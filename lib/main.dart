@@ -46,8 +46,8 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _tab = 0;
-  static const _tabs = [HomeScreen(), LibrariesScreen(), SearchScreen(), DownloadsScreen()];
-  static const _titles = ['', 'Libraries', 'Search', 'Downloads'];
+  static const _tabs = [HomeScreen(), BrowseScreen(), SearchScreen(), DownloadsScreen()];
+  static const _titles = ['', 'Browse', 'Search', 'Downloads'];
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -63,10 +63,13 @@ class _ShellState extends State<Shell> {
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
           destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
-            NavigationDestination(icon: Icon(Icons.video_library_outlined), label: 'Libraries'),
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+            NavigationDestination(
+                icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'),
+            // Search has no outlined/filled pair in Material Icons.
             NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
-            NavigationDestination(icon: Icon(Icons.download_outlined), label: 'Downloads'),
+            NavigationDestination(
+                icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'),
           ],
         ),
       );
@@ -76,14 +79,29 @@ class OfflineShell extends StatelessWidget {
   const OfflineShell({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Offline · Downloads'),
-          actions: [
-            const MagnetButton(),
-            IconButton(icon: const Icon(Icons.refresh), tooltip: 'Reconnect', onPressed: session.recheck),
-          ],
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Downloads'), actions: const [MagnetButton()]),
+      body: Column(children: [
+        ColoredBox(
+          color: FlickTokens.surface1,
+          child: Padding(
+            padding: const EdgeInsets.all(FlickTokens.pageGutter),
+            child: Row(children: [
+              Icon(Icons.wifi_off, color: cs.onSurfaceVariant),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text("You're offline. Downloaded videos still play.",
+                    style: Theme.of(context).textTheme.bodyMedium),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton(onPressed: session.recheck, child: const Text('Reconnect')),
+            ]),
+          ),
         ),
-        body: const DownloadsScreen(),
-      );
+        const Expanded(child: DownloadsScreen()),
+      ]),
+    );
+  }
 }
