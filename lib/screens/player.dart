@@ -8,6 +8,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../jellyfin.dart';
 import '../stall.dart';
 import '../state.dart';
+import '../theme.dart';
+import '../widgets.dart';
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({required this.item, this.source, this.report = true, super.key});
@@ -133,26 +135,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final bar = <Widget>[
-      const BackButton(color: Colors.white),
-      Expanded(
-        child: Text(widget.item.title,
-            style: const TextStyle(color: Colors.white), overflow: TextOverflow.ellipsis),
+      _TopBar(
+        title: headline(item),
+        subtitle: episodeLine(item),
+        buffer: _BufferAhead(_player),
+        quality: widget.source == null
+            ? PopupMenuButton<Quality>(
+                tooltip: 'Playback quality',
+                initialValue: _quality,
+                onSelected: _switch,
+                itemBuilder: (_) => [
+                  for (final q in Quality.values) PopupMenuItem(value: q, child: Text(q.label)),
+                ],
+                child: SizedBox(
+                  height: 48,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.high_quality, color: Colors.white),
+                    const SizedBox(width: 6),
+                    Text(_quality.label,
+                        style: Theme.of(context).textTheme.labelLarge?.copyWith(color: Colors.white)),
+                    const SizedBox(width: 8),
+                  ]),
+                ),
+              )
+            : null,
       ),
-      _BufferAhead(_player),
-      if (widget.source == null)
-        PopupMenuButton<Quality>(
-          icon: const Icon(Icons.high_quality, color: Colors.white),
-          initialValue: _quality,
-          onSelected: _switch,
-          itemBuilder: (_) => [
-            for (final q in Quality.values) PopupMenuItem(value: q, child: Text(q.label)),
-          ],
-        ),
     ];
     final theme = MaterialVideoControlsThemeData(
       topButtonBar: bar,
-      seekBarBufferColor: Colors.white54,
+      topButtonBarMargin: EdgeInsets.zero,
+      buttonBarHeight: 64,
+      seekBarColor: Colors.white.withValues(alpha: 0.2),
+      seekBarBufferColor: Colors.white.withValues(alpha: 0.45),
+      seekBarPositionColor: FlickTokens.accent,
+      seekBarThumbColor: FlickTokens.accent,
     );
     return Scaffold(
       backgroundColor: Colors.black,
@@ -176,10 +194,68 @@ class _BufferAhead extends StatelessWidget {
         builder: (_, _) {
           final ahead = player.state.buffer - player.state.position;
           final s = ahead.isNegative ? Duration.zero : ahead;
-          return Text(
-            'Buffered ${s.inMinutes}:${(s.inSeconds % 60).toString().padLeft(2, '0')}',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          return Text.rich(
+            TextSpan(style: const TextStyle(color: Colors.white70, fontSize: 12), children: [
+              const TextSpan(text: 'Buffered '),
+              TextSpan(
+                text: '${s.inMinutes}:${(s.inSeconds % 60).toString().padLeft(2, '0')}',
+                style: monoStyle.copyWith(color: Colors.white70, fontSize: 12),
+              ),
+            ]),
           );
         },
       );
+}
+
+/// Back target, title block (with buffer readout) and optional quality menu over a soft scrim.
+class _TopBar extends StatelessWidget {
+  const _TopBar({required this.title, this.subtitle, required this.buffer, this.quality});
+  final String title;
+  final String? subtitle;
+  final Widget buffer;
+  final Widget? quality;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    return Expanded(
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xB3000000), Color(0x00000000)],
+          ),
+        ),
+        child: Row(children: [
+          const SizedBox(width: 4),
+          SizedBox.square(
+            dimension: 48,
+            child: BackButton(
+                color: Colors.white, style: IconButton.styleFrom(minimumSize: const Size.square(48))),
+          ),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    maxLines: subtitle == null ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: t.titleSmall?.copyWith(color: Colors.white)),
+                if (subtitle != null)
+                  Text(subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.labelMedium?.copyWith(color: Colors.white70)),
+                buffer,
+              ],
+            ),
+          ),
+          ?quality,
+          const SizedBox(width: 8),
+        ]),
+      ),
+    );
+  }
 }
