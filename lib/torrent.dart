@@ -73,20 +73,8 @@ class TorrentEngine {
 Future<Directory> _root() async =>
     Directory('${(await getTemporaryDirectory()).path}/flick-torrents');
 
-Future<TorrentEngine>? _engine;
-
-/// The torrent engine. The first call also clears data left behind by a killed process.
-Future<TorrentEngine> torrentEngine() => _engine ??= () async {
-      try {
-        // Nothing can be streaming before the first call, so anything here is a leftover.
-        final root = await _root();
-        if (root.existsSync()) await root.delete(recursive: true);
-        return const TorrentEngine._();
-      } catch (_) {
-        _engine = null; // let a retry start over
-        rethrow;
-      }
-    }();
+/// The torrent engine. Data left behind by a killed process is swept natively, on the first add.
+Future<TorrentEngine> torrentEngine() async => const TorrentEngine._();
 
 /// A fresh directory for one torrent session's data.
 Future<Directory> torrentDir() async {

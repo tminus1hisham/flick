@@ -5,6 +5,7 @@ import android.os.Looper
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.util.BitSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -83,7 +84,13 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun add(magnet: String, dir: String): Int {
-        val sm = session ?: SessionManager().also { it.start(); session = it }
+        val sm = session ?: SessionManager().also {
+            // No native torrent exists before this session, so sibling session directories are leftovers
+            // from a killed process. Swept here, not in Dart: a hot restart resets Dart but not this plugin.
+            File(dir).parentFile?.listFiles()?.filter { f -> f.path != File(dir).path }?.forEach { f -> f.deleteRecursively() }
+            it.start()
+            session = it
+        }
         val ec = error_code()
         val p = libtorrent.parse_magnet_uri(magnet, ec)
         if (ec.value() != 0) throw IllegalArgumentException(ec.message())
@@ -116,23 +123,30 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun stream(e: Entry, id: Int, file: Int): String {
-        synchronized(e) {
-            check(e.alive) { "torrent was removed" }
-            val ti = e.th.torrentFile() ?: error("metadata not ready")
-            require(ti.hasV1()) { "v2-only torrents are not supported" }
-            require(ti.pieceLength() <= 32 shl 20) { "piece size ${ti.pieceLength()} not supported" }
-            e.closeConns()
-            e.gen++
-            e.activeFile = file
-            val fs = ti.files()
-            // Real priorities for every file, so boundary pieces land in real files (not libtorrent's part
-            // file) and can be hash-verified; piece priorities then limit the download to this file.
-            e.th.prioritizeFiles(Array(fs.numFiles()) { Priority.DEFAULT })
-            val wanted = pieceRange(fs.fileOffset(file), fs.fileSize(file), ti.pieceLength())
-            e.th.prioritizePieces(Array(ti.numPieces()) { if (it in wanted) Priority.DEFAULT else Priority.IGNORE })
-            e.th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-        }
+        // Server first: if it cannot start, nothing has been activated yet.
         val s = server ?: StreamServer { entries[it] }.also { server = it }
+        try {
+            synchronized(e) {
+                check(e.alive) { "torrent was removed" }
+                val ti = e.th.torrentFile() ?: error("metadata not ready")
+                require(ti.hasV1()) { "v2-only torrents are not supported" }
+                require(ti.pieceLength() <= 32 shl 20) { "piece size ${ti.pieceLength()} not supported" }
+                val fs = ti.files()
+                require(file in 0 until fs.numFiles()) { "no file $file" }
+                e.closeConns()
+                e.gen++
+                e.activeFile = file
+                // Real priorities for every file, so boundary pieces land in real files (not libtorrent's part
+                // file) and can be hash-verified; piece priorities then limit the download to this file.
+                e.th.prioritizeFiles(Array(fs.numFiles()) { Priority.DEFAULT })
+                val wanted = pieceRange(fs.fileOffset(file), fs.fileSize(file), ti.pieceLength())
+                e.th.prioritizePieces(Array(ti.numPieces()) { if (it in wanted) Priority.DEFAULT else Priority.IGNORE })
+                e.th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+            }
+        } catch (t: Throwable) {
+            stop(e) // roll back a partial activation so nothing keeps downloading behind the error
+            throw t
+        }
         return s.url(id, file)
     }
 

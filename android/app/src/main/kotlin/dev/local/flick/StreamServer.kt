@@ -99,21 +99,22 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
         val path = Regex("""/(\d+)/(\d+)""").matchEntire(parts.getOrNull(1) ?: "")
         val entry = path?.groupValues?.get(1)?.toIntOrNull()?.let(lookup)
         val file = path?.groupValues?.get(2)?.toIntOrNull()
-        val claim = entry?.let {
-            synchronized(it) {
-                if (!it.alive || it.activeFile != file) return@synchronized null
-                // mpv reconnects on seek; a request still waiting for a piece is superseded.
-                it.conns.filter { o -> o.waiting }.forEach(Conn::cancel)
-                it.conns += c
-                it.gen to it.th.torrentFile()
-            }
+        // Registered in entry.conns only once everything that can 404 has passed, and always paired with
+        // the finally below, so rejected requests never linger in the set.
+        val claim = if (entry == null || file == null) null else synchronized(entry) {
+            if (!entry.alive || entry.activeFile != file) return@synchronized null
+            val ti = entry.th.torrentFile() ?: return@synchronized null
+            // mpv reconnects on seek; a request still waiting for a piece is superseded.
+            entry.conns.filter { o -> o.waiting }.forEach(Conn::cancel)
+            entry.conns += c
+            entry.gen to ti
         }
-        if (entry == null || file == null || claim?.second == null) {
+        if (entry == null || file == null || claim == null) {
             out.write("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
             return
         }
         try {
-            body(c, entry, claim.first, claim.second!!, file, method, head)
+            body(c, entry, claim.first, claim.second, file, method, head)
         } finally {
             synchronized(entry) { entry.conns -= c }
         }
