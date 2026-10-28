@@ -28,13 +28,13 @@ Flick: Flutter (3.41, Material 3) Android app. A Jellyfin client plus magnet-lin
 | # | Route | File(s) | Key changes | Status |
 |---|-------|---------|-------------|--------|
 | 1 | Home (pilot) | screens/home.dart, main.dart | hero, Up next, rails, skeleton, transparent bar, profile | ☑ |
-| 2 | App shell + Browse | main.dart, screens/library.dart | Browse tab with library tabs + grid | ☐ |
-| 3 | Detail | screens/detail.dart | backdrop hero, Play/Download, season tabs, episode rows with states | ☐ |
-| 4 | Stream a link + Torrent | screens/torrent.dart | dialog copy, stage spine, telemetry, one-tap file rows | ☐ |
-| 5 | Downloads | screens/downloads.dart | human states, mono bytes, storage line, overflow delete | ☐ |
-| 6 | Search | screens/search.dart | empty / no-results states, grid | ☐ |
-| 7 | Player | screens/player.dart | themed media_kit controls, top bar | ☐ |
-| 8 | Login + Offline shell | screens/login.dart, main.dart | mark, inline errors, Stream a link | ☐ |
+| 2 | App shell + Browse | main.dart, screens/library.dart | Browse tab with library tabs + grid | ☑ |
+| 3 | Detail | screens/detail.dart | backdrop hero, Play/Download, season tabs, episode rows with states | ☑ |
+| 4 | Stream a link + Torrent | screens/torrent.dart | dialog copy, stage spine, telemetry, one-tap file rows | ☑ |
+| 5 | Downloads | screens/downloads.dart | human states, mono bytes, storage line, overflow delete | ☑ |
+| 6 | Search | screens/search.dart | empty / no-results states, grid | ☑ |
+| 7 | Player | screens/player.dart | themed media_kit controls, top bar | ☑ |
+| 8 | Login + Offline shell | screens/login.dart, main.dart | mark, inline errors, Stream a link | ☑ |
 
 ## Pilot learnings
 - Chip `labelStyle` must be a plain TextStyle. A WidgetStateTextStyle loses its font family when Chip merges it.
@@ -46,3 +46,8 @@ Same API calls, handlers, download and torrent logic. No new packages.
 
 ## Verification
 `flutter analyze` + `flutter test` per page, plus a mocked-server render at 390dp for screenshots.
+
+## Result (2026-10-28)
+All 8 rows done, one commit each on `ui-revamp`. Gates on the merged branch: `flutter analyze` no issues, `flutter test` 15 passed.
+Not verified on a device: real artwork and scrims, Player top bar (no render captured), image fade-in, text scale above 1.3.
+Follow-ups: promote duplicated `_gridDelegate`/`_GridSkeleton` (search + library) and `_Notice`/`_Message` into widgets.dart; floating `labelText` on filled inputs sits on the top edge (theme); search grid leaves slack under one-line titles.

@@ -16,6 +16,12 @@ void openItem(BuildContext context, Item item) => Navigator.push(
 String friendlyError(Object e) => switch (e) {
       SocketException() || ClientException() || TimeoutException() =>
         "Can't reach your server. Check your connection and try again.",
+      JellyfinException(status: 400 || 401, :final path) when path.contains('AuthenticateByName') =>
+        'Wrong username or password.',
+      JellyfinException(status: 401) => 'Your session has expired. Sign out and sign in again.',
+      JellyfinException(:final status) when status >= 500 =>
+        'Your server had a problem (error $status). Try again in a moment.',
+      JellyfinException(:final status) => 'Your server turned down the request (error $status).',
       _ => '$e',
     };
 
