@@ -64,7 +64,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ('demuxer-max-back-bytes', '${100 * 1024 * 1024}'),
       ('cache-pause-initial', 'yes'),
       ('cache-pause-wait', '8'),
-      // The torrent server drops idle connections; let ffmpeg reconnect at the current offset.
+      // Torrent sources: the server holds a request open until its piece downloads, so outwait
+      // media_kit's 5 s network-timeout, and reconnect at the current offset if it drops an idle one.
+      if (!widget.report) ('network-timeout', '60'),
       if (!widget.report)
         ('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5'),
     ]) {
