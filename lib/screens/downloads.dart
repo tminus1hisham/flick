@@ -91,7 +91,7 @@ class DownloadRow extends StatelessWidget {
       TaskStatus.enqueued || TaskStatus.waitingToRetry => ('Waiting', Icons.schedule, cs.onSurfaceVariant),
       TaskStatus.paused => ('Paused', Icons.pause_circle_outline, fc.warning),
       TaskStatus.complete => ('Ready offline', Icons.check_circle_outline, fc.success),
-      TaskStatus.failed || TaskStatus.notFound => ('Failed', Icons.error_outline, fc.danger),
+      TaskStatus.failed || TaskStatus.notFound => ('Failed', Icons.report_outlined, fc.danger),
       TaskStatus.canceled => ('Canceled', Icons.cancel_outlined, cs.onSurfaceVariant),
     };
 

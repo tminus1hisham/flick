@@ -247,7 +247,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
           ? _Notice(
               icon: Icons.report_outlined,
               title: "Couldn't play this torrent",
-              detail: '$error',
+              detail: error is PlatformException ? error.message ?? error.code : '$error',
               danger: true,
               action: OutlinedButton(onPressed: _retry, child: const Text('Try again')),
             )
@@ -396,9 +396,20 @@ class _FileRow extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (largest)
-                      Text('Largest',
-                          style: t.labelSmall
-                              ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
+                      // A filled tag: small red text on black would fall below 4.5:1.
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                              color: scheme.primary, borderRadius: BorderRadius.circular(4)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            child: Text('Largest',
+                                style: t.labelSmall?.copyWith(
+                                    color: scheme.onPrimary, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ),
                     Text(file.name, style: t.bodyMedium),
                     if (opening)
                       Text('Opening…',
