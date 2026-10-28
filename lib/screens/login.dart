@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../state.dart';
+import 'torrent.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -64,6 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator())
                     : const Text('Sign in'),
               ),
+              TextButton(onPressed: () => openMagnet(context), child: const Text('Play a magnet link')),
             ],
           ),
         ),

@@ -10,9 +10,14 @@ import '../stall.dart';
 import '../state.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({required this.item, this.localPath, super.key});
+  const PlayerScreen({required this.item, this.source, this.report = true, super.key});
   final Item item;
-  final String? localPath;
+
+  /// Plays this file/URL instead of streaming from Jellyfin.
+  final String? source;
+
+  /// Report playback progress to Jellyfin for [item].
+  final bool report;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -30,7 +35,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // open() resets state.position to 0 until mpv reports time-pos; report this instead.
   late Duration _pos = widget.item.resumePosition;
 
-  JellyfinClient? get _client => session.online ? session.client : null;
+  JellyfinClient? get _client => widget.report && session.online ? session.client : null;
 
   @override
   void initState() {
@@ -42,8 +47,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ..add(_player.stream.position.listen((p) {
         if (p > Duration.zero) _pos = p;
       }))
-      ..add(_player.stream.buffering.listen(_onBuffering));
-    _init();
+      ..add(_player.stream.buffering.listen(_onBuffering))
+      ..add(_player.stream.error.listen(_showError));
+    _init().catchError(_showError);
+  }
+
+  void _showError(Object e) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
   }
 
   Future<void> _init() async {
@@ -67,7 +77,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _open(Duration start) => _player.open(Media(
-        widget.localPath ?? session.client!.playUrl(widget.item, _quality),
+        widget.source ?? session.client!.playUrl(widget.item, _quality),
         start: start,
       ));
 
@@ -84,7 +94,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     // ponytail: out-of-cache seeks also count as stalls.
     if (!_started || _prompted) return;
-    if (widget.localPath != null || _quality != Quality.original) return;
+    if (widget.source != null || _quality != Quality.original) return;
     if (!_stalls.record(DateTime.now())) return;
     _prompted = true;
     _messenger = ScaffoldMessenger.of(context)..showSnackBar(SnackBar(
@@ -125,7 +135,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             style: const TextStyle(color: Colors.white), overflow: TextOverflow.ellipsis),
       ),
       _BufferAhead(_player),
-      if (widget.localPath == null)
+      if (widget.source == null)
         PopupMenuButton<Quality>(
           icon: const Icon(Icons.high_quality, color: Colors.white),
           initialValue: _quality,

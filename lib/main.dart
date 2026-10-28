@@ -6,6 +6,7 @@ import 'screens/home.dart';
 import 'screens/library.dart';
 import 'screens/login.dart';
 import 'screens/search.dart';
+import 'screens/torrent.dart';
 import 'state.dart';
 
 Future<void> main() async {
@@ -54,6 +55,7 @@ class _ShellState extends State<Shell> {
         appBar: AppBar(
           title: const Text('Flick'),
           actions: [
+            const MagnetButton(),
             IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: session.logout),
           ],
         ),
@@ -79,6 +81,7 @@ class OfflineShell extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Offline · Downloads'),
           actions: [
+            const MagnetButton(),
             IconButton(icon: const Icon(Icons.refresh), tooltip: 'Reconnect', onPressed: session.recheck),
           ],
         ),

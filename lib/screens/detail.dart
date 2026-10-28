@@ -18,7 +18,7 @@ Future<void> play(BuildContext context, Item item) async {
   }
   if (!context.mounted) return;
   await Navigator.push(context,
-      MaterialPageRoute(builder: (_) => PlayerScreen(item: item, localPath: local)));
+      MaterialPageRoute(builder: (_) => PlayerScreen(item: item, source: local)));
 }
 
 Future<Quality?> pickQuality(BuildContext context) => showModalBottomSheet<Quality>(

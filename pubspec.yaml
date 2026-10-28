@@ -42,6 +42,7 @@ dependencies:
   media_kit_libs_video: ^1.0.7
   background_downloader: ^9.5.9
   path_provider: ^2.1.6
+  libtorrent_flutter: 2.0.0
 
 dev_dependencies:
   flutter_test:
