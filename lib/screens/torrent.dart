@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../jellyfin.dart';
+import '../theme.dart';
 import '../torrent.dart';
 import 'player.dart';
 
@@ -35,7 +36,7 @@ class MagnetButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
       icon: const Icon(Icons.add_link),
-      tooltip: 'Play magnet link',
+      tooltip: 'Stream a link',
       onPressed: () => openMagnet(context));
 }
 
@@ -62,7 +63,7 @@ class _MagnetDialogState extends State<_MagnetDialog> {
   void _submit() {
     if (_done) return;
     final m = _text.text.trim();
-    if (!isMagnet(m)) return setState(() => _error = 'Not a magnet link');
+    if (!isMagnet(m)) return setState(() => _error = "That isn't a magnet link");
     _close(m);
   }
 
@@ -74,17 +75,26 @@ class _MagnetDialogState extends State<_MagnetDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Play magnet link'),
-        content: TextField(
-          controller: _text,
-          autofocus: true,
-          keyboardType: TextInputType.url,
-          decoration: InputDecoration(hintText: 'magnet:?xt=urn:btih:…', errorText: _error),
-          onSubmitted: (_) => _submit(),
+        title: const Text('Stream a link'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Paste a magnet link to choose a video.',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _text,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: InputDecoration(hintText: 'magnet:?xt=urn:btih:…', errorText: _error),
+              onSubmitted: (_) => _submit(),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: _close, child: const Text('Cancel')),
-          FilledButton(onPressed: _submit, child: const Text('Play')),
+          FilledButton(onPressed: _submit, child: const Text('Continue')),
         ],
       );
 }
@@ -107,6 +117,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
   List<TorrentFile>? _files;
   Object? _error;
   bool _busy = false, _opening = false;
+  int? _openingFile; // UI only: the row showing "Opening…", tracks _opening
 
   @override
   void initState() {
@@ -176,6 +187,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
     final engine = _engine, id = _id;
     if (_opening || engine == null || id == null) return;
     _opening = true;
+    setState(() => _openingFile = f.index);
     try {
       final url = await engine.stream(id, f.index);
       if (!mounted || id != _id) return;
@@ -192,6 +204,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
       if (mounted) setState(() => _error = e);
     } finally {
       _opening = false;
+      if (mounted) setState(() => _openingFile = null);
     }
   }
 
@@ -216,56 +229,230 @@ class _TorrentScreenState extends State<TorrentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final i = _info;
+    final i = _info, files = _files;
     final error = _error ?? i?.error;
-    final status = i == null ? 'Starting…' : '${i.peers} peers · ${_rate(i.rate)}';
+    final t = Theme.of(context).textTheme;
+    final secondary = Theme.of(context).colorScheme.onSurfaceVariant;
+    Widget metric(String label, String value) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: t.labelMedium?.copyWith(color: secondary)),
+            const SizedBox(height: 4),
+            Text(value, style: monoStyle),
+          ],
+        );
     return Scaffold(
-      appBar: AppBar(title: Text(i == null || i.name.isEmpty ? 'Torrent' : i.name)),
+      appBar: AppBar(title: const Text('Stream a link')),
       body: error != null
-          ? _Message(
-              'Could not play this torrent\n$error',
-              action: FilledButton(onPressed: _retry, child: const Text('Retry')),
+          ? _Notice(
+              icon: Icons.report_outlined,
+              title: "Couldn't play this torrent",
+              detail: '$error',
+              danger: true,
+              action: OutlinedButton(onPressed: _retry, child: const Text('Try again')),
             )
-          : _files == null
-              ? _Message(i == null ? 'Starting…' : 'Fetching metadata · $status', busy: true)
-              : _files!.isEmpty
-                  ? const _Message('No playable video in this torrent')
-                  : Column(children: [
-                      ListTile(dense: true, title: Text(status)),
-                      Expanded(
-                        child: ListView(children: [
-                          for (final f in _files!)
-                            ListTile(
-                              leading: const Icon(Icons.movie_outlined),
-                              title: Text(f.name),
-                              subtitle: Text(_size(f.size)),
-                              onTap: () => _play(f),
-                            ),
-                        ]),
-                      ),
+          : files != null && files.isEmpty
+              ? const _Notice(
+                  icon: Icons.movie_outlined,
+                  title: 'No playable video in this torrent',
+                  detail: 'It has no video files the player can stream.',
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                      FlickTokens.pageGutter, 8, FlickTokens.pageGutter, FlickTokens.sectionGap),
+                  children: [
+                    _Stage('Starting', i == null ? _Step.now : _Step.done, busy: true),
+                    _Stage(
+                      'Reading torrent details',
+                      i == null ? _Step.pending : (files == null ? _Step.now : _Step.done),
+                      detail: i != null && files == null
+                          ? 'Waiting for peers to send the file list'
+                          : null,
+                      busy: true,
+                    ),
+                    _Stage('Choose a video', files == null ? _Step.pending : _Step.now),
+                    if (i != null && i.name.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Text(i.name, style: t.titleMedium),
+                    ],
+                    const SizedBox(height: 20),
+                    Row(children: [
+                      Expanded(child: metric('Peers', i == null ? '—' : '${i.peers}')),
+                      Expanded(child: metric('Download speed', i == null ? '—' : _rate(i.rate))),
                     ]),
+                    if (i != null && files == null) ...[
+                      const SizedBox(height: 16),
+                      Text('Torrents with few peers can take a minute or more.',
+                          style: t.bodyMedium?.copyWith(color: secondary)),
+                    ],
+                    if (files != null) ...[
+                      const SizedBox(height: FlickTokens.sectionGap),
+                      for (final (n, f) in files.indexed) ...[
+                        if (n > 0) const Divider(),
+                        _FileRow(f,
+                            largest: n == 0,
+                            opening: _openingFile == f.index,
+                            onTap: () => _play(f)),
+                      ],
+                    ],
+                  ],
+                ),
     );
   }
 }
 
-class _Message extends StatelessWidget {
-  const _Message(this.text, {this.busy = false, this.action});
-  final String text;
+enum _Step { done, now, pending }
+
+/// One row of the status spine: a 3dp marker, the stage and its state.
+class _Stage extends StatelessWidget {
+  const _Stage(this.label, this.step, {this.detail, this.busy = false});
+  final String label;
+  final _Step step;
+  final String? detail;
+
+  /// Whether "now" means waiting on the engine (spinner) rather than on the user.
   final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final success = context.flick.success;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(
+            width: 3,
+            constraints: const BoxConstraints(minHeight: 24),
+            color: switch (step) {
+              _Step.done => success,
+              _Step.now => scheme.primary,
+              _Step.pending => FlickTokens.outline,
+            },
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label,
+                    style: t.bodyMedium?.copyWith(
+                        color: step == _Step.pending ? scheme.onSurfaceVariant : null)),
+                if (detail != null)
+                  Text(detail!, style: t.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          ...switch (step) {
+            _Step.done => [
+                Icon(Icons.check, size: 16, color: success),
+                const SizedBox(width: 4),
+                Center(child: Text('Done', style: t.labelMedium?.copyWith(color: success))),
+              ],
+            _Step.now => [
+                if (busy) ...const [
+                  Center(
+                      child: SizedBox.square(
+                          dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))),
+                  SizedBox(width: 8),
+                ],
+                Center(child: Text('Now', style: t.labelMedium)),
+              ],
+            _Step.pending => const <Widget>[],
+          },
+        ]),
+      ),
+    );
+  }
+}
+
+/// A flat, tappable video row: marker, wrapping name, size.
+class _FileRow extends StatelessWidget {
+  const _FileRow(this.file, {required this.largest, required this.opening, required this.onTap});
+  final TorrentFile file;
+  final bool largest, opening;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 56),
+        child: IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Container(width: 3, color: opening ? scheme.primary : Colors.transparent),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    if (largest)
+                      Text('Largest',
+                          style: t.labelSmall
+                              ?.copyWith(color: scheme.primary, fontWeight: FontWeight.w700)),
+                    Text(file.name, style: t.bodyMedium),
+                    if (opening)
+                      Text('Opening…',
+                          style: t.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Center(
+              child: Text(_size(file.size),
+                  style: monoStyle.copyWith(color: scheme.onSurfaceVariant)),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// Centred empty or error state: icon plus a written label, never colour alone.
+class _Notice extends StatelessWidget {
+  const _Notice(
+      {required this.icon, required this.title, this.detail, this.danger = false, this.action});
+  final IconData icon;
+  final String title;
+  final String? detail;
+  final bool danger;
   final Widget? action;
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (busy) const CircularProgressIndicator(),
-            const SizedBox(height: 16),
-            Text(text, textAlign: TextAlign.center),
-            if (action != null) ...[const SizedBox(height: 16), action!],
-          ]),
-        ),
-      );
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final secondary = Theme.of(context).colorScheme.onSurfaceVariant;
+    final tone = danger ? context.flick.danger : secondary;
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(FlickTokens.pageGutter),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 32, color: tone),
+          const SizedBox(height: 12),
+          Text(title,
+              textAlign: TextAlign.center,
+              style: t.titleMedium?.copyWith(color: danger ? tone : null)),
+          if (detail != null) ...[
+            const SizedBox(height: 8),
+            Text(detail!,
+                textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: secondary)),
+          ],
+          if (action != null) ...[const SizedBox(height: 16), action!],
+        ]),
+      ),
+    );
+  }
 }
 
 String _size(int bytes) => bytes >= 1 << 30
