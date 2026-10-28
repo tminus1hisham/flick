@@ -26,6 +26,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Quality _quality = Quality.original;
   bool _started = false, _prompted = false;
   Timer? _progress;
+  ScaffoldMessengerState? _messenger;
+  // open() resets state.position to 0 until mpv reports time-pos; report this instead.
+  late Duration _pos = widget.item.resumePosition;
 
   JellyfinClient? get _client => session.online ? session.client : null;
 
@@ -37,7 +40,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     _subs
       ..add(_player.stream.position.listen((p) {
-        if (p > const Duration(seconds: 1)) _started = true;
+        if (p > Duration.zero) _pos = p;
       }))
       ..add(_player.stream.buffering.listen(_onBuffering));
     _init();
@@ -46,19 +49,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _init() async {
     final mpv = _player.platform as NativePlayer;
     // Buffer hard up front and after a stall instead of stuttering.
+    // Read-ahead is bounded by bufferSize (demuxer-max-bytes) only.
     for (final (k, v) in [
-      ('cache', 'yes'),
       ('demuxer-max-back-bytes', '${100 * 1024 * 1024}'),
-      ('demuxer-readahead-secs', '300'),
       ('cache-pause-initial', 'yes'),
       ('cache-pause-wait', '8'),
     ]) {
+      if (!mounted) return;
       await mpv.setProperty(k, v);
     }
-    await _open(widget.item.resumePosition);
-    _report((c) => c.reportStart(widget.item.id, _player.state.position));
+    if (!mounted) return;
+    await _open(_pos);
+    if (!mounted) return;
+    _report((c) => c.reportStart(widget.item.id, _pos));
     _progress = Timer.periodic(const Duration(seconds: 10), (_) => _report((c) =>
-        c.reportProgress(widget.item.id, _player.state.position, paused: !_player.state.playing)));
+        c.reportProgress(widget.item.id, _pos, paused: !_player.state.playing)));
   }
 
   Future<void> _open(Duration start) => _player.open(Media(
@@ -72,11 +77,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onBuffering(bool buffering) {
-    if (!buffering || !_started || _prompted) return;
+    if (!buffering) {
+      // The first buffer-complete after real playback position ends the initial fill.
+      if (_player.state.position > Duration.zero) _started = true;
+      return;
+    }
+    // ponytail: out-of-cache seeks also count as stalls.
+    if (!_started || _prompted) return;
     if (widget.localPath != null || _quality != Quality.original) return;
     if (!_stalls.record(DateTime.now())) return;
     _prompted = true;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+    _messenger = ScaffoldMessenger.of(context)..showSnackBar(SnackBar(
       duration: const Duration(seconds: 15),
       content: const Text('Playback keeps stalling on this connection'),
       action: SnackBarAction(label: 'Use 1.5 Mbps', onPressed: () => _switch(Quality.mbps1_5)),
@@ -84,16 +95,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _switch(Quality q) async {
-    if (q == _quality) return;
-    final pos = _player.state.position;
+    if (q == _quality || !mounted) return;
     setState(() => _quality = q);
     _stalls.reset();
-    await _open(pos);
+    await _open(_pos);
   }
 
   @override
   void dispose() {
-    final pos = _player.state.position;
+    _messenger?.hideCurrentSnackBar();
+    final pos = _pos;
     _report((c) => c.reportStopped(widget.item.id, pos));
     _progress?.cancel();
     for (final s in _subs) {

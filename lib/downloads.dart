@@ -14,6 +14,8 @@ class Downloads extends ChangeNotifier {
   final _fd = FileDownloader();
   List<TaskRecord> records = [];
   late Directory _posters;
+  // Cancels land asynchronously after delete() and would re-create the record.
+  final _deleted = <String>{};
 
   Future<void> init() async {
     _posters = Directory('${(await getApplicationDocumentsDirectory()).path}/posters');
@@ -24,7 +26,13 @@ class Downloads extends ChangeNotifier {
       error: const TaskNotification('Download failed', '{displayName}'),
       progressBar: true,
     );
-    _fd.updates.listen((_) => refresh());
+    // Foreground mode lifts Android's 9-minute limit on non-pausable transcodes.
+    await _fd.configure(globalConfig: (Config.runInForeground, true));
+    // database.updates fires after the record is stored; _fd.updates fires before.
+    _fd.database.updates.listen((r) async {
+      if (_deleted.contains(r.taskId)) await _fd.database.deleteRecordWithId(r.taskId);
+      await refresh();
+    });
     await _fd.start();
     await refresh();
   }
@@ -51,6 +59,7 @@ class Downloads extends ChangeNotifier {
   }
 
   Future<void> enqueue(JellyfinClient c, Item item, Quality q) async {
+    _deleted.remove(item.id);
     await _fd.permissions.request(PermissionType.notifications);
     try {
       final img = await http.get(Uri.parse(c.imageUrl(item.id)));
@@ -76,6 +85,7 @@ class Downloads extends ChangeNotifier {
   Future<void> resume(TaskRecord r) async => _fd.resume(r.task as DownloadTask);
 
   Future<void> delete(TaskRecord r) async {
+    _deleted.add(r.taskId);
     await _fd.cancelTaskWithId(r.taskId);
     final f = File(await r.task.filePath());
     if (f.existsSync()) await f.delete();

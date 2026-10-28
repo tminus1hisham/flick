@@ -5,8 +5,17 @@ import '../jellyfin.dart';
 import '../state.dart';
 import 'player.dart';
 
+bool canDownload(TaskStatus? s) =>
+    s == null || s == TaskStatus.canceled || s == TaskStatus.failed || s == TaskStatus.notFound;
+
 Future<void> play(BuildContext context, Item item) async {
   final local = await downloads.localPath(item.id);
+  if (session.online) {
+    // The passed-in item's resume position may be stale.
+    try {
+      item = await session.client!.item(item.id);
+    } catch (_) {}
+  }
   if (!context.mounted) return;
   await Navigator.push(context,
       MaterialPageRoute(builder: (_) => PlayerScreen(item: item, localPath: local)));
@@ -30,6 +39,8 @@ Future<Quality?> pickQuality(BuildContext context) => showModalBottomSheet<Quali
     );
 
 Future<void> download(BuildContext context, List<Item> items) async {
+  items = [for (final i in items) if (canDownload(downloads.recordFor(i.id)?.status)) i];
+  if (items.isEmpty) return;
   final q = await pickQuality(context);
   if (q == null) return;
   for (final i in items) {
@@ -184,14 +195,12 @@ class DownloadButton extends StatelessWidget {
         builder: (context, _) {
           final r = downloads.recordFor(item.id);
           final (icon, label) = switch (r?.status) {
-            null || TaskStatus.canceled || TaskStatus.failed || TaskStatus.notFound =>
-              (Icons.download, 'Download'),
+            final s when canDownload(s) => (Icons.download, 'Download'),
             TaskStatus.complete => (Icons.download_done, 'Downloaded'),
             TaskStatus.paused => (Icons.pause_circle_outline, 'Paused'),
             _ => (Icons.downloading, '${((r!.progress.clamp(0, 1)) * 100).round()}%'),
           };
-          final canStart = icon == Icons.download;
-          final onPressed = canStart ? () => download(context, [item]) : null;
+          final onPressed = canDownload(r?.status) ? () => download(context, [item]) : null;
           return compact
               ? IconButton(onPressed: onPressed, icon: Icon(icon), tooltip: label)
               : OutlinedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label));
