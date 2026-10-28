@@ -64,6 +64,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ('demuxer-max-back-bytes', '${100 * 1024 * 1024}'),
       ('cache-pause-initial', 'yes'),
       ('cache-pause-wait', '8'),
+      // The torrent server drops idle connections; let ffmpeg reconnect at the current offset.
+      if (!widget.report)
+        ('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5'),
     ]) {
       if (!mounted) return;
       await mpv.setProperty(k, v);

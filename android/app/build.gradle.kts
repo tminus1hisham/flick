@@ -42,3 +42,12 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    val libtorrent4j = "2.1.0-39"
+    implementation("org.libtorrent4j:libtorrent4j:$libtorrent4j")
+    implementation("org.libtorrent4j:libtorrent4j-android-arm64:$libtorrent4j")
+    implementation("org.libtorrent4j:libtorrent4j-android-arm:$libtorrent4j")
+    implementation("org.libtorrent4j:libtorrent4j-android-x86_64:$libtorrent4j")
+    testImplementation("junit:junit:4.13.2")
+}

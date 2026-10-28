@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:libtorrent_flutter/libtorrent_flutter.dart';
 
 import '../jellyfin.dart';
 import '../torrent.dart';
@@ -99,12 +98,13 @@ class TorrentScreen extends StatefulWidget {
 }
 
 class _TorrentScreenState extends State<TorrentScreen> {
-  LibtorrentFlutter? _engine;
+  TorrentEngine? _engine;
   int? _id; // the torrent this screen owns
-  final _streamIds = <int>{};
-  StreamSubscription<Map<int, TorrentInfo>>? _sub;
-  TorrentInfo? _info;
-  List<FileInfo>? _files;
+  int _attempt = 0; // bumped by each start and by dispose; stale continuations clean up after themselves
+  Timer? _poll;
+  bool _polling = false;
+  TorrentStatus? _info;
+  List<TorrentFile>? _files;
   Object? _error;
   bool _busy = false, _opening = false;
 
@@ -115,42 +115,55 @@ class _TorrentScreenState extends State<TorrentScreen> {
   }
 
   Future<void> _start() async {
+    final attempt = ++_attempt;
+    bool stale() => attempt != _attempt || !mounted;
     _busy = true;
     try {
       final engine = _engine = await torrentEngine();
-      if (!mounted) return;
+      if (stale()) return;
       final dir = await torrentDir();
-      if (!mounted) return dir.delete(recursive: true).ignore();
-      final id = _id = engine.addMagnet(widget.magnet, dir.path, true);
-      _sub = engine.torrentUpdates.listen((all) {
-        if (all[id] case final i?) _update(i);
-      });
-      if (engine.torrents[id] case final i?) _update(i);
+      // Delete the directory only while no torrent can be using it; once add is invoked the startup
+      // sweep owns any leftovers.
+      if (stale()) return dir.delete(recursive: true).ignore();
+      final id = await engine.add(widget.magnet, dir.path);
+      if (stale()) return _forget(engine.remove(id));
+      _id = id;
+      _poll = Timer.periodic(const Duration(seconds: 1), (_) => _refresh());
+      _refresh();
     } catch (e) {
-      if (mounted) setState(() => _error = e);
+      if (!stale()) setState(() => _error = e);
     } finally {
-      _busy = false;
+      if (attempt == _attempt) _busy = false;
     }
   }
 
-  void _update(TorrentInfo i) {
-    if (!mounted || i.id != _id) return;
-    setState(() {
-      _info = i;
-      if (i.hasMetadata && _files == null) {
-        try {
-          _files = _engine!.getFiles(i.id).where((f) => f.isStreamable).toList()
+  Future<void> _refresh() async {
+    final engine = _engine, id = _id;
+    if (_polling || engine == null || id == null) return;
+    _polling = true;
+    try {
+      final s = await engine.status(id);
+      final files = s != null && s.hasMetadata && _files == null ? await engine.files(id) : null;
+      if (!mounted || id != _id) return;
+      setState(() {
+        _info = s;
+        if (files != null) {
+          _files = files.where((f) => isVideo(f.name)).toList()
             ..sort((a, b) => b.size.compareTo(a.size));
-        } catch (e) {
-          _error = e;
         }
-      }
-    });
+      });
+    } catch (e) {
+      if (mounted && id == _id) setState(() => _error = e);
+    } finally {
+      _polling = false;
+    }
   }
 
-  void _retry() {
+  Future<void> _retry() async {
     if (_busy) return;
-    _teardown();
+    _busy = true;
+    await _teardown();
+    if (!mounted) return;
     setState(() {
       _error = null;
       _info = null;
@@ -159,61 +172,44 @@ class _TorrentScreenState extends State<TorrentScreen> {
     _start();
   }
 
-  Future<void> _play(FileInfo f) async {
+  Future<void> _play(TorrentFile f) async {
     final engine = _engine, id = _id;
     if (_opening || engine == null || id == null) return;
     _opening = true;
     try {
-      final s = engine.startStream(id, fileIndex: f.index, maxCacheBytes: 64 << 20);
-      _streamIds.add(s.id);
+      final url = await engine.stream(id, f.index);
+      if (!mounted || id != _id) return;
       try {
         await Navigator.push(
             context,
             MaterialPageRoute(
                 builder: (_) => PlayerScreen(
-                    item: Item({'Id': 'torrent', 'Name': f.name}), source: s.url, report: false)));
+                    item: Item({'Id': 'torrent', 'Name': f.name}), source: url, report: false)));
       } finally {
-        // Unknown ids are a native no-op, so stop even if the poller dropped it.
-        _streamIds.remove(s.id);
-        _quietly(() => engine.stopStream(s.id));
+        if (id == _id) _forget(engine.stopStream(id));
       }
     } catch (e) {
-      // ponytail: if startStream throws after creating the native stream (its status read failed),
-      // the id never reaches us and native torrent removal does not stop streams, so that loopback
-      // stream lives until the process exits; repeated failures accumulate. Needs a package fix.
       if (mounted) setState(() => _error = e);
     } finally {
       _opening = false;
     }
   }
 
-  /// Stops and deletes the owned torrent. Each step runs even if an earlier one fails.
-  void _teardown() {
-    final sub = _sub;
-    _sub = null;
-    _quietly(() => sub?.cancel().catchError((Object e) => debugPrint('torrent teardown: $e')));
+  /// Removes the owned torrent (stops its streams and deletes its data natively).
+  Future<void> _teardown() async {
+    _poll?.cancel();
+    _poll = null;
     final engine = _engine, id = _id;
     _id = null;
-    if (engine == null || id == null) return;
-    for (final s in _streamIds) {
-      _quietly(() => engine.stopStream(s));
-    }
-    _streamIds.clear();
-    _quietly(() => engine.stopAllStreamsForTorrent(id));
-    // Not disposeTorrent: it no-ops until the poller has seen the torrent.
-    _quietly(() => engine.removeTorrent(id, deleteFiles: true));
+    if (engine != null && id != null) await _forget(engine.remove(id));
   }
 
-  static void _quietly(void Function() f) {
-    try {
-      f();
-    } catch (e) {
-      debugPrint('torrent teardown: $e');
-    }
-  }
+  static Future<void> _forget(Future<void> f) =>
+      f.catchError((Object e) => debugPrint('torrent teardown: $e'));
 
   @override
   void dispose() {
+    _attempt++;
     _teardown();
     super.dispose();
   }
@@ -221,9 +217,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
   @override
   Widget build(BuildContext context) {
     final i = _info;
-    final error = _error ??
-        (i != null && (i.state == TorrentState.error || i.errorMsg.isNotEmpty) ? i.errorMsg : null);
-    final status = i == null ? 'Starting…' : '${i.numPeers} peers · ${_rate(i.downloadRate)}';
+    final error = _error ?? i?.error;
+    final status = i == null ? 'Starting…' : '${i.peers} peers · ${_rate(i.rate)}';
     return Scaffold(
       appBar: AppBar(title: Text(i == null || i.name.isEmpty ? 'Torrent' : i.name)),
       body: error != null

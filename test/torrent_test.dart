@@ -37,6 +37,14 @@ void main() {
     expect(isMagnet('%%%:not a uri'), isFalse);
   });
 
+  test('isVideo goes by extension', () {
+    expect(isVideo('Big Buck Bunny.mp4'), isTrue);
+    expect(isVideo('Season 1/Show.S01E01.MKV'), isTrue);
+    expect(isVideo('poster.jpg'), isFalse);
+    expect(isVideo('README'), isFalse);
+    expect(isVideo('mp4'), isFalse);
+  });
+
   test('invalid percent-encoding is rejected, not thrown', () {
     expect(isMagnet('magnet:?xt=%FF'), isFalse);
     expect(isMagnet('magnet:?xt=urn:btih:$hex&dn=%FF'), isFalse);
