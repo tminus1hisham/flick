@@ -156,6 +156,9 @@ class JellyfinClient {
   String imageUrl(String itemId, {int maxHeight = 450}) =>
       _uri('/Items/$itemId/Images/Primary', {'maxHeight': maxHeight}).toString();
 
+  String backdropUrl(String itemId, {int maxWidth = 1280}) =>
+      _uri('/Items/$itemId/Images/Backdrop', {'maxWidth': maxWidth}).toString();
+
   String playUrl(Item item, Quality q) => q.bitrate == null
       ? _uri('/Videos/${item.id}/stream', {'static': true, 'api_key': token}).toString()
       : _uri('/Videos/${item.id}/master.m3u8', {

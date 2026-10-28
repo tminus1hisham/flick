@@ -8,6 +8,8 @@ import 'screens/login.dart';
 import 'screens/search.dart';
 import 'screens/torrent.dart';
 import 'state.dart';
+import 'theme.dart';
+import 'widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,11 +25,7 @@ class FlickApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Flick',
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          colorSchemeSeed: Colors.deepPurple,
-          useMaterial3: true,
-        ),
+        theme: flickTheme(),
         home: ListenableBuilder(
           listenable: session,
           builder: (_, _) => !session.loggedIn
@@ -49,16 +47,17 @@ class Shell extends StatefulWidget {
 class _ShellState extends State<Shell> {
   int _tab = 0;
   static const _tabs = [HomeScreen(), LibrariesScreen(), SearchScreen(), DownloadsScreen()];
+  static const _titles = ['', 'Libraries', 'Search', 'Downloads'];
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-          title: const Text('Flick'),
-          actions: [
-            const MagnetButton(),
-            IconButton(icon: const Icon(Icons.logout), tooltip: 'Sign out', onPressed: session.logout),
-          ],
-        ),
+        // Home draws its own bar over the hero.
+        appBar: _tab == 0
+            ? null
+            : AppBar(
+                title: Text(_titles[_tab]),
+                actions: const [MagnetButton(), ProfileButton()],
+              ),
         body: IndexedStack(index: _tab, children: _tabs),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
