@@ -146,7 +146,9 @@ class Addons extends ChangeNotifier {
         for (final e in raw == null ? const [] : jsonDecode(raw) as List)
           if (e is Map && e['url'] is String && _validManifest(e['manifest']))
             Addon((e['manifest'] as Map).cast<String, dynamic>(), _baseOf(e['url'] as String)),
-      ];
+      ]
+        // Added by link before it was built in (Torrentio): the built-in copy replaces it.
+        ..removeWhere((u) => _bundled.any((b) => b.id == u.id));
     } catch (_) {
       _user = [];
     }
@@ -447,6 +449,21 @@ const _bundledManifests = <({String base, bool locked, Map<String, dynamic> mani
       'id': 'org.stremio.watchhub',
       'name': 'WatchHub',
       'version': '1.15.0',
+      'resources': ['stream'],
+      'types': ['movie', 'series'],
+      'idPrefixes': ['tt'],
+      'catalogs': [],
+    },
+  ),
+  // Torrent streams for Cinemeta titles (user request 2026-10-29). Third-party, not a Stremio
+  // official addon; it sends no trackers, so magnetFor adds fallbackTrackers.
+  (
+    base: 'https://torrentio.strem.fun',
+    locked: false,
+    manifest: {
+      'id': 'com.stremio.torrentio.addon',
+      'name': 'Torrentio',
+      'version': '0.0.15',
       'resources': ['stream'],
       'types': ['movie', 'series'],
       'idPrefixes': ['tt'],

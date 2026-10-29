@@ -105,7 +105,7 @@ void main() {
         'https://three.example/manifest.json',
       ]);
       expect([x.base, y.base, z.base], ['https://one.example/cfg', 'https://two.example/cfg', 'https://three.example']);
-      expect(a.all.skip(4), [x, y, z]);
+      expect(a.all.skip(5), [x, y, z]);
     });
 
     Future<AddonError?> kind(Future<http.Response> Function(http.Request) h, String input) async {
@@ -258,8 +258,8 @@ void main() {
     expect(seen.single, 'https://v3-cinemeta.strem.io/meta/series/tt0096697:1:1.json');
 
     final src = a.streamSources('series', 'tt0096697:1:1');
-    expect([for (final s in src) s.name], ['WatchHub']); // PDM is movie-only
-    final ss = await a.streams(src.single, 'series', 'tt0096697:1:1');
+    expect([for (final s in src) s.name], ['WatchHub', 'Torrentio']); // PDM is movie-only
+    final ss = await a.streams(src.first, 'series', 'tt0096697:1:1');
     expect(seen.last, 'https://watchhub.strem.io/stream/series/tt0096697:1:1.json');
     expect(ss.length, 2);
     expect(ss.first.trackers, [tracker]);
@@ -316,15 +316,15 @@ void main() {
 
     final again = Addons(client: MockClient((_) async => throw StateError('no network on load')));
     await again.load();
-    expect([for (final b in again.all) b.id].skip(4), ['x.example', 'y.example']);
-    expect(again.all.skip(4).first.base, 'https://x.example');
+    expect([for (final b in again.all) b.id].skip(5), ['x.example', 'y.example']);
+    expect(again.all.skip(5).first.base, 'https://x.example');
     expect(again.isEnabled(again.all[1]), isFalse);
     expect(again.isEnabled(again.all.first), isTrue);
 
     await a.remove(x);
-    expect([for (final b in a.all.skip(4)) b.id], ['y.example']);
+    expect([for (final b in a.all.skip(5)) b.id], ['y.example']);
     await a.restore(x);
-    expect([for (final b in a.all.skip(4)) b.id], ['x.example', 'y.example']);
+    expect([for (final b in a.all.skip(5)) b.id], ['x.example', 'y.example']);
     expect(notified, 5);
   });
 
@@ -336,8 +336,24 @@ void main() {
       {'addons': jsonEncode([{'url': 'https://a', 'manifest': {'id': 'a'}}, 'junk'])},
     ]) {
       final a = await loaded((_) async => json({}), prefs);
-      expect(a.all.length, 4);
+      expect(a.all.length, 5);
       expect(a.all.every((b) => b.bundled), isTrue);
     }
+  });
+
+  test('Torrentio is built in and on, and a copy added by link before is dropped', () async {
+    final a = await loaded((_) async => json({}), {
+      'addons': jsonEncode([
+        {
+          'url': 'https://torrentio.strem.fun/manifest.json',
+          'manifest': {'id': 'com.stremio.torrentio.addon', 'name': 'Torrentio', 'resources': ['stream']},
+        },
+      ]),
+    });
+    final torrentio = a.all.where((b) => b.id == 'com.stremio.torrentio.addon').toList();
+    expect(torrentio, hasLength(1));
+    expect(torrentio.single.bundled, isTrue);
+    expect(a.isEnabled(torrentio.single), isTrue);
+    expect([for (final s in a.streamSources('movie', 'tt0012349')) s.name], contains('Torrentio'));
   });
 }
