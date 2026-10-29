@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../jellyfin.dart';
 import '../state.dart';
 import '../theme.dart';
+import 'account.dart';
 import 'detail.dart';
 
 class DownloadsScreen extends StatelessWidget {
@@ -16,7 +17,8 @@ class DownloadsScreen extends StatelessWidget {
         listenable: downloads,
         builder: (context, _) {
           final records = downloads.records;
-          if (records.isEmpty) return const _Empty();
+          // Files from an earlier sign-in still list and play; only an empty guest list asks to sign in.
+          if (records.isEmpty) return session.loggedIn ? const _Empty() : const SignInPrompt();
           final cs = Theme.of(context).colorScheme;
           return ListView(children: [
             Padding(

@@ -43,3 +43,19 @@ Source: github.com/stremio/stremio-official-addons `index.json`. stremio-core's 
 Bundled addons ship as manifest snapshots in code, so they work on first launch with no fetch. Cinemeta is locked; the other bundled ones get an on/off switch on Sources (no remove/re-paste needed). User-pasted addons keep remove + Undo.
 
 Not bundled: third-party torrent indexers (Torrentio and similar). None is part of the Stremio org; Stremio leaves them to the user, and Flick does the same via "Add a source".
+
+## Optional sign-in / guest mode (2026-10-29, design/guest.md)
+
+User decisions: comments left out (no backend); favourites + likes on Jellyfin for Jellyfin titles and on the device for Discover titles; first launch keeps Login with "Continue as guest".
+
+- cut: comments → no store exists (Jellyfin and addons have none).
+- cut: Home/Browse/Search for guests → hidden; guest shell is Discover + Downloads, no dead tabs.
+- cut: lock badges on gated toggles → normal off state, gate on tap.
+- cut: Favourites screen/tab → Discover "Favourites" chip + Home "Favourites" row.
+- cut: dislike → like on/off only.
+- kept: resume intent (the tapped action completes after sign-in), because re-tapping after a detour is the main soft-gate friction.
+- kept: guest Downloads tab, because old downloads must stay playable.
+- added: `lib/kit/sheet.dart` (`showFlickSheet`), the first kit piece: the gate and the guest profile sheet open through it, so new files have zero gates.py hits. Older sheets still call showModalBottomSheet directly.
+- override of Codex (guest-visual.md): Detail toggles sit **below** Play/Download, not above. Play stays the primary action by the title (Netflix's Play, then My List order).
+- override of Codex: the Title row is a small `_Saving` widget, not an inline ListenableBuilder, to keep `_hero` readable.
+- ponytail: device favourites not keyed per account; Home's Favourites row refreshes on pull, not on return from Detail.

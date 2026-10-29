@@ -8,7 +8,7 @@ import 'detail.dart';
 import 'library.dart';
 import 'torrent.dart';
 
-typedef _Home = ({List<Item> views, List<Item> resume, List<List<Item>> latest});
+typedef _Home = ({List<Item> views, List<Item> resume, List<Item> favourites, List<List<Item>> latest});
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -24,8 +24,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<_Home> _load() async {
     final c = session.client!;
     final views = await c.views();
-    final (resume, latest) = await (c.resume(), Future.wait(views.map((v) => c.latest(v.id)))).wait;
-    return (views: views, resume: resume, latest: latest);
+    final (resume, favourites, latest) =
+        await (c.resume(), c.items(favorites: true), Future.wait(views.map((v) => c.latest(v.id)))).wait;
+    return (views: views, resume: resume, favourites: favourites, latest: latest);
   }
 
   void _reload() => setState(() => _data = _load());
@@ -104,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ]),
           ),
+        SliverToBoxAdapter(child: PosterRow('Favourites', d.favourites)),
         for (var i = 0; i < d.views.length; i++)
           SliverToBoxAdapter(child: PosterRow('Latest in ${d.views[i].name}', d.latest[i])),
         const SliverToBoxAdapter(child: SizedBox(height: 28)),

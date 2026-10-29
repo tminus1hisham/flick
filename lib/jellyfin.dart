@@ -38,6 +38,9 @@ class Item {
     return t == null ? null : ticksToDuration(t);
   }
 
+  bool get isFavorite => json['UserData']?['IsFavorite'] as bool? ?? false;
+  bool get liked => json['UserData']?['Likes'] == true;
+
   Duration get resumePosition =>
       ticksToDuration((json['UserData']?['PlaybackPositionTicks'] as int?) ?? 0);
 
@@ -85,10 +88,15 @@ class JellyfinClient {
     return jsonDecode(r.body);
   }
 
-  Future<dynamic> _post(String path, Object body) async {
-    final r = await _http.post(_uri(path), headers: _headers, body: jsonEncode(body));
+  Future<dynamic> _post(String path, Object body, [Map<String, Object?> query = const {}]) async {
+    final r = await _http.post(_uri(path, query), headers: _headers, body: jsonEncode(body));
     if (r.statusCode >= 300) throw JellyfinException(r.statusCode, path);
     return r.body.isEmpty ? null : jsonDecode(r.body);
+  }
+
+  Future<void> _delete(String path, [Map<String, Object?> query = const {}]) async {
+    final r = await _http.delete(_uri(path, query), headers: _headers);
+    if (r.statusCode >= 300) throw JellyfinException(r.statusCode, path);
   }
 
   List<Item> _items(dynamic body) => [
@@ -127,11 +135,13 @@ class JellyfinClient {
         'limit': 20,
       }));
 
-  Future<List<Item>> items({String? parentId, String? searchTerm, int start = 0, int limit = 60}) async =>
+  Future<List<Item>> items(
+          {String? parentId, String? searchTerm, bool favorites = false, int start = 0, int limit = 60}) async =>
       _items(await _get('/Items', {
         'userId': userId,
         'parentId': parentId,
         'searchTerm': searchTerm,
+        if (favorites) 'filters': 'IsFavorite',
         'recursive': true,
         'includeItemTypes': searchTerm == null ? 'Movie,Series' : 'Movie,Series,Episode',
         'sortBy': 'SortName',
@@ -175,6 +185,14 @@ class JellyfinClient {
           'audioBitRate': 128000,
           'api_key': token,
         }).toString();
+
+  Future<void> setFavorite(String itemId, bool on) => on
+      ? _post('/UserFavoriteItems/$itemId', const {}, {'userId': userId})
+      : _delete('/UserFavoriteItems/$itemId', {'userId': userId});
+
+  Future<void> setLiked(String itemId, bool on) => on
+      ? _post('/UserItems/$itemId/Rating', const {}, {'userId': userId, 'likes': true})
+      : _delete('/UserItems/$itemId/Rating', {'userId': userId});
 
   Future<void> reportStart(String itemId, Duration pos) =>
       _post('/Sessions/Playing', {'ItemId': itemId, 'PositionTicks': durationToTicks(pos)});

@@ -16,6 +16,10 @@ const _posters = [
   'assets/posters/p06.webp',
   'assets/posters/p07.webp',
   'assets/posters/p08.webp',
+  'assets/posters/p09.webp',
+  'assets/posters/p10.webp',
+  'assets/posters/p11.webp',
+  'assets/posters/p12.webp',
 ];
 
 class LoginScreen extends StatefulWidget {
@@ -52,6 +56,8 @@ class _LoginScreenState extends State<LoginScreen> {
       var server = _server.text.trim();
       if (!server.startsWith('http')) server = 'http://$server';
       await session.login(server, _user.text.trim(), _pass.text);
+      // Opened from a gate or the profile sheet: return to where the user was.
+      if (mounted && Navigator.canPop(context)) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => _error = friendlyError(e));
     } finally {
@@ -67,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final pushed = ModalRoute.of(context)?.canPop ?? false;
     return Scaffold(
       backgroundColor: FlickTokens.background,
       // The poster wall stays full-screen; only the form moves for the keyboard.
@@ -84,19 +91,30 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       const SafeArea(bottom: false, child: _Brand()),
                       const Spacer(),
-                      _panel(context, reduceMotion),
+                      _panel(context, reduceMotion, pushed),
                     ],
                   ),
                 ),
               ],
             ),
           ),
+          if (pushed)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + FlickTokens.grid,
+              left: FlickTokens.grid * 2,
+              child: IconButton(
+                tooltip: 'Close sign in',
+                style: IconButton.styleFrom(backgroundColor: FlickTokens.background.withValues(alpha: 0.45)),
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _panel(BuildContext context, bool reduceMotion) {
+  Widget _panel(BuildContext context, bool reduceMotion, bool pushed) {
     // Sign up is visual-only until there's a backend for it.
     final message =
         _error ??
@@ -219,6 +237,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       )
                     : Text(_signUp ? 'Create account' : 'Sign in'),
               ),
+              if (!pushed && !session.onboarded) ...[
+                const SizedBox(height: FlickTokens.grid),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: FlickTokens.textSecondary,
+                    minimumSize: const Size.fromHeight(FlickTokens.minTouchTarget),
+                  ),
+                  onPressed: _busy ? null : session.continueAsGuest,
+                  child: const Text('Continue as guest'),
+                ),
+              ],
               const SizedBox(height: 4),
               TextButton(
                 style: TextButton.styleFrom(
@@ -325,7 +354,7 @@ class PosterDrift extends StatefulWidget {
 class _PosterDriftState extends State<PosterDrift> with SingleTickerProviderStateMixin {
   static const _angle = -12 * math.pi / 180;
   static const _gap = 12.0;
-  // Loops per controller period; with 8 posters that's 24 / 30 / 40 / 30 s per poster.
+  // Loops per controller period; that's 24 / 30 / 40 / 30 s per poster.
   static const _cycles = [5, 4, 3, 4];
   static const _offsets = [0.0, .31, .57, .79];
 

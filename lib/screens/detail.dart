@@ -5,6 +5,7 @@ import '../jellyfin.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'account.dart';
 import 'player.dart';
 
 bool canDownload(TaskStatus? s) =>
@@ -101,7 +102,11 @@ class _DetailScreenState extends State<DetailScreen> {
         ListView(padding: EdgeInsets.only(bottom: 28 + MediaQuery.paddingOf(context).bottom), children: [
           FutureBuilder<Item>(
             future: _full,
-            builder: (_, s) => _hero(s.data ?? item),
+            builder: (_, s) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              _hero(s.data ?? item),
+              // Keyed so the toggles start from the server's state once the full item arrives.
+              _Saving(s.data ?? item, key: ValueKey(s.hasData)),
+            ]),
           ),
           if (_seasons != null) _seasonSection(),
         ]),
@@ -110,7 +115,7 @@ class _DetailScreenState extends State<DetailScreen> {
           top: MediaQuery.paddingOf(context).top + 4,
           left: 8,
           child: BackButton(
-            style: IconButton.styleFrom(backgroundColor: Colors.black.withValues(alpha: 0.45)),
+            style: IconButton.styleFrom(backgroundColor: FlickTokens.background.withValues(alpha: 0.45)),
           ),
         ),
       ]),
@@ -397,6 +402,76 @@ class _EpisodesSkeleton extends StatelessWidget {
             ),
         ]),
       );
+}
+
+/// Favourite + like for a Jellyfin title, saved to the server. Flips at once, reverts on failure.
+class _Saving extends StatefulWidget {
+  const _Saving(this.item, {super.key});
+  final Item item;
+
+  @override
+  State<_Saving> createState() => _SavingState();
+}
+
+class _SavingState extends State<_Saving> {
+  late bool _favourite = widget.item.isFavorite, _liked = widget.item.liked;
+  final _busy = <String>{};
+  bool _failed = false;
+
+  Future<void> _set(String what, bool on, void Function(bool) apply, Future<void> Function(String, bool) send) async {
+    if (!_busy.add(what)) return;
+    setState(() {
+      _failed = false;
+      apply(on);
+    });
+    try {
+      await send(widget.item.id, on);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          apply(!on);
+          _failed = true;
+        });
+      }
+    }
+    _busy.remove(what);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = session.client!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, FlickTokens.grid * 4, FlickTokens.pageGutter, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: FlickTokens.grid * 2, runSpacing: FlickTokens.grid * 2, children: [
+          ToggleAction(
+            on: _favourite,
+            icon: Icons.favorite_border_rounded,
+            onIcon: Icons.favorite_rounded,
+            label: 'Add to favourites',
+            onLabel: 'Remove from favourites',
+            onPressed: () => _set('favourite', !_favourite, (v) => _favourite = v, c.setFavorite),
+          ),
+          ToggleAction(
+            on: _liked,
+            icon: Icons.thumb_up_outlined,
+            onIcon: Icons.thumb_up_rounded,
+            label: 'Like title',
+            onLabel: 'Unlike title',
+            onPressed: () => _set('like', !_liked, (v) => _liked = v, c.setLiked),
+          ),
+        ]),
+        if (_failed) ...[
+          const SizedBox(height: FlickTokens.grid * 2),
+          Semantics(
+            liveRegion: true,
+            child: Text("Couldn't save. Try again.",
+                style: FlickText.metadata.copyWith(color: context.flick.danger)),
+          ),
+        ],
+      ]),
+    );
+  }
 }
 
 class DownloadButton extends StatelessWidget {

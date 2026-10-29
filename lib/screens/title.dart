@@ -7,6 +7,7 @@ import '../playback.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'account.dart';
 
 /// Row text for a stream. Tests swap it, since describe() belongs to the addons contract.
 @visibleForTesting
@@ -122,6 +123,10 @@ class _TitleScreenState extends State<TitleScreen> {
               Text(m.description!, maxLines: 2, overflow: TextOverflow.ellipsis, style: FlickText.body),
             ],
           ],
+          // Outside the loading branch: the preview is enough to save while the meta loads.
+          const SizedBox(height: FlickTokens.grid * 4),
+          _Saving(p),
+          const SizedBox(height: FlickTokens.grid),
         ]),
       ),
     ]);
@@ -185,6 +190,40 @@ class _TitleScreenState extends State<TitleScreen> {
       SliverList.list(children: [for (final v in eps) _EpisodeRow(m, v)]),
     ];
   }
+}
+
+/// Favourite + like for a Discover title, saved on this device. A guest's tap opens the sign-in
+/// gate, and the action completes after signing in.
+class _Saving extends StatelessWidget {
+  const _Saving(this.preview);
+  final MetaPreview preview;
+
+  Future<void> _gated(BuildContext context, Gate gate, VoidCallback action) async {
+    if (await requireSignIn(context, gate)) action();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: Listenable.merge([saved, session]),
+        builder: (context, _) => Wrap(spacing: FlickTokens.grid * 2, runSpacing: FlickTokens.grid * 2, children: [
+          ToggleAction(
+            on: session.loggedIn && saved.isFavourite(preview.id),
+            icon: Icons.favorite_border_rounded,
+            onIcon: Icons.favorite_rounded,
+            label: 'Add to favourites',
+            onLabel: 'Remove from favourites',
+            onPressed: () => _gated(context, Gate.favourite, () => saved.toggleFavourite(preview)),
+          ),
+          ToggleAction(
+            on: session.loggedIn && saved.isLiked(preview.id),
+            icon: Icons.thumb_up_outlined,
+            onIcon: Icons.thumb_up_rounded,
+            label: 'Like title',
+            onLabel: 'Unlike title',
+            onPressed: () => _gated(context, Gate.like, () => saved.toggleLike(preview.id)),
+          ),
+        ]),
+      );
 }
 
 /// D3 Streams for one episode.

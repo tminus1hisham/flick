@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' show ClientException;
 
 import 'jellyfin.dart';
+import 'kit/sheet.dart';
+import 'screens/account.dart';
 import 'screens/detail.dart';
 import 'state.dart';
 import 'theme.dart';
@@ -232,14 +234,40 @@ class PosterRow extends StatelessWidget {
   }
 }
 
-/// Signed-in server details and sign out.
+/// Signed-in server details and sign out; for a guest, what signing in gives and Sign in.
 class ProfileButton extends StatelessWidget {
   const ProfileButton({super.key});
 
+  Future<void> _guest(BuildContext context) async {
+    final go = await showFlickSheet<bool>(
+      context,
+      (sheet) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+              FlickTokens.pageGutter, FlickTokens.grid, FlickTokens.pageGutter, FlickTokens.pageGutter),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Not signed in', style: FlickText.railHeading.copyWith(color: FlickTokens.textPrimary)),
+            const SizedBox(height: FlickTokens.grid * 2),
+            Text(
+              'Browse and play as a guest. Sign in with your Jellyfin server account to save favourites, '
+              'like titles and download.',
+              style: FlickText.body.copyWith(color: FlickTokens.textSecondary),
+            ),
+            const SizedBox(height: FlickTokens.grid * 6),
+            FilledButton(onPressed: () => Navigator.pop(sheet, true), child: const Text('Sign in')),
+          ]),
+        ),
+      ),
+    );
+    // From the page's context: the sheet's own context is being disposed.
+    if (go == true && context.mounted) await openSignIn(context);
+  }
+
   @override
   Widget build(BuildContext context) => IconButton(
-        tooltip: 'Profile',
-        onPressed: () => showModalBottomSheet<void>(
+        tooltip: session.loggedIn ? 'Profile' : 'Sign in',
+        onPressed: () => !session.loggedIn ? _guest(context) : showModalBottomSheet<void>(
           context: context,
           showDragHandle: true,
           builder: (sheet) => SafeArea(

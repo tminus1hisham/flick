@@ -10,6 +10,7 @@ import '../widgets.dart';
 import 'title.dart';
 
 (String, String, String) _key(Catalog c) => (c.addon.base, c.type, c.id);
+const _favourites = ('', '', 'favourites');
 
 // The client can't tell offline from an addon being down: both are AddonError.unreachable.
 bool _offline(Object? e) => e is AddonException && e.kind == AddonError.unreachable;
@@ -45,10 +46,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: addons,
+        listenable: Listenable.merge([addons, saved, session]),
         builder: (context, _) {
           final catalogs = addons.catalogs.where((c) => c.type == _type).toList();
           final selected = catalogs.where((c) => _key(c) == _selected).firstOrNull ?? catalogs.firstOrNull;
+          final favourites =
+              session.loggedIn ? [for (final f in saved.favourites) if (f.type == _type) f] : <MetaPreview>[];
+          final showFavourites = _selected == _favourites && favourites.isNotEmpty;
           final searchable = catalogs.where((c) => c.searchable).firstOrNull;
           final searching = _query.isNotEmpty;
           final heroes = !MediaQuery.disableAnimationsOf(context);
@@ -104,15 +108,28 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
                 child: Row(children: [
+                  if (favourites.isNotEmpty) ...[
+                    ChoiceChip(
+                      avatar: const Icon(Icons.favorite_rounded),
+                      label: const Text('Favourites'),
+                      selected: showFavourites,
+                      showCheckmark: false,
+                      materialTapTargetSize: MaterialTapTargetSize.padded,
+                      onSelected: (_) {
+                        if (!showFavourites) _pick(() => _selected = _favourites);
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   for (final c in catalogs) ...[
                     if (c != catalogs.first) const SizedBox(width: 8),
                     ChoiceChip(
                       label: Text(c.name),
-                      selected: c == selected,
+                      selected: !showFavourites && c == selected,
                       showCheckmark: false,
                       materialTapTargetSize: MaterialTapTargetSize.padded,
                       onSelected: (_) {
-                        if (c != selected) _pick(() => _selected = _key(c));
+                        if (showFavourites || c != selected) _pick(() => _selected = _key(c));
                       },
                     ),
                   ],
@@ -124,9 +141,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 child: IndexedStack(index: searching ? 1 : 0, children: [
                   HeroMode(
                     enabled: heroes && !searching,
-                    child: selected == null
-                        ? const _Notice(Icons.video_library_outlined, 'No catalogs for this type yet.')
-                        : _Feed(selected, key: ValueKey(_key(selected))),
+                    child: showFavourites
+                        // Keyed by the list so unfavouriting on Title shows here on return.
+                        ? _Feed.saved(favourites, key: ValueKey(favourites.map((f) => f.id).join()))
+                        : selected == null
+                            ? const _Notice(Icons.video_library_outlined, 'No catalogs for this type yet.')
+                            : _Feed(selected, key: ValueKey(_key(selected))),
                   ),
                   HeroMode(
                     enabled: heroes && searching,
@@ -182,8 +202,15 @@ class _Segment extends StatelessWidget {
 
 /// One catalog (or one search) paged in as the viewer nears the end.
 class _Feed extends StatefulWidget {
-  const _Feed(this.catalog, {this.query, this.onClear, super.key});
-  final Catalog catalog;
+  const _Feed(Catalog this.catalog, {this.query, this.onClear, super.key}) : saved = null;
+
+  /// The device favourites: one fixed page, no paging.
+  const _Feed.saved(List<MetaPreview> this.saved, {super.key})
+      : catalog = null,
+        query = null,
+        onClear = null;
+  final Catalog? catalog;
+  final List<MetaPreview>? saved;
   final String? query;
   final VoidCallback? onClear;
 
@@ -200,17 +227,22 @@ class _FeedState extends State<_Feed> {
   @override
   void initState() {
     super.initState();
+    if (widget.saved case final saved?) {
+      _items.addAll(saved);
+      _done = true;
+    }
     _more();
   }
 
   Future<void> _more() async {
     if (_loading || _done) return;
+    final catalog = widget.catalog!;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final page = await addons.catalog(widget.catalog, search: widget.query, skip: _items.length);
+      final page = await addons.catalog(catalog, search: widget.query, skip: _items.length);
       // Pages can overlap; a page with nothing new ends the feed, and Hero tags stay unique.
       final fresh = page.where((m) => _ids.add(m.id)).toList();
       _items.addAll(fresh);

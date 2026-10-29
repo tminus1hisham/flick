@@ -19,6 +19,7 @@ Future<void> main() async {
   await session.load();
   await downloads.init();
   await addons.load();
+  await saved.load();
   runApp(const FlickApp());
 }
 
@@ -34,17 +35,21 @@ class FlickApp extends StatelessWidget {
         builder: (_, child) => SplashHandoff(child: child!),
         home: ListenableBuilder(
           listenable: session,
-          builder: (_, _) => !session.loggedIn
-              ? const LoginScreen()
-              : session.online
-                  ? const Shell()
-                  : const OfflineShell(),
+          builder: (_, _) => session.loggedIn
+              ? (session.online ? const Shell(key: ValueKey('member')) : const OfflineShell())
+              : session.onboarded
+                  // Keyed apart so the tab index resets when signing in or out.
+                  ? const Shell(guest: true, key: ValueKey('guest'))
+                  : const LoginScreen(),
         ),
       );
 }
 
 class Shell extends StatefulWidget {
-  const Shell({super.key});
+  const Shell({this.guest = false, super.key});
+
+  /// No server: only Discover and Downloads.
+  final bool guest;
 
   @override
   State<Shell> createState() => _ShellState();
@@ -52,35 +57,39 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _tab = 0;
-  static const _tabs = [HomeScreen(), DiscoverScreen(), BrowseScreen(), SearchScreen(), DownloadsScreen()];
-  static const _titles = ['', '', 'Browse', 'Search', 'Downloads'];
+  static const _home = (HomeScreen(), 'Home',
+      NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'));
+  static const _discover = (DiscoverScreen(), 'Discover',
+      NavigationDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'));
+  static const _browse = (BrowseScreen(), 'Browse',
+      NavigationDestination(
+          icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'));
+  // Search has no outlined/filled pair in Material Icons.
+  static const _search = (SearchScreen(), 'Search', NavigationDestination(icon: Icon(Icons.search), label: 'Search'));
+  static const _downloads = (DownloadsScreen(), 'Downloads',
+      NavigationDestination(
+          icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'));
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        // Home draws its own bar over the hero; Discover's search field is its header.
-        appBar: _tab < 2
-            ? null
-            : AppBar(
-                title: Text(_titles[_tab]),
-                actions: const [MagnetButton(), ProfileButton()],
-              ),
-        body: IndexedStack(index: _tab, children: _tabs),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (i) => setState(() => _tab = i),
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-            NavigationDestination(
-                icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'),
-            NavigationDestination(
-                icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'),
-            // Search has no outlined/filled pair in Material Icons.
-            NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
-            NavigationDestination(
-                icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final tabs = widget.guest ? const [_discover, _downloads] : const [_home, _discover, _browse, _search, _downloads];
+    final (_, name, _) = tabs[_tab];
+    return Scaffold(
+      // Home draws its own bar over the hero; Discover's search field is its header.
+      appBar: name == 'Home' || name == 'Discover'
+          ? null
+          : AppBar(
+              title: Text(name),
+              actions: const [MagnetButton(), ProfileButton()],
+            ),
+      body: IndexedStack(index: _tab, children: [for (final (screen, _, _) in tabs) screen]),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (i) => setState(() => _tab = i),
+        destinations: [for (final (_, _, destination) in tabs) destination],
+      ),
+    );
+  }
 }
 
 class OfflineShell extends StatelessWidget {
