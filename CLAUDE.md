@@ -6,7 +6,8 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze`: must print `No issues found!`
-- `flutter test`: 72 tests pass on branch `guest`.
+- `flutter test`: 80 tests pass on branch `guest`.
+- Kotlin unit tests: `cd android && ./gradlew :app:testDebugUnitTest` (results in `build/app/test-results/`). A fresh worktree first needs `flutter pub get` and the gitignored `android/gradlew*` + `android/gradle/wrapper/gradle-wrapper.jar` copied from the main checkout.
 - `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`).
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits. Older files (player.dart, widgets.dart, library.dart) have known hits; that is expected.
 - `PlayerScreen` can't be pumped in `flutter test` because media_kit needs native libmpv. Put player logic in pure helpers or getters and test those (see test/player_test.dart).
@@ -63,7 +64,15 @@ Sign-in is optional. First launch shows Login with "Continue as guest" (top righ
 - **Not ours:** login.dart's `_posters` lists p09–p12.webp, added by another session. Those asset files are untracked. Commit them with that session's work, or drop the 4 lines before merging.
 - Not verified on a device.
 
+### Buffering and stable playback (branch `guest`, 2026-10-30)
+Plan written with Codex: `~/.claude/plans/come-up-with-a-twinkling-peach.md` (4 phases; Claude overrode Codex on: keep SHA-1 piece check, no `cache-secs=30`, 128/16 MiB cache). Phase 1 done and merged (fresh review: both halves PASS-WITH-NITS, nits fixed):
+- StreamServer: a new request no longer cancels other waiting requests (mpv's tail probe used to kill the head request); a waiting request ends only when its own client hangs up (`clientGone` in Http.kt) and counts as progress for the 60 s watchdog.
+- Player, addon playback only: the 10 s pre-start fatal timer is gone (failure = mpv idle, re-checked 1 s and 3 s after an early error); `network-timeout` 120 s torrent / 30 s direct; demuxer 128 MiB ahead / 16 MiB back; `cache-pause-wait` 3 s, rising once to 8 s after 2 genuine stalls in 60 s (`PauseWait` in lib/stall.dart). `PlayerScreen.torrent` (engine, id) is passed but only used for the timeout so far.
+- **Known gap until Phase 3:** a source that hangs without mpv going idle shows loading forever (no "Try another source" yet). Don't merge to main before Phase 3.
+- Not verified on a device; the no-blanket-cancel and watchdog-refresh changes have no test that fails without them (native-only).
+
 ## Next
+- **Buffering Phase 2** (native piece scheduling: head 4 MiB + last-piece prefetch, bitrate-aware rolling window with `deadline = 1000·k·P/R`, seek = request outside the window and not a tail probe → `clearPieceDeadlines`, new channel method `bitrate`) and **Phase 3** (buffering overlay via build-mobile, Codex design in the plan: stages, real progress from `player.stream.bufferingPercentage`, peers · speed, "Waiting for connection" via a native `online` method, "Try another source" after 15 s or 3 stalls in 2 min). Then Phase 4: device measurement and tuning.
 0. **Guest mode:** device-check: first launch → Continue as guest → Discover; ♥ as guest → sheet → Sign in → back on the title with ♥ on; sign out → guest shell; guest Downloads prompt.
 1. **Device acceptance** (APK: `build/app/outputs/flutter-apk/app-debug.apk`):
    - Jellyfin streamed and downloaded playback still works.
