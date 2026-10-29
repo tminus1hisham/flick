@@ -7,6 +7,7 @@ import 'screens/home.dart';
 import 'screens/library.dart';
 import 'screens/login.dart';
 import 'screens/search.dart';
+import 'screens/sources.dart';
 import 'screens/torrent.dart';
 import 'state.dart';
 import 'theme.dart';
@@ -27,6 +28,7 @@ class FlickApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Flick',
+        routes: {'/sources': (_) => const SourcesScreen()},
         debugShowCheckedModeBanner: false,
         theme: flickTheme(),
         builder: (_, child) => SplashHandoff(child: child!),

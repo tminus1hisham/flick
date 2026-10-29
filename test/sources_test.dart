@@ -44,8 +44,8 @@ class _Addons extends Addons {
   Future<Addon> add(String input) {
     calls.add('add $input');
     return switch (input) {
-      'nope' => Future.error(const AddonException(AddonError.invalid)),
-      'twice' => Future.error(const AddonException(AddonError.duplicate)),
+      'nope' => Future.error(AddonException(AddonError.invalid)),
+      'twice' => Future.error(AddonException(AddonError.duplicate)),
       _ => (pendingAdd = Completer()).future,
     };
   }

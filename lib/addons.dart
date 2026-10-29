@@ -333,8 +333,8 @@ final _seeders = RegExp(r'👤\s*(\d+)');
 final _sizeTagged = RegExp(r'💾\s*(\d+(?:\.\d+)?\s?[KMGT]i?B)', caseSensitive: false);
 final _sizeBare = RegExp(r'\b\d+(?:\.\d+)? ?(?:GB|MB)\b');
 final _origin = RegExp('⚙️?\\s*([^\\n]+)');
-// ignore: valid_regexps, the lint parses without unicode: true; \p{...} is valid there (pinned by tests).
 final _emoji = RegExp(
+    // ignore: valid_regexps, the lint parses without unicode: true; \p{...} is valid there (pinned by tests).
     r'[\p{Extended_Pictographic}\p{Regional_Indicator}\p{Emoji_Modifier}\u{FE0F}\u{200D}\u{20E3}]',
     unicode: true);
 
