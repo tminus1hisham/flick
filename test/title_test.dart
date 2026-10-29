@@ -1,5 +1,6 @@
 
 import 'package:flick/addons.dart';
+import 'package:flick/kit/download_button.dart';
 import 'package:flick/screens/title.dart';
 import 'package:flick/state.dart';
 import 'package:flick/theme.dart';
@@ -42,12 +43,12 @@ class _Addons extends Addons {
       switch (results[a.name]) { final List<AddonStream> l => l, final e => throw e! };
 }
 
-AddonStream _stream(String title, {String? infoHash = 'ed0afbc1', String? externalUrl, String? name}) => (
+AddonStream _stream(String title, {String? infoHash = 'ed0afbc1', String? url, String? externalUrl, String? name}) => (
       name: name,
       title: title,
       infoHash: infoHash,
       fileIdx: null,
-      url: null,
+      url: url,
       externalUrl: externalUrl,
       trackers: const [],
       filename: null,
@@ -119,6 +120,20 @@ void main() {
     expect(find.textContaining('—'), findsOneWidget);
     expect(find.textContaining(' 0'), findsNothing);
     expect(find.bySemanticsLabel('1080p, unknown seeders, 812 MB, from 1337x'), findsOneWidget);
+  });
+
+  testWidgets('only torrent streams get a download action, separate from the row that plays', (tester) async {
+    await _open(
+        tester,
+        _Addons(_meta('movie'), sources: [_Addon('Northstar')], results: {
+          'Northstar': [_stream('The.Kid.1921.1080p'), _stream('Direct', infoHash: null, url: 'https://cdn.example/kid.mp4')],
+        }),
+        'movie');
+
+    expect(find.byType(DownloadButton), findsOneWidget);
+    expect(find.bySemanticsLabel('Download'), findsOneWidget);
+    expect(find.bySemanticsLabel('1080p, The.Kid.1921.1080p, 284 seeders, 812 MB, from 1337x'), findsOneWidget);
+    expect(find.bySemanticsLabel('1080p, Direct, 284 seeders, 812 MB, from 1337x'), findsOneWidget);
   });
 
   testWidgets('no stream sources asks to add one', (tester) async {

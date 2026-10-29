@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart';
+import '../downloads.dart';
+import '../kit/download_button.dart';
 import '../kit/toggle.dart';
 import '../playback.dart';
 import '../state.dart';
@@ -126,6 +128,7 @@ class _TitleScreenState extends State<TitleScreen> {
           // Outside the loading branch: the preview is enough to save while the meta loads.
           const SizedBox(height: FlickTokens.grid * 4),
           _Saving(p),
+          _Downloading((d) => d.playback.videoId == p.id || d.playback.videoId.startsWith('${p.id}:')),
           const SizedBox(height: FlickTokens.grid),
         ]),
       ),
@@ -162,7 +165,8 @@ class _TitleScreenState extends State<TitleScreen> {
     if (!_series) {
       return [
         const SliverToBoxAdapter(child: _Heading('Streams', style: FlickText.railHeading)),
-        _StreamList((title: m.name, subtitle: null, type: m.type, videoId: m.id, season: null, episode: null)),
+        _StreamList((title: m.name, subtitle: null, type: m.type, videoId: m.id, season: null, episode: null),
+            poster: widget.preview.poster ?? m.poster),
       ];
     }
     if (m.videos.isEmpty) {
@@ -251,6 +255,7 @@ class StreamsScreen extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(video.title, style: FlickText.railHeading),
               ],
+              _Downloading((d) => d.playback.videoId == video.id),
             ]),
           ),
         ),
@@ -261,7 +266,7 @@ class StreamsScreen extends StatelessWidget {
           videoId: video.id,
           season: video.season,
           episode: video.episode,
-        )),
+        ), poster: meta.poster ?? video.thumbnail),
         SliverPadding(padding: EdgeInsets.only(bottom: 28 + MediaQuery.paddingOf(context).bottom)),
       ]),
     );
@@ -270,8 +275,11 @@ class StreamsScreen extends StatelessWidget {
 
 /// Every stream source asked in parallel, one group each; external services gather under "Where to watch".
 class _StreamList extends StatefulWidget {
-  const _StreamList(this.playback);
+  const _StreamList(this.playback, {this.poster});
   final Playback playback;
+
+  /// Shown on a download's row in Downloads.
+  final String? poster;
 
   @override
   State<_StreamList> createState() => _StreamListState();
@@ -386,7 +394,7 @@ class _StreamListState extends State<_StreamList> {
   List<Widget> _group(Addon a) {
     final r = _results[a.id];
     if (r is List<AddonStream>) {
-      final rows = [for (final s in r) if (s.externalUrl == null) _StreamRow(s, widget.playback)];
+      final rows = [for (final s in r) if (s.externalUrl == null) _StreamRow(s, widget.playback, poster: widget.poster)];
       // A services-only answer lives under "Where to watch" and must not read as streams found.
       if (rows.isEmpty && r.isNotEmpty) return const [];
       return [
@@ -414,10 +422,36 @@ class _StreamListState extends State<_StreamList> {
   }
 }
 
+/// Whether a title (or episode) has a download under way: a line under its heading, not a destination.
+class _Downloading extends StatelessWidget {
+  const _Downloading(this.matches);
+  final bool Function(Download) matches;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: downloads,
+        builder: (context, _) {
+          final active = downloads.items.any((d) =>
+              matches(d) && (d.state == DownloadState.queued || d.state == DownloadState.downloading));
+          if (!active) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.only(top: FlickTokens.grid * 2),
+            child: Row(children: [
+              Icon(Icons.south_rounded, size: 16, color: context.flick.progress),
+              const SizedBox(width: FlickTokens.grid * 2),
+              Flexible(child: Text('Downloading · see Downloads', style: FlickText.metadata.merge(_muted))),
+            ]),
+          );
+        },
+      );
+}
+
+/// A stream: the row plays it; torrents get a separate download action beside it, with its own semantics.
 class _StreamRow extends StatelessWidget {
-  const _StreamRow(this.stream, this.playback);
+  const _StreamRow(this.stream, this.playback, {this.poster});
   final AddonStream stream;
   final Playback playback;
+  final String? poster;
 
   @override
   Widget build(BuildContext context) {
@@ -443,52 +477,77 @@ class _StreamRow extends StatelessWidget {
       if (i.size != null) [TextSpan(text: i.size, style: streamMonoStyle)],
       if (i.origin != null) [TextSpan(text: i.origin)],
     ];
-    return _Press(
-      label: [
-        i.quality,
-        release,
-        if (seeders != null) '$seeders seeders',
-        ?i.size,
-        if (i.origin != null) 'from ${i.origin}',
-      ].join(', '),
-      onTap: () async {
-        HapticFeedback.lightImpact();
-        await play(context, stream, playback);
-      },
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 60),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: FlickTokens.outline))),
-        child: Row(children: [
-          SizedBox(
-            width: FlickTokens.streamQualityWidth,
+    final hash = stream.infoHash;
+    final action = hash == null || stream.url != null
+        ? null
+        : ListenableBuilder(
+            listenable: downloads,
+            builder: (context, _) {
+              final d = downloads.of(hash, stream.fileIdx, playback.videoId);
+              final done = d?.state == DownloadState.done;
+              // Failed can be tried again; queued, paused and downloading stay disabled (Downloads owns them).
+              final idle = d == null || d.state == DownloadState.failed;
+              return DownloadButton(
+                progress: idle || done ? null : (d.total > 0 ? (d.bytes / d.total).clamp(0.0, 1.0) : 0.0),
+                done: done,
+                label: d?.state == DownloadState.failed ? 'Retry download' : 'Download',
+                onPressed: idle ? () => download(context, stream, playback, poster: poster) : null,
+              );
+            },
+          );
+    return DecoratedBox(
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: FlickTokens.outline))),
+      child: Row(children: [
+        Expanded(
+          child: _Press(
+            label: [
+              i.quality,
+              release,
+              if (seeders != null) '$seeders seeders',
+              ?i.size,
+              if (i.origin != null) 'from ${i.origin}',
+            ].join(', '),
+            onTap: () async {
+              HapticFeedback.lightImpact();
+              await play(context, stream, playback);
+            },
             child: Container(
-              height: 24,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(
-                color: FlickTokens.surface2,
-                borderRadius: BorderRadius.circular(FlickTokens.controlRadius),
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(i.quality, style: FlickText.metadata.copyWith(fontWeight: FontWeight.w700)),
-              ),
+              constraints: const BoxConstraints(minHeight: 60),
+              padding: EdgeInsets.fromLTRB(20, 12, action == null ? 20 : 8, 12),
+              child: Row(children: [
+                SizedBox(
+                  width: FlickTokens.streamQualityWidth,
+                  child: Container(
+                    height: 24,
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: FlickTokens.surface2,
+                      borderRadius: BorderRadius.circular(FlickTokens.controlRadius),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(i.quality, style: FlickText.metadata.copyWith(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(release, maxLines: 2, overflow: TextOverflow.ellipsis, style: FlickText.body),
+                    for (final l in i.lines.skip(1)) Text(l, style: FlickText.metadata.merge(_muted)),
+                    if (telemetry.isNotEmpty)
+                      Text.rich(TextSpan(style: FlickText.metadata.merge(_muted), children: [
+                        for (final (n, part) in telemetry.indexed) ...[if (n > 0) const TextSpan(text: ' · '), ...part],
+                      ])),
+                  ]),
+                ),
+              ]),
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(release, maxLines: 2, overflow: TextOverflow.ellipsis, style: FlickText.body),
-              for (final l in i.lines.skip(1)) Text(l, style: FlickText.metadata.merge(_muted)),
-              if (telemetry.isNotEmpty)
-                Text.rich(TextSpan(style: FlickText.metadata.merge(_muted), children: [
-                  for (final (n, part) in telemetry.indexed) ...[if (n > 0) const TextSpan(text: ' · '), ...part],
-                ])),
-            ]),
-          ),
-        ]),
-      ),
+        ),
+        if (action != null) Padding(padding: const EdgeInsets.only(right: FlickTokens.pageGutter), child: action),
+      ]),
     );
   }
 }
@@ -629,7 +688,7 @@ class _PressState extends State<_Press> {
         excludeSemantics: true,
         child: AnimatedScale(
           scale: _down && !MediaQuery.disableAnimationsOf(context) ? 0.97 : 1,
-          duration: FlickTokens.stateDuration,
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : FlickTokens.stateDuration,
           curve: FlickTokens.curveIn,
           child: InkWell(
             onTap: widget.onTap,

@@ -8,6 +8,11 @@ import 'package:flick/screens/player.dart';
 // PlayerScreen can't be pumped headless: Player() needs libmpv, which
 // `flutter test` doesn't have. These cover the decisions it delegates to.
 void main() {
+  test('a downloaded file offers Back, not another source', () {
+    expect(exitLabel('/data/user/0/dev.local.flick/files/downloads/ab/kid.mkv'), 'Back');
+    expect(exitLabel('http://127.0.0.1:8090/0'), 'Choose another source');
+  });
+
   group('stoppedEarly', () {
     const d = Duration(minutes: 100);
     bool early({

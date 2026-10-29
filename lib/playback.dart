@@ -15,7 +15,7 @@ Future<void> play(BuildContext context, AddonStream s, Playback p) async {
     await openExternal(external);
     return;
   }
-  final title = p.subtitle == null ? p.title : '${p.title} · ${p.subtitle}';
+  final title = _name(p);
   final Widget screen;
   if (url != null) {
     screen = PlayerScreen(
@@ -30,3 +30,10 @@ Future<void> play(BuildContext context, AddonStream s, Playback p) async {
   }
   await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
 }
+
+String _name(Playback p) => p.subtitle == null ? p.title : '${p.title} · ${p.subtitle}';
+
+/// Downloads torrent stream [s]: the torrent start screen picks the file like [play], registers it and comes back.
+Future<void> download(BuildContext context, AddonStream s, Playback p, {String? poster}) =>
+    Navigator.push(context, MaterialPageRoute(builder: (_) => TorrentScreen(magnetFor(s), fileIdx: s.fileIdx,
+        season: p.season, episode: p.episode, title: _name(p), playback: p, download: true, poster: poster)));

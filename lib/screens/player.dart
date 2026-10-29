@@ -111,6 +111,11 @@ String? addedSubtitle(String trackList, String sid, Iterable<String> known) {
       : null;
 }
 
+/// The recovery overlay's way out: a downloaded file (a local path) has no
+/// other source to choose.
+String exitLabel(String source) =>
+    source.startsWith('/') ? 'Back' : 'Choose another source';
+
 /// Whether playback stopping is a failure rather than the video ending. Past
 /// 90% (Stremio's CREDITS_THRESHOLD_COEF) or with an unknown duration it ended:
 /// .ts files and some MKVs overstate their duration. Short of that it failed
@@ -148,7 +153,7 @@ class PlayerScreen extends StatefulWidget {
   final Map<String, String> headers;
   final List<Subtitle> subtitles;
 
-  /// An addon stream URL or the local torrent stream server.
+  /// An addon stream URL, the local torrent stream server, or a downloaded file's path.
   final String source;
 
   @override
@@ -664,7 +669,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     minimumSize: const Size(48, 48),
                                   ),
                                   onPressed: () => Navigator.pop(context),
-                                  child: const Text('Choose another source'),
+                                  child: Text(exitLabel(widget.source)),
                                 ),
                               ],
                             ),

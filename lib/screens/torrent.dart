@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
+import '../state.dart' show downloads;
 import '../theme.dart';
 import '../torrent.dart';
 import 'player.dart';
@@ -103,13 +105,18 @@ class _MagnetDialogState extends State<_MagnetDialog> {
 class TorrentScreen extends StatefulWidget {
   const TorrentScreen(this.magnet,
       {this.fileIdx, this.season, this.episode, this.title, this.playback, this.subtitles = const [], this.hash,
-      super.key});
+      this.download = false, this.poster, super.key})
+      : assert(!download || playback != null, 'a download is listed by its playback');
   final String magnet;
   final int? fileIdx, season, episode;
   final String? title;
   final Playback? playback;
   final List<Subtitle> subtitles;
   final String? hash;
+
+  /// Registers the chosen file as a download and pops, instead of playing it.
+  final bool download;
+  final String? poster;
 
   @override
   State<TorrentScreen> createState() => _TorrentScreenState();
@@ -144,10 +151,13 @@ class _TorrentScreenState extends State<TorrentScreen> {
     try {
       final engine = _engine = await torrentEngine();
       if (stale()) return;
-      final dir = await torrentDir();
+      final dir = widget.download ? Directory(await downloadDir(infoHashOf(widget.magnet)!)) : await torrentDir();
       // Delete the directory only while no torrent can be using it; once add is invoked the startup
-      // sweep owns any leftovers.
-      if (stale()) return dir.delete(recursive: true).ignore();
+      // sweep owns any leftovers. A downloads folder may already hold another file of this torrent.
+      if (stale()) {
+        if (!widget.download) dir.delete(recursive: true).ignore();
+        return;
+      }
       final id = await engine.add(widget.magnet, dir.path);
       if (stale()) return _forget(engine.release(id));
       _id = id;
@@ -202,7 +212,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
               : b.index == _suggested ? 1 : b.size.compareTo(a.size));
         }
       });
-      if (auto != null) _play(auto!, automatic: true);
+      if (auto != null) widget.download ? _keep(auto!) : _play(auto!, automatic: true);
     } catch (e) {
       if (mounted && id == _id && attempt == _attempt) setState(() => _error = e);
     } finally {
@@ -214,7 +224,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
     if (_busy) return;
     _busy = true;
     _attempt++;
-    await _teardown(remove: true);
+    // Remove would delete a downloads folder that may hold another, pinned file of this torrent.
+    await _teardown(remove: !widget.download);
     if (!mounted) return;
     setState(() {
       _error = null;
@@ -250,6 +261,28 @@ class _TorrentScreenState extends State<TorrentScreen> {
         if (id == _id) _forget(engine.stopStream(id));
       }
       if (automatic && mounted && id == _id) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) setState(() => _error = e);
+    } finally {
+      _opening = false;
+      if (mounted) setState(() => _openingFile = null);
+    }
+  }
+
+  /// Registers [f] as a download and goes back to the stream list.
+  Future<void> _keep(TorrentFile f) async {
+    final id = _id;
+    if (_opening || id == null) return;
+    _opening = true;
+    setState(() => _openingFile = f.index);
+    try {
+      await downloads.start(widget.magnet, widget.playback!, f.index, poster: widget.poster);
+      if (id != _id) return; // a retry started over meanwhile
+      // The torrent is the download's now: leaving must not release it.
+      _poll?.cancel();
+      _poll = null;
+      _id = null;
+      if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -294,7 +327,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
           ],
         );
     return Scaffold(
-      appBar: AppBar(title: const Text('Stream a link')),
+      appBar: AppBar(title: Text(widget.download ? widget.title ?? widget.playback!.title : 'Stream a link')),
       body: error != null
           ? _Notice(
               icon: Icons.report_outlined,
@@ -356,7 +389,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
                         _FileRow(f,
                             suggested: f.index == _suggested,
                             opening: _openingFile == f.index,
-                            onTap: () => _play(f)),
+                            onTap: () => widget.download ? _keep(f) : _play(f)),
                       ],
                     ],
                   ],
