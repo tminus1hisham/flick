@@ -21,10 +21,12 @@ Future<void> play(BuildContext context, AddonStream s, Playback p) async {
   if (url != null) {
     screen = PlayerScreen(
         item: Item({'Id': p.videoId, 'Name': title, 'Type': 'Video'}),
-        source: url, report: false);
+        source: url, report: false, headers: s.headers, subtitles: s.subtitles,
+        playback: p, filename: s.filename, size: s.videoSize, hash: s.videoHash);
   } else if (s.infoHash != null) {
     screen = TorrentScreen(magnetFor(s), fileIdx: s.fileIdx,
-        season: p.season, episode: p.episode, title: title);
+        season: p.season, episode: p.episode, title: title,
+        playback: p, subtitles: s.subtitles, hash: s.videoHash);
   } else {
     throw ArgumentError('Stream has no playable source');
   }
