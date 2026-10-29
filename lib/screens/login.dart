@@ -262,7 +262,7 @@ class _Brand extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
     child: Column(
       children: [
-        const FlickMark(size: 48),
+        const FlickMark(size: 48, label: null),
         const SizedBox(height: 12),
         Text('Flick', style: FlickText.heroTitle.copyWith(color: FlickTokens.textPrimary)),
         const SizedBox(height: 8),

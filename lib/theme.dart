@@ -606,54 +606,69 @@ ButtonStyle playButtonStyle(BuildContext context) {
   );
 }
 
+/// The Light Cut: a solid screen with a diagonal slit. Pass `label: null`
+/// when the mark sits next to the "Flick" wordmark, so it is announced once.
 class FlickMark extends StatelessWidget {
-  const FlickMark({super.key, this.size = 24}) : assert(size > 0);
+  const FlickMark({super.key, this.size = 24, this.label = 'Flick'})
+      : master = false,
+        assert(size > 0);
+
+  /// The 108-unit launcher master on its full canvas, so it lines up with the
+  /// native splash icon (res/drawable/splash_mark.xml).
+  const FlickMark.master({super.key, required this.size})
+      : master = true,
+        label = null,
+        assert(size > 0);
 
   final double size;
+  final String? label;
+  final bool master;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Flick',
-      image: true,
-      child: ExcludeSemantics(
-        child: CustomPaint(
-          size: Size.square(size),
-          painter: const _FlickMarkPainter(),
-        ),
-      ),
+    final mark = CustomPaint(
+      size: Size.square(size),
+      painter: master ? _FlickMarkPainter.master : _FlickMarkPainter.small,
     );
+    return label == null
+        ? ExcludeSemantics(child: mark)
+        : Semantics(label: label, image: true, child: ExcludeSemantics(child: mark));
   }
 }
 
 class _FlickMarkPainter extends CustomPainter {
-  const _FlickMarkPainter();
+  const _FlickMarkPainter(this.canvasSize, this.outline, this.slit);
+
+  // Optical redraw for 16-48dp: wider slit, bridges of at least 4 units.
+  static const small = _FlickMarkPainter(24, [
+    Offset(2, 4), Offset(19.5, 4), Offset(22, 6.5), Offset(22, 20), Offset(4.5, 20), Offset(2, 17.5),
+  ], [
+    Offset(6.5, 16), Offset(10.5, 16), Offset(17.5, 8), Offset(13.5, 8),
+  ]);
+
+  static const master = _FlickMarkPainter(108, [
+    Offset(28, 34), Offset(74, 34), Offset(80, 40), Offset(80, 74), Offset(34, 74), Offset(28, 68),
+  ], [
+    Offset(40, 65), Offset(50, 65), Offset(68, 43), Offset(58, 43),
+  ]);
+
+  final double canvasSize;
+  final List<Offset> outline;
+  final List<Offset> slit;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = FlickTokens.flickMark
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
     final path = Path()
-      ..moveTo(4, 10)
-      ..lineTo(4, 4)
-      ..lineTo(10, 4)
-      ..moveTo(20, 14)
-      ..lineTo(20, 20)
-      ..lineTo(14, 20)
-      ..moveTo(8.5, 15.5)
-      ..lineTo(15.5, 8.5);
+      ..fillType = PathFillType.evenOdd
+      ..addPolygon(outline, true)
+      ..addPolygon(slit, true);
 
     canvas.save();
-    canvas.scale(size.width / 24, size.height / 24);
-    canvas.drawPath(path, paint);
+    canvas.scale(size.width / canvasSize, size.height / canvasSize);
+    canvas.drawPath(path, Paint()..color = FlickTokens.flickMark);
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(covariant _FlickMarkPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _FlickMarkPainter oldDelegate) => oldDelegate != this;
 }

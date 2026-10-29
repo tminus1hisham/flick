@@ -1,12 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Android 11 and older. Android 12+ uses the windowSplashScreen* items in values-v31.
+     The mark is centred at its 288dp intrinsic size, where SplashHandoff picks it up. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item android:drawable="@color/flick_background" />
+    <item
+        android:drawable="@drawable/splash_mark"
+        android:gravity="center" />
 </layer-list>

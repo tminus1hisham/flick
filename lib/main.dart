@@ -27,6 +27,7 @@ class FlickApp extends StatelessWidget {
         title: 'Flick',
         debugShowCheckedModeBanner: false,
         theme: flickTheme(),
+        builder: (_, child) => SplashHandoff(child: child!),
         home: ListenableBuilder(
           listenable: session,
           builder: (_, _) => !session.loggedIn

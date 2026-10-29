@@ -46,6 +46,14 @@ Flick: Flutter (3.41, Material 3) Android app. A Jellyfin client plus magnet-lin
 - `PosterDrift` is the one approved exception to "no carousel or parallax": 8 original textless thriller images generated for Flick (assets/posters, 144 KB), 4 columns at -12 deg, 24-40 s per poster, static under reduce-motion.
 - No backdrop blur on the panel: the scrim is 85-98% opaque there, so blur would cost every frame and show nothing.
 
+## Identity: Light Cut (approved 2026-10-29)
+- Mark: solid red screen, two clipped corners, a "/" slit as negative space. Replaced the corner-bracket mark, which read as the player's fullscreen button. Codex drew it; UX checked it against "off" slashes (those lean "\" and cross the shape).
+- Geometry lives in two places that must stay in sync: `_FlickMarkPainter` in theme.dart (24-unit optical redraw for 16-48dp, 108-unit master) and the vector drawables (ic_launcher_foreground, ic_launcher_monochrome, splash_mark).
+- Next to the "Flick" wordmark, pass `label: null` so screen readers hear the name once.
+- Launcher: adaptive icon with a flat #080808 background and a monochrome layer for themed icons; PNG fallbacks only for API 24-25 (minSdk 24).
+- Splash: #080808 everywhere (the white launch background is gone). Android 12+ uses the 288dp no-background icon box. `SplashHandoff` (widgets.dart) draws the same master at 288dp in the window centre, fades the app in over 120 ms, then the mark out by 280 ms. No minimum duration, skipped under reduce motion.
+- Notification icon left to background_downloader: its download/done/error/paused glyphs carry state, which beats a logo there.
+
 ## Constraints
 Same API calls, handlers, download and torrent logic. No new packages.
 

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Light Cut, 108-unit master. Keep in sync with FlickMark.master in lib/theme.dart. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/flick_mark"
+        android:fillType="evenOdd"
+        android:pathData="M28,34H74L80,40V74H34L28,68Z M40,65H50L68,43H58Z" />
+</vector>

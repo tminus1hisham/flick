@@ -131,7 +131,7 @@ class _TopBar extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.only(left: 20, right: 8),
                   child: Row(children: [
-                    const FlickMark(size: 24),
+                    const FlickMark(size: 24, label: null),
                     const SizedBox(width: 8),
                     Text('Flick', style: Theme.of(context).textTheme.titleLarge),
                     const Spacer(),
