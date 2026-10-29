@@ -23,6 +23,10 @@ AddonStream stream({
       externalUrl: null,
       trackers: trackers,
       filename: filename,
+      headers: const {},
+      subtitles: const [],
+      videoSize: null,
+      videoHash: null,
     );
 
 Map<String, dynamic> manifest(String id, {List<Object> resources = const ['stream']}) =>
@@ -225,7 +229,17 @@ void main() {
             'infoHash': hash.toLowerCase(),
             'fileIdx': 0,
             'sources': ['tracker:$tracker', 'dht:${hash.toLowerCase()}'],
-            'behaviorHints': {'filename': 'x.mkv'},
+            'behaviorHints': {
+              'filename': 'x.mkv',
+              'videoSize': 1073741824,
+              'videoHash': 'abc123',
+              'proxyHeaders': {
+                'request': {'User-Agent': 'Flick', 'Bad': 1},
+              },
+            },
+            'subtitles': [
+              {'id': 's1', 'url': 'https://s/1.srt', 'lang': 'eng'},
+            ],
           },
           {'name': 'yt', 'ytId': 'abc'},
           {'name': 'Netflix', 'externalUrl': 'https://netflix.com/title/1'},
@@ -247,6 +261,11 @@ void main() {
     expect(ss.first.title, 'x\n💾 1 GB');
     expect(ss.first.filename, 'x.mkv');
     expect(ss.first.fileIdx, 0);
+    expect(ss.first.headers, {'User-Agent': 'Flick'}); // non-string values dropped
+    expect(ss.first.subtitles, [(id: 's1', url: 'https://s/1.srt', lang: 'eng')]);
+    expect(ss.first.videoSize, 1073741824);
+    expect(ss.first.videoHash, 'abc123');
+    expect(ss.last.headers, isEmpty);
     expect(ss.last.externalUrl, 'https://netflix.com/title/1');
   });
 
@@ -264,6 +283,18 @@ void main() {
     });
     await a.add('https://subs.example');
     expect(await a.subtitles('movie', 'tt1'), [(id: '1', url: 'https://s/1.srt', lang: 'eng')]);
+  });
+
+  test('subtitles send the file hash, size and name as the Stremio extra', () async {
+    final seen = <String>[];
+    final a = await loaded((r) async {
+      seen.add('${r.url}');
+      if (r.url.path.endsWith('manifest.json')) return json(manifest('subs', resources: ['subtitles']));
+      return json({'subtitles': []});
+    });
+    await a.add('https://subs.example');
+    await a.subtitles('series', 'tt1:4:2', hash: 'ab12', size: 300, filename: 'S04E02 x.mkv');
+    expect(seen, contains('https://subs.example/subtitles/series/tt1:4:2/videoHash=ab12&videoSize=300&filename=S04E02%20x.mkv.json'));
   });
 
   test('persistence round trip, remove then restore keeps position', () async {

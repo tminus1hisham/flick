@@ -33,6 +33,10 @@ typedef AddonStream = ({
   String? externalUrl,
   List<String> trackers,
   String? filename,
+  Map<String, String> headers, // behaviorHints.proxyHeaders.request, sent with a url stream
+  List<Subtitle> subtitles,
+  int? videoSize,
+  String? videoHash,
 });
 typedef StreamInfo = ({String quality, int? seeders, String? size, String? origin, List<String> lines});
 typedef Subtitle = ({String id, String url, String lang});
@@ -306,23 +310,41 @@ class Addons extends ChangeNotifier {
               for (final t in (s['sources'] as List?) ?? const [])
                 if (t is String && t.startsWith('tracker:')) t.substring('tracker:'.length),
             ],
-            filename: s['behaviorHints'] is Map ? _str(s['behaviorHints']['filename']) : null,
+            filename: _hints(s)['filename'] is String ? _hints(s)['filename'] as String : null,
+            headers: switch (_hints(s)['proxyHeaders']) {
+              {'request': final Map r} => {
+                  for (final e in r.entries)
+                    if (e.value is String) '${e.key}': e.value as String,
+                },
+              _ => const <String, String>{},
+            },
+            subtitles: _subs(s['subtitles']),
+            videoSize: _int(_hints(s)['videoSize']),
+            videoHash: _str(_hints(s)['videoHash']),
           ),
     ];
   }
 
-  /// Merged over every active subtitles addon; one addon failing is ignored.
-  Future<List<Subtitle>> subtitles(String type, String videoId) async {
+  static Map _hints(Map s) => s['behaviorHints'] is Map ? s['behaviorHints'] as Map : const {};
+
+  static List<Subtitle> _subs(Object? list) => [
+        for (final s in list is List ? list : const [])
+          if (s is Map && s['url'] is String)
+            (id: _str(s['id']) ?? s['url'] as String, url: s['url'] as String, lang: _str(s['lang']) ?? ''),
+      ];
+
+  /// Merged over every active subtitles addon; one addon failing is ignored. The file's hash, size and name
+  /// go along as Stremio's extra (`/videoHash=…&videoSize=…&filename=….json`) so addons can match the exact file.
+  Future<List<Subtitle>> subtitles(String type, String videoId, {String? hash, int? size, String? filename}) async {
+    final extra = [
+      if (hash != null) 'videoHash=${Uri.encodeComponent(hash)}',
+      if (size != null) 'videoSize=$size',
+      if (filename != null) 'filename=${Uri.encodeComponent(filename)}',
+    ].join('&');
+    final path = '${_seg(type)}/${_seg(videoId)}${extra.isEmpty ? '' : '/$extra'}.json';
     final lists = await Future.wait([
       for (final a in active.where((a) => a.serves('subtitles', type, videoId)))
-        _get('${a.base}/subtitles/${_seg(type)}/${_seg(videoId)}.json').then(
-          (body) => <Subtitle>[
-            for (final s in (body['subtitles'] as List?) ?? const [])
-              if (s is Map && s['url'] is String)
-                (id: _str(s['id']) ?? s['url'] as String, url: s['url'] as String, lang: _str(s['lang']) ?? ''),
-          ],
-          onError: (_) => <Subtitle>[],
-        ),
+        _get('${a.base}/subtitles/$path').then((body) => _subs(body['subtitles']), onError: (_) => <Subtitle>[]),
     ]);
     return [for (final l in lists) ...l];
   }

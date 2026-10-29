@@ -52,6 +52,10 @@ AddonStream _stream(String title, {String? infoHash = 'ed0afbc1', String? extern
       externalUrl: externalUrl,
       trackers: const [],
       filename: null,
+      headers: const {},
+      subtitles: const [],
+      videoSize: null,
+      videoHash: null,
     );
 
 Meta _meta(String type, [List<Video> videos = const []]) => (
