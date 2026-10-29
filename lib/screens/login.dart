@@ -89,15 +89,30 @@ class _LoginScreenState extends State<LoginScreen> {
                   hasScrollBody: false,
                   child: Column(
                     children: [
-                      const SafeArea(bottom: false, child: _Brand()),
+                      // Room for the guest link above the mark.
+                      SafeArea(bottom: false, child: _Brand(top: !pushed && !session.onboarded ? 64 : 40)),
                       const Spacer(),
-                      _panel(context, reduceMotion, pushed),
+                      _panel(context, reduceMotion),
                     ],
                   ),
                 ),
               ],
             ),
           ),
+          // Top right, where "skip" lives: under the form it falls below the fold on a 640dp phone.
+          if (!pushed && !session.onboarded)
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + FlickTokens.grid,
+              right: FlickTokens.grid * 2,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  backgroundColor: FlickTokens.background.withValues(alpha: 0.45),
+                  minimumSize: const Size(0, FlickTokens.minTouchTarget),
+                ),
+                onPressed: _busy ? null : session.continueAsGuest,
+                child: const Text('Continue as guest'),
+              ),
+            ),
           if (pushed)
             Positioned(
               top: MediaQuery.paddingOf(context).top + FlickTokens.grid,
@@ -114,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _panel(BuildContext context, bool reduceMotion, bool pushed) {
+  Widget _panel(BuildContext context, bool reduceMotion) {
     // Sign up is visual-only until there's a backend for it.
     final message =
         _error ??
@@ -237,17 +252,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       )
                     : Text(_signUp ? 'Create account' : 'Sign in'),
               ),
-              if (!pushed && !session.onboarded) ...[
-                const SizedBox(height: FlickTokens.grid),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    foregroundColor: FlickTokens.textSecondary,
-                    minimumSize: const Size.fromHeight(FlickTokens.minTouchTarget),
-                  ),
-                  onPressed: _busy ? null : session.continueAsGuest,
-                  child: const Text('Continue as guest'),
-                ),
-              ],
               const SizedBox(height: 4),
               TextButton(
                 style: TextButton.styleFrom(
@@ -284,11 +288,12 @@ class _Field extends StatelessWidget {
 }
 
 class _Brand extends StatelessWidget {
-  const _Brand();
+  const _Brand({required this.top});
+  final double top;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 40, 20, 24),
+    padding: EdgeInsets.fromLTRB(20, top, 20, 24),
     child: Column(
       children: [
         const FlickMark(size: 48, label: null),
