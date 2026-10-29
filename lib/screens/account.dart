@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import '../kit/sheet.dart';
 import '../state.dart';
 import '../theme.dart';
-import '../widgets.dart' show NetImage, Skeleton;
+import '../widgets.dart' show NetImage;
 import 'login.dart';
 
 /// Actions that need a Jellyfin account.
@@ -76,7 +76,7 @@ class SignInSheet extends StatelessWidget {
                   // No artwork to show (downloads, or a title without a poster): the Flick mark.
                   child: gate == Gate.download || (poster ?? '').trim().isEmpty
                       ? const SizedBox(
-                          width: FlickTokens.grid * 16,
+                          width: FlickTokens.grid * 12,
                           child: FlickMark(
                             size: FlickTokens.grid * 12,
                             label: null,
@@ -157,14 +157,6 @@ class _GatePoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = poster?.trim();
-    final hasPoster = url != null && url.isNotEmpty;
-    const placeholder = Skeleton(
-      width: FlickTokens.grid * 14,
-      height: FlickTokens.grid * 21,
-      radius: FlickTokens.artworkRadius,
-    );
-
     return SizedBox(
       width: FlickTokens.grid * 16,
       height: FlickTokens.grid * 23,
@@ -186,9 +178,8 @@ class _GatePoster extends StatelessWidget {
                 borderRadius: BorderRadius.circular(
                   FlickTokens.artworkRadius,
                 ),
-                child: !hasPoster
-                    ? placeholder
-                    : NetImage(url, icon: false),
+                // Only built with a poster; SignInSheet shows the Flick mark otherwise.
+                child: NetImage(poster!.trim(), icon: false),
               ),
             ),
           ),
@@ -298,7 +289,7 @@ class _ToggleActionState extends State<ToggleAction> {
                 dimension: FlickTokens.minTouchTarget,
                 child: Center(
                   child: AnimatedSwitcher(
-                    duration: FlickTokens.stateDuration,
+                    duration: reduceMotion ? Duration.zero : FlickTokens.stateDuration,
                     switchInCurve: FlickTokens.curveIn,
                     switchOutCurve: FlickTokens.curveOut,
                     transitionBuilder: (child, animation) {
@@ -368,12 +359,9 @@ class SignInPrompt extends StatelessWidget {
                 ),
                 child: SizedBox(
                   width: double.infinity,
-                  height: FlickTokens.grid * 30,
-                  child: Opacity(
-                    opacity: 0.72,
-                    // PosterDrift stops itself under reduced motion.
-                    child: const PosterDrift(assets: _assets),
-                  ),
+                  // Tall enough for whole posters to read; PosterDrift stops itself under reduced motion.
+                  height: FlickTokens.grid * 40,
+                  child: const PosterDrift(assets: _assets),
                 ),
               ),
             ),

@@ -69,6 +69,10 @@ class _ShellState extends State<Shell> {
       NavigationDestination(
           icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'));
 
+  // Global, not ValueKeys: IndexedStack wraps each child in an unkeyed Visibility, so only a
+  // GlobalKey moves Discover's state from guest position 0 to member position 1.
+  final _keys = <String, GlobalKey>{};
+
   static List<(Widget, String, NavigationDestination)> _tabsFor(bool guest) =>
       guest ? const [_discover, _downloads] : const [_home, _discover, _browse, _search, _downloads];
 
@@ -94,9 +98,9 @@ class _ShellState extends State<Shell> {
               title: Text(name),
               actions: const [MagnetButton(), ProfileButton()],
             ),
-      // Keyed by name so Discover and Downloads keep their state across sign-in and sign-out.
+      // Discover and Downloads keep their state across sign-in and sign-out.
       body: IndexedStack(index: _tab, children: [
-        for (final (screen, name, _) in tabs) KeyedSubtree(key: ValueKey(name), child: screen),
+        for (final (screen, name, _) in tabs) KeyedSubtree(key: _keys.putIfAbsent(name, GlobalKey.new), child: screen),
       ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,

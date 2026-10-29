@@ -3,6 +3,8 @@ import 'dart:ui' show Tristate;
 
 import 'package:flick/addons.dart';
 import 'package:flick/jellyfin.dart';
+import 'package:flick/main.dart';
+import 'package:flick/screens/discover.dart';
 import 'package:flick/screens/account.dart';
 import 'package:flick/screens/title.dart';
 import 'package:flick/session.dart';
@@ -186,5 +188,32 @@ void main() {
     expect(saved.favourites, [_kid]);
     expect(saved.isLiked(_kid.id), isTrue);
     expect(tester.getSemantics(find.bySemanticsLabel('Unlike title')).flagsCollection.isToggled, Tristate.isTrue);
+  });
+
+  testWidgets('signing in keeps the guest on Discover with its state', (tester) async {
+    addons = _Addons();
+    final signedIn = ValueNotifier(false);
+    final server = JellyfinClient(
+      server: 'https://srv',
+      deviceId: 'd',
+      token: 't',
+      userId: 'u',
+      client: MockClient((r) async => http.Response(jsonEncode({'Items': []}), 200)),
+    );
+    await tester.pumpWidget(MaterialApp(
+      theme: flickTheme(),
+      home: ValueListenableBuilder(
+        valueListenable: signedIn,
+        builder: (_, member, _) => Shell(guest: !member),
+      ),
+    ));
+    final before = tester.state(find.byType(DiscoverScreen));
+
+    session.client = server;
+    addTearDown(() => session.client = null);
+    signedIn.value = true;
+    await tester.pump();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1, reason: 'Discover, not Home');
+    expect(tester.state(find.byType(DiscoverScreen, skipOffstage: false)), same(before));
   });
 }

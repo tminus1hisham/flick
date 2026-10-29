@@ -106,8 +106,11 @@ class _DetailScreenState extends State<DetailScreen> {
             future: _full,
             builder: (_, s) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _hero(s.data ?? item),
-              // Disabled until the full item arrives, so a tap never races the server's state.
-              _Saving(s.data ?? item, ready: s.hasData, key: ValueKey(s.hasData)),
+              // Disabled until the full item arrives, so a tap never races the server's state; if that
+              // fetch fails they start from the item that opened the page.
+              _Saving(s.data ?? item,
+                  ready: s.connectionState == ConnectionState.done,
+                  key: ValueKey(s.connectionState == ConnectionState.done)),
             ]),
           ),
           if (_seasons != null) _seasonSection(),

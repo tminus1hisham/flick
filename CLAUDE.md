@@ -6,7 +6,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze`: must print `No issues found!`
-- `flutter test`: 63 tests pass as of 653e238.
+- `flutter test`: 72 tests pass on branch `guest`.
 - `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`).
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits. Older files (player.dart, widgets.dart, library.dart) have known hits; that is expected.
 - `PlayerScreen` can't be pumped in `flutter test` because media_kit needs native libmpv. Put player logic in pure helpers or getters and test those (see test/player_test.dart).
@@ -14,6 +14,7 @@ This file is the shared source for continuing the work in a new session. Read it
 ## Branches and history
 - `main`: the UI revamp ("Afterglow", REVAMP_PLAN.md).
 - `discover`: everything below; not yet merged to main. Head 653e238 + this file. Merge to main only when the user asks.
+- `guest`: branched from `discover`; optional sign-in (guest mode). See design/guest.md. Not merged.
 - Untracked and deliberately not committed: the 3 large mockups `design/mockups/{d3-watchhub,d4-sources-bundled,player-subtitles}.png` (~1.5 MB each), and the test torrent `ED0AFBC1….torrent` (Rick and Morty S04E02, used as a hash in tests).
 
 ## Architecture
@@ -29,6 +30,8 @@ This file is the shared source for continuing the work in a new session. Read it
 | `lib/screens/title.dart` | D2 Title (movie: streams inline; series: season chips and episodes) and D3 Streams (one episode). Shared stream list: one group per source, each resolving on its own, per-source Retry, filter chips when there are 2 or more sources, WatchHub "Where to watch" rows. `describeStream` is a test seam. |
 | `lib/screens/sources.dart` | D4 Sources at route `/sources`: bundled switches, add by manifest URL with inline errors, remove with an inline Undo row. |
 | `lib/screens/torrent.dart` | Torrent start screen (stage spine, peers and speed): auto-opens `fileIdx` or a sure guess, otherwise the file list with "Suggested"; Retry / Choose another source; releases (not removes) the torrent on exit. |
+| `lib/screens/account.dart` | Guest mode: `Gate`, `requireSignIn(context, gate, poster:)` (sheet, then pushed Login; the caller applies the action afterwards), `openSignIn`, `SignInSheet`, `ToggleAction` (favourite/like; `onPressed` answers whether state changed, haptics only then), `SignInPrompt` (guest Downloads). |
+| `lib/kit/sheet.dart` | `showFlickSheet`: the first kit piece (themed, content-sized, reduced-motion aware). New sheets go through it. |
 | `lib/screens/player.dart` | media_kit player, the only dart-formatted file in the repo. Jellyfin playback (`report: true`, streamed or downloaded) behaves as before this work. Addon playback (`PlayerScreen.addonPlayback => !report`) adds request headers, a recovery overlay (only before playback starts or when it ends early), and a tracks panel: audio; subtitles Off / embedded / stream-provided / addon subtitles downloaded in Dart **without** the stream's headers and loaded with `SubtitleTrack.data`; device-language auto-pick once, which never overrides a manual choice. |
 
 ## Design sources (approved; follow them, don't reinvent)
@@ -54,7 +57,14 @@ Done on `discover`: Discover / Title / Streams / Sources screens, the addon clie
 - Nothing has run on a device. Subtitle loading assumes mpv returns `track-list` as JSON; media_kit observes it as a node, and mpv prints nodes as JSON.
 - The player fix commit 653e238 has not had a second review.
 
+### Guest mode (branch `guest`, 2026-10-29)
+Sign-in is optional. First launch shows Login with "Continue as guest" (top right); later launches open the guest Shell (Discover + Downloads). Sign-out lands there too. Favourites and likes: Jellyfin titles save to Jellyfin (`/UserFavoriteItems`, `/UserItems/{id}/Rating`, 10.9+ routes), Discover titles save on the device (`saved` in state.dart, `Saved` in session.dart). Guests hit a sign-in sheet; after signing in, the tapped action completes (and sets, never toggles off). Comments are out (no backend; user's call). Surfaces: Discover "Favourites" chip, Home "Favourites" row. Design: design/guest.md (brief + spec), design/guest-visual.md (Codex), decisions.md last section.
+- Review: round 1 (code + design critic) failed and was fixed. Round 2: code PASS-WITH-NITS, design critic PASS (distinct 8, hierarchy 8, motion 8, craft 8, states 8, theme 9, a11y 8, space 8). Nits fixed, except one: tapping a guest's download whose file is gone does nothing (no crash, no feedback).
+- **Not ours:** login.dart's `_posters` lists p09–p12.webp, added by another session. Those asset files are untracked. Commit them with that session's work, or drop the 4 lines before merging.
+- Not verified on a device.
+
 ## Next
+0. **Guest mode:** device-check: first launch → Continue as guest → Discover; ♥ as guest → sheet → Sign in → back on the title with ♥ on; sign out → guest shell; guest Downloads prompt.
 1. **Device acceptance** (APK: `build/app/outputs/flutter-apk/app-debug.apk`):
    - Jellyfin streamed and downloaded playback still works.
    - Discover → "The Kid" (1921, Public Domain Movies) torrent plays end to end.
