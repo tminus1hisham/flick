@@ -121,10 +121,11 @@ Reduced motion (`MediaQuery.disableAnimations` / platform `disableAnimations`): 
 
 From Stremio's enginefs, stremio-video and stremio-core, built in the same pass. YouTube (ytId, trailers, Channels) is deferred by the user.
 
-- **Contract:** `lib/addons.dart`, `lib/playback.dart` (`play(context, stream, playback)` is the screens' only way to start playback), `guessFile` in `lib/torrent.dart`.
+- **Contract:** `lib/addons.dart` as in "Dart API" above (built on branch `discover-data`); then `lib/playback.dart` (`play(context, stream, playback)` is the screens' only way to start playback), `guessFile` in `lib/torrent.dart`.
 - **File guess (enginefs `guessFileIdx`):** a valid playable `fileIdx` wins; else a unique SxxEyy match or the sole video auto-opens; an ambiguous multi-video torrent shows the file list with the largest video marked "Suggested". Pasted magnets use the same rule.
 - **Request headers:** `behaviorHints.proxyHeaders.request` → media_kit `Media(httpHeaders:)`. Partial support: no response headers, no proxy.
 - **Recovery:** a player or torrent failure shows an overlay with **Retry** and **Choose another source** (pops to the unchanged stream list).
 - **Tracks panel:** audio + subtitles (Off, embedded, stream `subtitles[]`, OpenSubtitles v3 fetched when the panel opens, with loading and retry). Auto-pick the device language when a match exists.
 - **Warm torrent (enginefs `ENGINE_TIMEOUT`):** leaving the player releases the torrent: it stops downloading and is removed after 60 s unless the same infoHash is added again, which reuses it (metadata and verified pieces kept). Remove stays immediate elsewhere.
-- **Split:** Codex builds `addons.dart`, `playback.dart`, `torrent.dart`, `screens/torrent.dart`, `screens/player.dart`, `Torrents.kt` (+ external-link intent), unit tests (branch `discover-engine`). Claude builds `screens/discover.dart`, `title.dart`, `sources.dart`, `main.dart`, `theme.dart` tokens, widget tests (branch `discover-screens`). Engine merges first.
+- **Post-merge addition to `AddonStream`:** `Map<String, String> headers`, `List<Subtitle> subtitles`, `int? videoSize`, `String? videoHash` (behaviorHints + stream subtitles), and `subtitles(type, videoId, {size, filename, hash})` extras.
+- **Split:** `addons.dart` comes from `discover-data`. Codex builds `playback.dart`, `torrent.dart`, `screens/torrent.dart`, `screens/player.dart`, `Torrents.kt` (+ external-link intent), unit tests (branch `discover-engine`). Claude builds `screens/discover.dart`, `title.dart`, `sources.dart`, `main.dart`, `theme.dart` tokens, widget tests (branch `discover-screens`). Engine merges first.
