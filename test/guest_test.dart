@@ -158,6 +158,23 @@ void main() {
     session.client = null;
   });
 
+  testWidgets('signing in from the gate never removes a favourite kept from an earlier sign-in', (tester) async {
+    // Saved survives sign-out, and a guest always sees "off": a toggle here would delete it.
+    await saved.toggleFavourite(_kid);
+    await _openTitle(tester);
+    await tester.tap(_favourite());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign in'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    session.client = JellyfinClient(server: 'https://srv', deviceId: 'd', token: 't');
+    await tester.tap(find.byTooltip('Close sign in'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(saved.favourites, [_kid]);
+    session.client = null;
+  });
+
   testWidgets('a member favourites and likes without a gate', (tester) async {
     session.client = JellyfinClient(server: 'https://srv', deviceId: 'd', token: 't');
     addTearDown(() => session.client = null);

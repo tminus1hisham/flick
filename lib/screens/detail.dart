@@ -13,6 +13,8 @@ bool canDownload(TaskStatus? s) =>
 
 Future<void> play(BuildContext context, Item item) async {
   final local = await downloads.localPath(item.id);
+  // A guest's download whose file is gone: there is no server to stream it from instead.
+  if (local == null && session.client == null) return;
   if (session.online) {
     // The passed-in item's resume position may be stale.
     try {
@@ -104,8 +106,8 @@ class _DetailScreenState extends State<DetailScreen> {
             future: _full,
             builder: (_, s) => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               _hero(s.data ?? item),
-              // Keyed so the toggles start from the server's state once the full item arrives.
-              _Saving(s.data ?? item, key: ValueKey(s.hasData)),
+              // Disabled until the full item arrives, so a tap never races the server's state.
+              _Saving(s.data ?? item, ready: s.hasData, key: ValueKey(s.hasData)),
             ]),
           ),
           if (_seasons != null) _seasonSection(),
@@ -406,8 +408,9 @@ class _EpisodesSkeleton extends StatelessWidget {
 
 /// Favourite + like for a Jellyfin title, saved to the server. Flips at once, reverts on failure.
 class _Saving extends StatefulWidget {
-  const _Saving(this.item, {super.key});
+  const _Saving(this.item, {required this.ready, super.key});
   final Item item;
+  final bool ready;
 
   @override
   State<_Saving> createState() => _SavingState();
@@ -418,8 +421,14 @@ class _SavingState extends State<_Saving> {
   final _busy = <String>{};
   bool _failed = false;
 
-  Future<void> _set(String what, bool on, void Function(bool) apply, Future<void> Function(String, bool) send) async {
-    if (!_busy.add(what)) return;
+  /// Optimistic: answers true at once so the toggle's haptic lands with the flip, not the response.
+  bool _set(String what, bool on, void Function(bool) apply, Future<void> Function(String, bool) send) {
+    if (!_busy.add(what)) return false;
+    _send(what, on, apply, send);
+    return true;
+  }
+
+  Future<void> _send(String what, bool on, void Function(bool) apply, Future<void> Function(String, bool) send) async {
     setState(() {
       _failed = false;
       apply(on);
@@ -450,7 +459,9 @@ class _SavingState extends State<_Saving> {
             onIcon: Icons.favorite_rounded,
             label: 'Add to favourites',
             onLabel: 'Remove from favourites',
-            onPressed: () => _set('favourite', !_favourite, (v) => _favourite = v, c.setFavorite),
+            onPressed: !widget.ready
+                ? null
+                : () async => _set('favourite', !_favourite, (v) => _favourite = v, c.setFavorite),
           ),
           ToggleAction(
             on: _liked,
@@ -458,7 +469,7 @@ class _SavingState extends State<_Saving> {
             onIcon: Icons.thumb_up_rounded,
             label: 'Like title',
             onLabel: 'Unlike title',
-            onPressed: () => _set('like', !_liked, (v) => _liked = v, c.setLiked),
+            onPressed: !widget.ready ? null : () async => _set('like', !_liked, (v) => _liked = v, c.setLiked),
           ),
         ]),
         if (_failed) ...[

@@ -36,10 +36,9 @@ class FlickApp extends StatelessWidget {
         home: ListenableBuilder(
           listenable: session,
           builder: (_, _) => session.loggedIn
-              ? (session.online ? const Shell(key: ValueKey('member')) : const OfflineShell())
+              ? (session.online ? const Shell() : const OfflineShell())
               : session.onboarded
-                  // Keyed apart so the tab index resets when signing in or out.
-                  ? const Shell(guest: true, key: ValueKey('guest'))
+                  ? const Shell(guest: true)
                   : const LoginScreen(),
         ),
       );
@@ -70,9 +69,22 @@ class _ShellState extends State<Shell> {
       NavigationDestination(
           icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'));
 
+  static List<(Widget, String, NavigationDestination)> _tabsFor(bool guest) =>
+      guest ? const [_discover, _downloads] : const [_home, _discover, _browse, _search, _downloads];
+
+  /// Signing in or out keeps the current tab where both shells have it, so a guest who signs in
+  /// from a Discover title comes back to Discover, not Home.
+  @override
+  void didUpdateWidget(Shell old) {
+    super.didUpdateWidget(old);
+    if (old.guest == widget.guest) return;
+    final (_, name, _) = _tabsFor(old.guest)[_tab];
+    _tab = _tabsFor(widget.guest).indexWhere((t) => t.$2 == name).clamp(0, 4);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tabs = widget.guest ? const [_discover, _downloads] : const [_home, _discover, _browse, _search, _downloads];
+    final tabs = _tabsFor(widget.guest);
     final (_, name, _) = tabs[_tab];
     return Scaffold(
       // Home draws its own bar over the hero; Discover's search field is its header.
@@ -82,7 +94,10 @@ class _ShellState extends State<Shell> {
               title: Text(name),
               actions: const [MagnetButton(), ProfileButton()],
             ),
-      body: IndexedStack(index: _tab, children: [for (final (screen, _, _) in tabs) screen]),
+      // Keyed by name so Discover and Downloads keep their state across sign-in and sign-out.
+      body: IndexedStack(index: _tab, children: [
+        for (final (screen, name, _) in tabs) KeyedSubtree(key: ValueKey(name), child: screen),
+      ]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() => _tab = i),

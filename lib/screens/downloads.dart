@@ -163,7 +163,8 @@ class DownloadRow extends StatelessWidget {
               icon: const Icon(Icons.pause),
               onPressed: () => downloads.pause(r),
             ),
-          if (paused)
+          // Resuming fetches from the server, which a guest has signed out of.
+          if (paused && session.loggedIn)
             IconButton(
               tooltip: 'Resume download',
               icon: const Icon(Icons.play_arrow),

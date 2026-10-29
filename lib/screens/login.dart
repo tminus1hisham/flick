@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import '../state.dart';
 import '../theme.dart';
@@ -81,22 +82,27 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Stack(
         children: [
           const Positioned.fill(child: PosterDrift(assets: _posters)),
-          Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-            child: CustomScrollView(
-              slivers: [
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Column(
-                    children: [
-                      // Room for the guest link above the mark.
-                      SafeArea(bottom: false, child: _Brand(top: !pushed && !session.onboarded ? 64 : 40)),
-                      const Spacer(),
-                      _panel(context, reduceMotion),
-                    ],
+          Semantics(
+            // Read after the guest link, which sits first visually (top right) but last in the Stack.
+            sortKey: const OrdinalSortKey(1),
+            container: true,
+            child: Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+              child: CustomScrollView(
+                slivers: [
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Column(
+                      children: [
+                        // Room for the guest link above the mark.
+                        SafeArea(bottom: false, child: _Brand(top: !pushed && !session.onboarded ? 64 : 40)),
+                        const Spacer(),
+                        _panel(context, reduceMotion),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           // Top right, where "skip" lives: under the form it falls below the fold on a 640dp phone.
@@ -104,13 +110,17 @@ class _LoginScreenState extends State<LoginScreen> {
             Positioned(
               top: MediaQuery.paddingOf(context).top + FlickTokens.grid,
               right: FlickTokens.grid * 2,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  backgroundColor: FlickTokens.background.withValues(alpha: 0.45),
-                  minimumSize: const Size(0, FlickTokens.minTouchTarget),
+              child: Semantics(
+                sortKey: const OrdinalSortKey(0),
+                container: true,
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    backgroundColor: FlickTokens.background.withValues(alpha: 0.45),
+                    minimumSize: const Size(0, FlickTokens.minTouchTarget),
+                  ),
+                  onPressed: _busy ? null : session.continueAsGuest,
+                  child: const Text('Continue as guest'),
                 ),
-                onPressed: _busy ? null : session.continueAsGuest,
-                child: const Text('Continue as guest'),
               ),
             ),
           if (pushed)

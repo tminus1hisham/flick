@@ -198,8 +198,16 @@ class _Saving extends StatelessWidget {
   const _Saving(this.preview);
   final MetaPreview preview;
 
-  Future<void> _gated(BuildContext context, Gate gate, VoidCallback action) async {
-    if (await requireSignIn(context, gate)) action();
+  /// A member's tap toggles. After the sign-in detour it sets instead: a guest always sees "off" but the
+  /// device list survives sign-out, so a toggle there could remove what the guest meant to add.
+  Future<bool> _tap(BuildContext context, Gate gate, bool Function() isOn, VoidCallback toggle) async {
+    if (session.loggedIn) {
+      toggle();
+      return true;
+    }
+    if (!await requireSignIn(context, gate, poster: preview.poster)) return false;
+    if (!isOn()) toggle();
+    return true;
   }
 
   @override
@@ -212,7 +220,8 @@ class _Saving extends StatelessWidget {
             onIcon: Icons.favorite_rounded,
             label: 'Add to favourites',
             onLabel: 'Remove from favourites',
-            onPressed: () => _gated(context, Gate.favourite, () => saved.toggleFavourite(preview)),
+            onPressed: () => _tap(context, Gate.favourite, () => saved.isFavourite(preview.id),
+                () => saved.toggleFavourite(preview)),
           ),
           ToggleAction(
             on: session.loggedIn && saved.isLiked(preview.id),
@@ -220,7 +229,8 @@ class _Saving extends StatelessWidget {
             onIcon: Icons.thumb_up_rounded,
             label: 'Like title',
             onLabel: 'Unlike title',
-            onPressed: () => _gated(context, Gate.like, () => saved.toggleLike(preview.id)),
+            onPressed: () =>
+                _tap(context, Gate.like, () => saved.isLiked(preview.id), () => saved.toggleLike(preview.id)),
           ),
         ]),
       );

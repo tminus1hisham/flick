@@ -238,67 +238,148 @@ class PosterRow extends StatelessWidget {
 class ProfileButton extends StatelessWidget {
   const ProfileButton({super.key});
 
+  Widget _content(List<Widget> children) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(
+            FlickTokens.pageGutter,
+            FlickTokens.grid,
+            FlickTokens.pageGutter,
+            FlickTokens.pageGutter,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: children,
+          ),
+        ),
+      );
+
+  Duration _duration(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : FlickTokens.stateDuration;
+
   Future<void> _guest(BuildContext context) async {
     final go = await showFlickSheet<bool>(
       context,
-      (sheet) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-              FlickTokens.pageGutter, FlickTokens.grid, FlickTokens.pageGutter, FlickTokens.pageGutter),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('Not signed in', style: FlickText.railHeading.copyWith(color: FlickTokens.textPrimary)),
-            const SizedBox(height: FlickTokens.grid * 2),
-            Text(
-              'Browse and play as a guest. Sign in with your Jellyfin server account to save favourites, '
-              'like titles and download.',
-              style: FlickText.body.copyWith(color: FlickTokens.textSecondary),
+      (sheet) => _content([
+        Semantics(
+          header: true,
+          child: Text(
+            'Not signed in',
+            style: FlickText.railHeading.copyWith(
+              color: FlickTokens.textPrimary,
             ),
-            const SizedBox(height: FlickTokens.grid * 6),
-            FilledButton(onPressed: () => Navigator.pop(sheet, true), child: const Text('Sign in')),
-          ]),
+          ),
         ),
-      ),
+        const SizedBox(height: FlickTokens.grid * 2),
+        Text(
+          'Browse and play as a guest. Sign in with your Jellyfin '
+          'server account to save favourites, like titles and download.',
+          style: FlickText.body.copyWith(
+            color: FlickTokens.textSecondary,
+          ),
+        ),
+        const SizedBox(height: FlickTokens.grid * 6),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: FlickTokens.accent,
+            foregroundColor: FlickTokens.onAccent,
+            minimumSize: const Size(
+              FlickTokens.minTouchTarget,
+              FlickTokens.minTouchTarget,
+            ),
+            textStyle: FlickText.button,
+            animationDuration: _duration(sheet),
+          ),
+          onPressed: () => Navigator.pop(sheet, true),
+          child: const Text('Sign in'),
+        ),
+      ]),
     );
-    // From the page's context: the sheet's own context is being disposed.
     if (go == true && context.mounted) await openSignIn(context);
+  }
+
+  Future<void> _member(BuildContext context) async {
+    final authority =
+        Uri.tryParse(session.client?.server ?? '')?.authority ?? '';
+
+    await showFlickSheet<void>(
+      context,
+      (sheet) => _content([
+        Text(
+          'Signed in to',
+          style: FlickText.metadata.copyWith(
+            color: FlickTokens.textSecondary,
+          ),
+        ),
+        const SizedBox(height: FlickTokens.grid),
+        Semantics(
+          header: true,
+          child: Text(
+            authority.isEmpty ? 'Your Jellyfin server' : authority,
+            softWrap: true,
+            style: FlickText.railHeading.copyWith(
+              color: FlickTokens.textPrimary,
+            ),
+          ),
+        ),
+        const SizedBox(height: FlickTokens.grid * 6),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: FlickTokens.textPrimary,
+            side: const BorderSide(color: FlickTokens.outline),
+            minimumSize: const Size(
+              FlickTokens.minTouchTarget,
+              FlickTokens.minTouchTarget,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                FlickTokens.controlRadius,
+              ),
+            ),
+            textStyle: FlickText.button,
+            animationDuration: _duration(sheet),
+          ),
+          onPressed: () {
+            Navigator.pop(sheet);
+            session.logout();
+          },
+          icon: const ExcludeSemantics(child: Icon(Icons.logout_rounded)),
+          label: const Text('Sign out'),
+        ),
+      ]),
+    );
   }
 
   @override
   Widget build(BuildContext context) => IconButton(
         tooltip: session.loggedIn ? 'Profile' : 'Sign in',
-        onPressed: () => !session.loggedIn ? _guest(context) : showModalBottomSheet<void>(
-          context: context,
-          showDragHandle: true,
-          builder: (sheet) => SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Signed in to', style: Theme.of(sheet).textTheme.labelMedium),
-                  const SizedBox(height: 4),
-                  Text(Uri.tryParse(session.client?.server ?? '')?.authority ?? '',
-                      style: Theme.of(sheet).textTheme.titleSmall),
-                  const SizedBox(height: 20),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(sheet);
-                      session.logout();
-                    },
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign out'),
-                  ),
-                ],
-              ),
+        style: IconButton.styleFrom(
+          minimumSize: const Size(
+            FlickTokens.minTouchTarget,
+            FlickTokens.minTouchTarget,
+          ),
+          animationDuration: _duration(context),
+        ),
+        onPressed: () async {
+          if (session.loggedIn) {
+            await _member(context);
+          } else {
+            await _guest(context);
+          }
+        },
+        icon: const ExcludeSemantics(
+          child: CircleAvatar(
+            radius: FlickTokens.grid * 4,
+            backgroundColor: FlickTokens.surface2,
+            child: Icon(
+              Icons.person_outline_rounded,
+              size: FlickTokens.grid * 5,
+              color: FlickTokens.textSecondary,
             ),
           ),
-        ),
-        icon: CircleAvatar(
-          radius: 16,
-          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-          child: Icon(Icons.person_outline, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
         ),
       );
 }

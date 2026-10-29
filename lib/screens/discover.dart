@@ -143,7 +143,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     enabled: heroes && !searching,
                     child: showFavourites
                         // Keyed by the list so unfavouriting on Title shows here on return.
-                        ? _Feed.saved(favourites, key: ValueKey(favourites.map((f) => f.id).join()))
+                        ? _Feed.saved(favourites, key: ValueKey(favourites.map((f) => f.id).join(',')))
                         : selected == null
                             ? const _Notice(Icons.video_library_outlined, 'No catalogs for this type yet.')
                             : _Feed(selected, key: ValueKey(_key(selected))),

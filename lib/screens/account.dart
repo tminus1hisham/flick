@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../kit/sheet.dart';
 import '../state.dart';
 import '../theme.dart';
+import '../widgets.dart' show NetImage, Skeleton;
 import 'login.dart';
 
 /// Actions that need a Jellyfin account.
@@ -18,9 +19,10 @@ enum Gate {
 
 /// True when signed in, now or after the sign-in sheet and Login.
 /// The caller then performs the action, preserving the original intent.
-Future<bool> requireSignIn(BuildContext context, Gate gate) async {
+/// [poster] is the artwork of the title being saved, shown in the sheet.
+Future<bool> requireSignIn(BuildContext context, Gate gate, {String? poster}) async {
   if (session.loggedIn) return true;
-  final go = await showFlickSheet<bool>(context, (_) => SignInSheet(gate));
+  final go = await showFlickSheet<bool>(context, (_) => SignInSheet(gate, poster: poster));
   if (go != true || !context.mounted) return false;
   return openSignIn(context);
 }
@@ -34,93 +36,190 @@ Future<bool> openSignIn(BuildContext context) async {
   return session.loggedIn;
 }
 
-/// Why an account is needed, Sign in, Not now.
-/// Pops true for Sign in; dismissal leaves the action unchanged.
+/// Why an account is needed, Sign in, Not now. Pops true for Sign in; the title's poster
+/// (or the Flick mark for downloads) shows what is being saved.
 class SignInSheet extends StatelessWidget {
-  const SignInSheet(this.gate, {super.key});
+  const SignInSheet(this.gate, {this.poster, super.key});
 
   final Gate gate;
+  final String? poster;
 
   IconData get _icon => switch (gate) {
-        Gate.favourite => Icons.favorite_border_rounded,
-        Gate.like => Icons.thumb_up_outlined,
-        Gate.download => Icons.download_outlined,
+        Gate.favourite => Icons.favorite_rounded,
+        Gate.like => Icons.thumb_up_rounded,
+        Gate.download => Icons.download_rounded,
       };
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FlickTokens.pageGutter,
-            FlickTokens.grid,
-            FlickTokens.pageGutter,
-            FlickTokens.pageGutter,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: ExcludeSemantics(
-                  child: Container(
-                    width: FlickTokens.minTouchTarget,
-                    height: FlickTokens.minTouchTarget,
-                    decoration: BoxDecoration(
-                      color: FlickTokens.surface2,
-                      borderRadius: BorderRadius.circular(
-                        FlickTokens.controlRadius,
+  Widget build(BuildContext context) {
+    final duration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : FlickTokens.stateDuration;
+
+    return SafeArea(
+      top: false,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+          FlickTokens.pageGutter,
+          FlickTokens.grid,
+          FlickTokens.pageGutter,
+          FlickTokens.pageGutter,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ExcludeSemantics(
+                  // No artwork to show (downloads, or a title without a poster): the Flick mark.
+                  child: gate == Gate.download || (poster ?? '').trim().isEmpty
+                      ? const SizedBox(
+                          width: FlickTokens.grid * 16,
+                          child: FlickMark(
+                            size: FlickTokens.grid * 12,
+                            label: null,
+                          ),
+                        )
+                      : _GatePoster(poster: poster, icon: _icon),
+                ),
+                const SizedBox(width: FlickTokens.grid * 4),
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      gate.title,
+                      style: FlickText.railHeading.copyWith(
+                        color: FlickTokens.textPrimary,
                       ),
                     ),
-                    child: Icon(
-                      _icon,
-                      color: FlickTokens.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: FlickTokens.grid * 4),
+            Text(
+              'Flick accounts are Jellyfin server accounts. Browsing and playing stay open without one.',
+              style: FlickText.body.copyWith(
+                color: FlickTokens.textSecondary,
+              ),
+            ),
+            const SizedBox(height: FlickTokens.grid * 6),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(
+                        FlickTokens.minTouchTarget,
+                        FlickTokens.minTouchTarget,
+                      ),
+                      animationDuration: duration,
+                      foregroundColor: FlickTokens.textSecondary,
+                      textStyle: FlickText.button,
                     ),
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text('Not now'),
                   ),
                 ),
-              ),
-              const SizedBox(height: FlickTokens.grid * 4),
-              Semantics(
-                header: true,
-                child: Text(
-                  gate.title,
-                  style: FlickText.pageTitle.copyWith(
-                    color: FlickTokens.textPrimary,
+                const SizedBox(width: FlickTokens.railGap),
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(
+                        FlickTokens.minTouchTarget,
+                        FlickTokens.minTouchTarget,
+                      ),
+                      animationDuration: duration,
+                      backgroundColor: FlickTokens.accent,
+                      foregroundColor: FlickTokens.onAccent,
+                      textStyle: FlickText.button,
+                    ),
+                    onPressed: () => Navigator.pop(context, true),
+                    child: const Text('Sign in'),
                   ),
                 ),
-              ),
-              const SizedBox(height: FlickTokens.grid * 2),
-              Text(
-                'Your Jellyfin server account. '
-                'Favourites and downloads follow you.',
-                style: FlickText.body.copyWith(
-                  color: FlickTokens.textSecondary,
-                ),
-              ),
-              const SizedBox(height: FlickTokens.grid * 6),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Sign in'),
-              ),
-              const SizedBox(height: FlickTokens.grid * 2),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: FlickTokens.textSecondary,
-                ),
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Not now'),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
+}
+
+class _GatePoster extends StatelessWidget {
+  const _GatePoster({required this.poster, required this.icon});
+
+  final String? poster;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = poster?.trim();
+    final hasPoster = url != null && url.isNotEmpty;
+    const placeholder = Skeleton(
+      width: FlickTokens.grid * 14,
+      height: FlickTokens.grid * 21,
+      radius: FlickTokens.artworkRadius,
+    );
+
+    return SizedBox(
+      width: FlickTokens.grid * 16,
+      height: FlickTokens.grid * 23,
+      child: Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            width: FlickTokens.grid * 14,
+            height: FlickTokens.grid * 21,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(
+                  FlickTokens.artworkRadius,
+                ),
+                border: Border.all(color: FlickTokens.outline),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(
+                  FlickTokens.artworkRadius,
+                ),
+                child: !hasPoster
+                    ? placeholder
+                    : NetImage(url, icon: false),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: FlickTokens.grid * 6,
+              height: FlickTokens.grid * 6,
+              decoration: const BoxDecoration(
+                color: FlickTokens.accent,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                icon,
+                size: FlickTokens.grid * 4,
+                color: FlickTokens.onAccent,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Controlled favourite / like toggle.
 ///
-/// The caller owns gating, persistence and optimistic state. Haptics follow
-/// state changes after activation, so opening or dismissing a gate is silent.
+/// The caller owns gating, persistence and optimistic state. [onPressed] answers whether the
+/// state changed: a dismissed sign-in gate answers false and stays silent.
 class ToggleAction extends StatefulWidget {
   const ToggleAction({
     required this.on,
@@ -137,7 +236,7 @@ class ToggleAction extends StatefulWidget {
 
   /// Spoken action while off and while on.
   final String label, onLabel;
-  final VoidCallback? onPressed;
+  final Future<bool> Function()? onPressed;
 
   @override
   State<ToggleAction> createState() => _ToggleActionState();
@@ -145,27 +244,17 @@ class ToggleAction extends StatefulWidget {
 
 class _ToggleActionState extends State<ToggleAction> {
   bool _down = false;
-  bool _activated = false;
 
-  void _activate() {
-    if (widget.onPressed == null) return;
-    _activated = true;
-    widget.onPressed!();
+  Future<void> _activate() async {
+    final turningOn = !widget.on;
+    if (await widget.onPressed?.call() ?? false) {
+      turningOn ? HapticFeedback.lightImpact() : HapticFeedback.selectionClick();
+    }
   }
 
   @override
   void didUpdateWidget(covariant ToggleAction oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.on != oldWidget.on) {
-      if (_activated) {
-        if (widget.on) {
-          HapticFeedback.lightImpact();
-        } else {
-          HapticFeedback.selectionClick();
-        }
-      }
-      _activated = false;
-    }
     if (widget.onPressed == null) _down = false;
   }
 
@@ -242,63 +331,89 @@ class _ToggleActionState extends State<ToggleAction> {
   }
 }
 
-/// Guest Downloads empty state. Existing downloads take precedence.
+/// Guest Downloads empty state: a muted strip of the Login poster wall, then the way in.
 class SignInPrompt extends StatelessWidget {
   const SignInPrompt({super.key});
 
+  static const _assets = <String>[
+    'assets/posters/p01.webp',
+    'assets/posters/p02.webp',
+    'assets/posters/p03.webp',
+    'assets/posters/p04.webp',
+    'assets/posters/p05.webp',
+    'assets/posters/p06.webp',
+    'assets/posters/p07.webp',
+    'assets/posters/p08.webp',
+  ];
+
   @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(FlickTokens.pageGutter),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: ExcludeSemantics(
-                  child: Container(
-                    width: FlickTokens.grid * 16,
-                    height: FlickTokens.grid * 16,
-                    decoration: BoxDecoration(
-                      color: FlickTokens.surface1,
-                      borderRadius: BorderRadius.circular(
-                        FlickTokens.controlRadius,
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.download_outlined,
-                      size: FlickTokens.grid * 8,
-                      color: FlickTokens.textSecondary,
-                    ),
+  Widget build(BuildContext context) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+        FlickTokens.pageGutter,
+        FlickTokens.grid * 4,
+        FlickTokens.pageGutter,
+        FlickTokens.pageGutter,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ExcludeSemantics(
+            child: IgnorePointer(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(
+                  FlickTokens.artworkRadius,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: FlickTokens.grid * 30,
+                  child: Opacity(
+                    opacity: 0.72,
+                    // PosterDrift stops itself under reduced motion.
+                    child: const PosterDrift(assets: _assets),
                   ),
                 ),
               ),
-              const SizedBox(height: FlickTokens.grid * 5),
-              Semantics(
-                header: true,
-                child: Text(
-                  Gate.download.title,
-                  textAlign: TextAlign.center,
-                  style: FlickText.pageTitle.copyWith(
-                    color: FlickTokens.textPrimary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: FlickTokens.grid * 2),
-              Text(
-                'Downloads come from your Jellyfin library.',
-                textAlign: TextAlign.center,
-                style: FlickText.body.copyWith(
-                  color: FlickTokens.textSecondary,
-                ),
-              ),
-              const SizedBox(height: FlickTokens.grid * 6),
-              FilledButton(
-                onPressed: () => openSignIn(context),
-                child: const Text('Sign in'),
-              ),
-            ],
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: FlickTokens.grid * 5),
+          Semantics(
+            header: true,
+            child: Text(
+              'Your library, ready offline',
+              style: FlickText.railHeading.copyWith(
+                color: FlickTokens.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(height: FlickTokens.grid * 2),
+          Text(
+            'Sign in to your Jellyfin server to download titles '
+            'and take them with you.',
+            style: FlickText.body.copyWith(
+              color: FlickTokens.textSecondary,
+            ),
+          ),
+          const SizedBox(height: FlickTokens.grid * 6),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(
+                FlickTokens.minTouchTarget,
+                FlickTokens.minTouchTarget,
+              ),
+              backgroundColor: FlickTokens.accent,
+              foregroundColor: FlickTokens.onAccent,
+              textStyle: FlickText.button,
+              animationDuration:
+                  reduceMotion ? Duration.zero : FlickTokens.stateDuration,
+            ),
+            onPressed: () => openSignIn(context),
+            child: const Text('Sign in'),
+          ),
+        ],
+      ),
+    );
+  }
 }
