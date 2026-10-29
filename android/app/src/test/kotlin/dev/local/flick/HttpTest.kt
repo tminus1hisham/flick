@@ -1,10 +1,16 @@
 package dev.local.flick
 
+import java.io.BufferedInputStream
 import java.io.File
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.security.MessageDigest
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HttpTest {
@@ -88,6 +94,34 @@ class HttpTest {
     @Test fun mimeByExtension() {
         assertEquals("video/x-matroska", mimeOf("Show.S01E01.MKV"))
         assertEquals("application/octet-stream", mimeOf("readme"))
+    }
+
+    /** [check] gets the server side of a loopback connection, its buffered input, and the client socket. */
+    private fun loopback(check: (Socket, BufferedInputStream, Socket) -> Unit) {
+        ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { server ->
+            Socket(server.inetAddress, server.localPort).use { client ->
+                server.accept().use { s -> check(s, BufferedInputStream(s.getInputStream()), client) }
+            }
+        }
+    }
+
+    @Test fun clientGoneFalseWhileIdle() = loopback { s, input, _ ->
+        assertFalse(clientGone(s, input))
+        assertEquals(0, s.soTimeout) // restored
+    }
+
+    @Test fun clientGoneTrueAfterHangUp() = loopback { s, input, client ->
+        client.close()
+        val deadline = System.nanoTime() + 2_000_000_000L // the FIN can take a moment to arrive
+        while (!clientGone(s, input) && System.nanoTime() < deadline) Thread.sleep(5)
+        assertTrue(clientGone(s, input))
+    }
+
+    @Test fun clientGoneIgnoresStrayBytes() = loopback { s, input, client ->
+        client.getOutputStream().apply { write('x'.code); flush() }
+        Thread.sleep(50)
+        assertFalse(clientGone(s, input)) // reads the byte, client still open
+        assertFalse(clientGone(s, input))
     }
 
     private fun createTempDirectory(): File = kotlin.io.path.createTempDirectory("httptest").toFile()

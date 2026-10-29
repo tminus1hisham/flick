@@ -1,6 +1,10 @@
 package dev.local.flick
 
+import java.io.InputStream
 import java.io.RandomAccessFile
+import java.net.Socket
+import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.security.MessageDigest
 
 /** A request's byte range against a resource, per RFC 9110 (single ranges only). */
@@ -86,6 +90,24 @@ fun sha1(slices: List<Slice>, cancelled: () -> Boolean): ByteArray? {
         }
     }
     return md.digest()
+}
+
+/**
+ * Whether the client has hung up, checked with a 1 ms read of [input] (the socket's stream). A byte the client sent
+ * is skipped, not taken as a hang-up; only end of stream is. The socket's read timeout is restored afterwards.
+ */
+fun clientGone(socket: Socket, input: InputStream): Boolean {
+    val timeout = socket.soTimeout
+    socket.soTimeout = 1
+    try {
+        return input.read() < 0
+    } catch (_: SocketTimeoutException) {
+        return false
+    } catch (_: SocketException) {
+        return true // reset: the client closed with response bytes unread
+    } finally {
+        socket.soTimeout = timeout
+    }
 }
 
 private val videoTypes = mapOf(
