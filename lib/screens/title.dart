@@ -1,8 +1,6 @@
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' show ClientException;
 
 import '../addons.dart';
 import '../playback.dart';
@@ -19,7 +17,8 @@ final _glass = FlickTokens.background.withValues(alpha: 0.45);
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 String _day(DateTime d) => '${d.day} ${_months[d.month - 1]}';
-bool _offline(Object e) => e is SocketException || e is ClientException;
+// The client can't tell offline from an addon being down: both are AddonError.unreachable.
+bool _offline(Object e) => e is AddonException && e.kind == AddonError.unreachable;
 void _openSources(BuildContext context) => Navigator.pushNamed(context, '/sources');
 
 /// D2 Title: a movie's streams inline, or a series' seasons and episodes (an episode opens [StreamsScreen]).
@@ -135,7 +134,7 @@ class _TitleScreenState extends State<TitleScreen> {
         SliverToBoxAdapter(
           child: _Notice(
             offline ? Icons.wifi_off : Icons.report_outlined,
-            offline ? "You're offline." : "Couldn't load this title.",
+            offline ? "Couldn't connect. Check your connection and try again." : "Couldn't load this title.",
             live: true,
             actions: [OutlinedButton(onPressed: _retry, child: const Text('Try again'))],
           ),
@@ -366,8 +365,8 @@ class _StreamListState extends State<_StreamList> {
         for (var i = 0; i < 2; i++) const _RowSkeleton()
       else
         _Notice(
-          _offline(r) ? Icons.wifi_off : Icons.warning_amber_rounded,
-          _offline(r) ? "You're offline" : "${a.name} didn't answer",
+          Icons.warning_amber_rounded,
+          "${a.name} didn't answer",
           live: true,
           actions: [TextButton(onPressed: () => setState(() => _ask(a)), child: const Text('Retry'))],
         ),

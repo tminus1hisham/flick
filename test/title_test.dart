@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flick/addons.dart';
 import 'package:flick/screens/title.dart';
@@ -99,7 +98,7 @@ void main() {
         tester,
         _Addons(_meta('movie'), sources: [_Addon('Northstar'), _Addon('Open Reel')], results: {
           'Northstar': [_stream('The.Kid.1921.1080p')],
-          'Open Reel': TimeoutException('slow'),
+          'Open Reel': AddonException(AddonError.unreachable),
         }),
         'movie');
 

@@ -58,6 +58,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
     });
     try {
       await addons.add(_url.text.trim());
+      if (!mounted) return;
       _url.clear();
     } on AddonException catch (e) {
       _error = switch (e.kind) {

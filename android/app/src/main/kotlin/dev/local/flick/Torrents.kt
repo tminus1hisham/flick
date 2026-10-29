@@ -93,9 +93,6 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     private fun handle(call: MethodCall): Any? {
         val id = call.argument<Int>("id")
-        if (id != null && call.method != "release" && call.method != "remove") {
-            releases.remove(id)?.cancel(false)
-        }
         return when (call.method) {
             "add" -> add(call.argument<String>("magnet")!!, call.argument<String>("dir")!!)
             "status" -> entries[id]?.let { e -> synchronized(e) { if (e.alive) status(e) else null } }

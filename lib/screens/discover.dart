@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' show ClientException;
 
 import '../addons.dart';
 import '../state.dart';
@@ -13,7 +11,8 @@ import 'title.dart';
 
 (String, String, String) _key(Catalog c) => (c.addon.base, c.type, c.id);
 
-bool _offline(Object? e) => e is SocketException || e is ClientException || e is TimeoutException;
+// The client can't tell offline from an addon being down: both are AddonError.unreachable.
+bool _offline(Object? e) => e is AddonException && e.kind == AddonError.unreachable;
 
 /// D1: addon catalogs as a poster wall, with search over the current type.
 class DiscoverScreen extends StatefulWidget {
@@ -238,7 +237,7 @@ class _FeedState extends State<_Feed> {
         if (_items.isEmpty) {
           if (_error != null) {
             return _offline(_error)
-                ? _Notice(Icons.wifi_off, "You're offline", action: 'Try again', onAction: _more)
+                ? _Notice(Icons.wifi_off, "Couldn't connect. Check your connection and try again.", action: 'Try again', onAction: _more)
                 : _Notice(Icons.report_outlined, "Couldn't load these titles", action: 'Try again', onAction: _more);
           }
           if (!_done) return GridSkeleton(padding: gutters, delegate: grid);
@@ -279,7 +278,7 @@ class _FeedState extends State<_Feed> {
                           color: FlickTokens.textSecondary),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(_offline(_error) ? "You're offline" : "Couldn't load more titles",
+                        child: Text(_offline(_error) ? "Couldn't connect. Check your connection." : "Couldn't load more titles",
                             style: FlickText.body),
                       ),
                       const SizedBox(width: 8),
