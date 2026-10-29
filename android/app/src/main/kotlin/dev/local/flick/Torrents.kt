@@ -1,5 +1,8 @@
 package dev.local.flick
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -9,10 +12,13 @@ import java.io.File
 import java.util.BitSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.libtorrent4j.Priority
 import org.libtorrent4j.SessionHandle
 import org.libtorrent4j.SessionManager
+import org.libtorrent4j.Sha1Hash
 import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
 import org.libtorrent4j.swig.error_code
@@ -35,10 +41,15 @@ class Entry(val th: TorrentHandle, val dir: String) {
     }
 }
 
-/** MethodChannel "flick/torrent". Calls run one at a time off the main thread and answer exactly once. */
+/** MethodChannel "flick/torrent". ctl serializes calls and delayed removals; replies answer once.
+ * Live hashes share an entry; release stops playback and keeps it warm for 60 seconds.
+ */
 class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
+    private lateinit var context: Context
     private val ctl = Executors.newSingleThreadExecutor()
+    private val timer = Executors.newSingleThreadScheduledExecutor()
+    private val releases = mutableMapOf<Int, ScheduledFuture<*>>()
     private val main = Handler(Looper.getMainLooper())
     private val entries = ConcurrentHashMap<Int, Entry>()
     private val nextId = AtomicInteger(1)
@@ -46,12 +57,14 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     private var server: StreamServer? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
+        context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, "flick/torrent")
         channel.setMethodCallHandler(this)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        timer.shutdownNow()
         ctl.execute {
             server?.close()
             entries.keys.toList().forEach(::remove)
@@ -61,6 +74,15 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        // On the main thread, so opening a link never waits behind a slow torrent call.
+        if (call.method == "openExternal") {
+            runCatching {
+                val uri = Uri.parse(call.argument<String>("url")!!)
+                require(uri.scheme?.lowercase() in listOf("http", "https")) { "only http/https URLs are allowed" }
+                context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }.fold({ result.success(null) }, { result.error("external", it.message ?: it.toString(), null) })
+            return
+        }
         ctl.execute {
             val r = runCatching { handle(call) }
             main.post {
@@ -71,6 +93,9 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     private fun handle(call: MethodCall): Any? {
         val id = call.argument<Int>("id")
+        if (id != null && call.method != "release" && call.method != "remove") {
+            releases.remove(id)?.cancel(false)
+        }
         return when (call.method) {
             "add" -> add(call.argument<String>("magnet")!!, call.argument<String>("dir")!!)
             "status" -> entries[id]?.let { e -> synchronized(e) { if (e.alive) status(e) else null } }
@@ -78,6 +103,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
             "stream" -> stream(entries[id] ?: error("torrent was removed"), id!!, call.argument<Int>("file")!!)
             // The channel cannot encode Unit, so these answer null explicitly.
             "stopStream" -> { entries[id]?.let(::stop); null }
+            "release" -> { release(id!!); null }
             "remove" -> { remove(id!!); null }
             else -> throw IllegalArgumentException("unknown method ${call.method}")
         }
@@ -94,8 +120,20 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
         val ec = error_code()
         val p = libtorrent.parse_magnet_uri(magnet, ec)
         if (ec.value() != 0) throw IllegalArgumentException(ec.message())
+        val hash = Sha1Hash(p.getInfo_hashes().getV1()).toHex().lowercase()
+        for ((id, e) in entries) {
+            val same = synchronized(e) {
+                e.alive && hash != "0".repeat(40) && e.th.infoHash().toHex().lowercase() == hash
+            }
+            if (same) {
+                releases.remove(id)?.cancel(false)
+                // delete() only removes an empty directory; never delete the live entry's data.
+                if (File(dir).canonicalPath != File(e.dir).canonicalPath) File(dir).delete()
+                return id
+            }
+        }
         p.setSave_path(dir)
-        // Nothing downloads until a file is picked; a re-add during a pending removal fails rather than sharing it.
+        // Nothing downloads until a file is picked.
         p.setFlags(p.getFlags().or_(TorrentFlags.DEFAULT_DONT_DOWNLOAD).or_(TorrentFlags.DUPLICATE_IS_ERROR))
         val th = TorrentHandle(sm.swig().add_torrent(p, ec))
         if (ec.value() != 0) throw IllegalStateException(ec.message())
@@ -160,7 +198,21 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
+    private fun release(id: Int) {
+        val e = entries[id] ?: return
+        stop(e)
+        releases.remove(id)?.cancel(false)
+        lateinit var pending: ScheduledFuture<*>
+        pending = timer.schedule({
+            ctl.execute {
+                if (releases[id] === pending) remove(id)
+            }
+        }, 60, TimeUnit.SECONDS)
+        releases[id] = pending
+    }
+
     private fun remove(id: Int) {
+        releases.remove(id)?.cancel(false)
         val e = entries.remove(id) ?: return
         synchronized(e) {
             e.alive = false

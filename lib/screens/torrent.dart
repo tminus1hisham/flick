@@ -100,8 +100,10 @@ class _MagnetDialogState extends State<_MagnetDialog> {
 }
 
 class TorrentScreen extends StatefulWidget {
-  const TorrentScreen(this.magnet, {super.key});
+  const TorrentScreen(this.magnet, {this.fileIdx, this.season, this.episode, this.title, super.key});
   final String magnet;
+  final int? fileIdx, season, episode;
+  final String? title;
 
   @override
   State<TorrentScreen> createState() => _TorrentScreenState();
@@ -118,6 +120,9 @@ class _TorrentScreenState extends State<TorrentScreen> {
   Object? _error;
   bool _busy = false, _opening = false;
   int? _openingFile; // UI only: the row showing "Opening…", tracks _opening
+  int? _suggested;
+  bool _autoAttempted = false;
+  DateTime? _startedAt;
 
   @override
   void initState() {
@@ -129,6 +134,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
     final attempt = ++_attempt;
     bool stale() => attempt != _attempt || !mounted;
     _busy = true;
+    _startedAt = DateTime.now();
     try {
       final engine = _engine = await torrentEngine();
       if (stale()) return;
@@ -137,7 +143,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
       // sweep owns any leftovers.
       if (stale()) return dir.delete(recursive: true).ignore();
       final id = await engine.add(widget.magnet, dir.path);
-      if (stale()) return _forget(engine.remove(id));
+      if (stale()) return _forget(engine.release(id));
       _id = id;
       _poll = Timer.periodic(const Duration(seconds: 1), (_) => _refresh());
       _refresh();
@@ -150,21 +156,49 @@ class _TorrentScreenState extends State<TorrentScreen> {
 
   Future<void> _refresh() async {
     final engine = _engine, id = _id;
-    if (_polling || engine == null || id == null) return;
+    final attempt = _attempt;
+    if (_polling || _error != null || engine == null || id == null) return;
     _polling = true;
     try {
       final s = await engine.status(id);
       final files = s != null && s.hasMetadata && _files == null ? await engine.files(id) : null;
-      if (!mounted || id != _id) return;
+      if (!mounted || id != _id || attempt != _attempt) return;
+      TorrentFile? auto;
       setState(() {
         _info = s;
+        if (s == null) {
+          _error = 'This torrent is no longer available.';
+        } else if (s.error != null) {
+          _error = s.error;
+        } else if (!s.hasMetadata &&
+            DateTime.now().difference(_startedAt!) >= const Duration(seconds: 60)) {
+          _error = 'No torrent details arrived. Try again or choose another source.';
+        }
         if (files != null) {
           _files = files.where((f) => isVideo(f.name)).toList()
             ..sort((a, b) => b.size.compareTo(a.size));
+          final guess = guessFile(_files!, season: widget.season, episode: widget.episode);
+          _suggested = guess.index;
+          TorrentFile? selected;
+          for (final f in _files!) {
+            if (f.index == widget.fileIdx) selected = f;
+          }
+          if (selected == null && guess.sure) {
+            for (final f in _files!) {
+              if (f.index == guess.index) selected = f;
+            }
+          }
+          if (!_autoAttempted && selected != null && _error == null) {
+            _autoAttempted = true;
+            auto = selected;
+          }
+          _files!.sort((a, b) => a.index == b.index ? 0 : a.index == _suggested ? -1
+              : b.index == _suggested ? 1 : b.size.compareTo(a.size));
         }
       });
+      if (auto != null) _play(auto!, automatic: true);
     } catch (e) {
-      if (mounted && id == _id) setState(() => _error = e);
+      if (mounted && id == _id && attempt == _attempt) setState(() => _error = e);
     } finally {
       _polling = false;
     }
@@ -173,17 +207,20 @@ class _TorrentScreenState extends State<TorrentScreen> {
   Future<void> _retry() async {
     if (_busy) return;
     _busy = true;
-    await _teardown();
+    _attempt++;
+    await _teardown(remove: true);
     if (!mounted) return;
     setState(() {
       _error = null;
       _info = null;
       _files = null;
+      _suggested = null;
+      _autoAttempted = false;
     });
     _start();
   }
 
-  Future<void> _play(TorrentFile f) async {
+  Future<void> _play(TorrentFile f, {bool automatic = false}) async {
     final engine = _engine, id = _id;
     if (_opening || engine == null || id == null) return;
     _opening = true;
@@ -196,10 +233,12 @@ class _TorrentScreenState extends State<TorrentScreen> {
             context,
             MaterialPageRoute(
                 builder: (_) => PlayerScreen(
-                    item: Item({'Id': 'torrent', 'Name': f.name}), source: url, report: false)));
+                    item: Item({'Id': 'torrent', 'Name': widget.title ?? f.name}),
+                    source: url, report: false)));
       } finally {
         if (id == _id) _forget(engine.stopStream(id));
       }
+      if (automatic && mounted && id == _id) Navigator.pop(context);
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -208,13 +247,15 @@ class _TorrentScreenState extends State<TorrentScreen> {
     }
   }
 
-  /// Removes the owned torrent (stops its streams and deletes its data natively).
-  Future<void> _teardown() async {
+  /// Keep a released torrent warm; retries explicitly start over.
+  Future<void> _teardown({bool remove = false}) async {
     _poll?.cancel();
     _poll = null;
     final engine = _engine, id = _id;
     _id = null;
-    if (engine != null && id != null) await _forget(engine.remove(id));
+    if (engine != null && id != null) {
+      await _forget(remove ? engine.remove(id) : engine.release(id));
+    }
   }
 
   static Future<void> _forget(Future<void> f) =>
@@ -249,7 +290,15 @@ class _TorrentScreenState extends State<TorrentScreen> {
               title: "Couldn't play this torrent",
               detail: error is PlatformException ? error.message ?? error.code : '$error',
               danger: true,
-              action: OutlinedButton(onPressed: _retry, child: const Text('Try again')),
+              action: Wrap(spacing: 12, children: [
+                OutlinedButton(
+                    style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                    onPressed: _retry, child: const Text('Retry')),
+                TextButton(
+                    style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Choose another source')),
+              ]),
             )
           : files != null && files.isEmpty
               ? const _Notice(
@@ -270,7 +319,11 @@ class _TorrentScreenState extends State<TorrentScreen> {
                           : null,
                       busy: true,
                     ),
-                    _Stage('Choose a video', files == null ? _Step.pending : _Step.now),
+                    _Stage(
+                        _autoAttempted && _openingFile != null
+                            ? 'Opening ${files!.firstWhere((f) => f.index == _openingFile).name}'
+                            : 'Choose a video',
+                        files == null ? _Step.pending : _Step.now),
                     if (i != null && i.name.isNotEmpty) ...[
                       const SizedBox(height: 20),
                       Text(i.name, style: t.titleMedium),
@@ -290,7 +343,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
                       for (final (n, f) in files.indexed) ...[
                         if (n > 0) const Divider(),
                         _FileRow(f,
-                            largest: n == 0,
+                            suggested: f.index == _suggested,
                             opening: _openingFile == f.index,
                             onTap: () => _play(f)),
                       ],
@@ -371,9 +424,9 @@ class _Stage extends StatelessWidget {
 
 /// A flat, tappable video row: marker, wrapping name, size.
 class _FileRow extends StatelessWidget {
-  const _FileRow(this.file, {required this.largest, required this.opening, required this.onTap});
+  const _FileRow(this.file, {required this.suggested, required this.opening, required this.onTap});
   final TorrentFile file;
-  final bool largest, opening;
+  final bool suggested, opening;
   final VoidCallback onTap;
 
   @override
@@ -386,7 +439,7 @@ class _FileRow extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: 56),
         child: IntrinsicHeight(
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Container(width: 3, color: opening ? scheme.primary : Colors.transparent),
+            Container(width: 3, color: opening ? scheme.primary : null),
             const SizedBox(width: 16),
             Expanded(
               child: Padding(
@@ -395,7 +448,7 @@ class _FileRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (largest)
+                    if (suggested)
                       // A filled tag: small red text on black would fall below 4.5:1.
                       Align(
                         alignment: Alignment.centerLeft,
@@ -404,9 +457,12 @@ class _FileRow extends StatelessWidget {
                               color: scheme.primary, borderRadius: BorderRadius.circular(4)),
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            child: Text('Largest',
-                                style: t.labelSmall?.copyWith(
-                                    color: scheme.onPrimary, fontWeight: FontWeight.w700)),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Icon(Icons.recommend_outlined, size: 16, color: scheme.onPrimary),
+                              const SizedBox(width: 4),
+                              Text('Suggested', style: t.labelSmall?.copyWith(
+                                  color: scheme.onPrimary, fontWeight: FontWeight.w700)),
+                            ]),
                           ),
                         ),
                       ),

@@ -6,14 +6,18 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../jellyfin.dart';
+import '../addons.dart' show Subtitle;
 import '../stall.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({required this.item, this.source, this.report = true, super.key});
+  const PlayerScreen({required this.item, this.source, this.report = true,
+    this.headers = const {}, this.subtitles = const [], super.key});
   final Item item;
+  final Map<String, String> headers;
+  final List<Subtitle> subtitles;
 
   /// Plays this file/URL instead of streaming from Jellyfin.
   final String? source;
@@ -33,6 +37,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Quality _quality = Quality.original;
   bool _started = false, _prompted = false;
   Timer? _progress;
+  String? _error;
+  bool _retrying = false;
   ScaffoldMessengerState? _messenger;
   // open() resets state.position to 0 until mpv reports time-pos; report this instead.
   late Duration _pos = widget.item.resumePosition;
@@ -55,7 +61,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _showError(Object e) {
+    if (widget.source != null) {
+      if (mounted) setState(() => _error = '$e');
+      return;
+    }
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+  }
+
+  Future<void> _retry() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      setState(() => _error = null);
+      await _open(_pos);
+    } catch (e) {
+      _showError(e);
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
   }
 
   Future<void> _init() async {
@@ -86,6 +109,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _open(Duration start) => _player.open(Media(
         widget.source ?? session.client!.playUrl(widget.item, _quality),
         start: start,
+        httpHeaders: widget.headers,
       ));
 
   void _report(Future<void> Function(JellyfinClient) call) {
@@ -177,7 +201,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
       body: MaterialVideoControlsTheme(
         normal: theme,
         fullscreen: theme,
-        child: Video(controller: _controller),
+        child: Stack(children: [
+          Video(controller: _controller),
+          if (_error != null)
+            Positioned.fill(
+              child: ColoredBox(
+                color: FlickTokens.background,
+                child: Center(child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(FlickTokens.pageGutter),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.report_outlined, color: context.flick.danger),
+                    const SizedBox(height: 12),
+                    const Text("Couldn't play this video"),
+                    const SizedBox(height: 8),
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    Wrap(spacing: 12, children: [
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                        onPressed: _retrying ? null : _retry, child: const Text('Retry')),
+                      TextButton(
+                        style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Choose another source')),
+                    ]),
+                  ]),
+                )),
+              ),
+            ),
+        ]),
       ),
     );
   }
