@@ -41,6 +41,11 @@ Flick: Flutter (3.41, Material 3) Android app. A Jellyfin client plus magnet-lin
 - Hero: `Stack(fit: passthrough)` + `Column(min, spaceBetween)` pins the copy to the bottom of the 440dp hero.
 - Verified via a mocked-server widget render with the real fonts (network artwork shows as placeholders in tests).
 
+## Login notes (2026-10-29)
+- Sign in / Sign up on one screen (segment switch). Sign up is visual-only: extra Confirm field, "Create account" disabled, note that the server admin creates accounts. Jellyfin has no public sign-up; `/Startup/User` (owner setup) is the path if it gets wired.
+- `PosterDrift` is the one approved exception to "no carousel or parallax": 8 original textless thriller images generated for Flick (assets/posters, 144 KB), 4 columns at -12 deg, 24-40 s per poster, static under reduce-motion.
+- No backdrop blur on the panel: the scrim is 85-98% opaque there, so blur would cost every frame and show nothing.
+
 ## Constraints
 Same API calls, handlers, download and torrent logic. No new packages.
 
