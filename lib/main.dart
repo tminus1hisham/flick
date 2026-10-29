@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'screens/discover.dart';
 import 'screens/downloads.dart';
 import 'screens/home.dart';
 import 'screens/library.dart';
@@ -16,6 +17,7 @@ Future<void> main() async {
   MediaKit.ensureInitialized();
   await session.load();
   await downloads.init();
+  await addons.load();
   runApp(const FlickApp());
 }
 
@@ -48,13 +50,13 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _tab = 0;
-  static const _tabs = [HomeScreen(), BrowseScreen(), SearchScreen(), DownloadsScreen()];
-  static const _titles = ['', 'Browse', 'Search', 'Downloads'];
+  static const _tabs = [HomeScreen(), DiscoverScreen(), BrowseScreen(), SearchScreen(), DownloadsScreen()];
+  static const _titles = ['', '', 'Browse', 'Search', 'Downloads'];
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        // Home draws its own bar over the hero.
-        appBar: _tab == 0
+        // Home draws its own bar over the hero; Discover's search field is its header.
+        appBar: _tab < 2
             ? null
             : AppBar(
                 title: Text(_titles[_tab]),
@@ -66,6 +68,8 @@ class _ShellState extends State<Shell> {
           onDestinationSelected: (i) => setState(() => _tab = i),
           destinations: const [
             NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+            NavigationDestination(
+                icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'),
             NavigationDestination(
                 icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'),
             // Search has no outlined/filled pair in Material Icons.

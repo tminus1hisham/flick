@@ -111,6 +111,34 @@ class Skeleton extends StatelessWidget {
       );
 }
 
+/// Library and search poster grid.
+const posterGrid = SliverGridDelegateWithMaxCrossAxisExtent(
+  maxCrossAxisExtent: 130,
+  childAspectRatio: 0.46,
+  crossAxisSpacing: FlickTokens.railGap,
+  mainAxisSpacing: 20,
+);
+
+/// Poster grid stand-in: artwork and a caption bar per cell, laid out by [delegate].
+class GridSkeleton extends StatelessWidget {
+  const GridSkeleton({required this.padding, this.delegate = posterGrid, super.key});
+  final EdgeInsetsGeometry padding;
+  final SliverGridDelegate delegate;
+
+  @override
+  Widget build(BuildContext context) => GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        padding: padding,
+        gridDelegate: delegate,
+        itemCount: 12,
+        itemBuilder: (_, _) => const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          AspectRatio(aspectRatio: 2 / 3, child: Skeleton(radius: FlickTokens.artworkRadius)),
+          SizedBox(height: 8),
+          Skeleton(width: 80, height: 12, radius: 4),
+        ]),
+      );
+}
+
 class ErrorState extends StatelessWidget {
   const ErrorState(this.error, {this.onRetry, super.key});
   final Object error;
