@@ -378,11 +378,23 @@ StreamInfo describe(AddonStream s) {
   );
 }
 
+/// Used when a stream names no trackers (Torrentio sends none): with DHT alone the torrent's
+/// details never arrived on an emulator in 2 minutes; with these, playback started within 45 s.
+// ponytail: a fixed list; fetch a maintained one (e.g. ngosang/trackerslist) if these go stale.
+const fallbackTrackers = [
+  'udp://tracker.opentrackr.org:1337/announce',
+  'udp://open.stealth.si:80/announce',
+  'udp://tracker.torrent.eu.org:451/announce',
+  'udp://exodus.desync.com:6969/announce',
+  'udp://open.demonii.com:1337/announce',
+];
+
 String magnetFor(AddonStream s) {
   final firstLine = s.title?.split('\n').first.trim();
   final dn = s.filename ?? (firstLine == null || firstLine.isEmpty ? null : firstLine) ?? s.name ?? '';
+  final trackers = s.trackers.isEmpty ? fallbackTrackers : s.trackers;
   return 'magnet:?xt=urn:btih:${s.infoHash!}&dn=${Uri.encodeComponent(dn)}'
-      '${s.trackers.map((t) => '&tr=${Uri.encodeComponent(t)}').join()}';
+      '${trackers.map((t) => '&tr=${Uri.encodeComponent(t)}').join()}';
 }
 
 /// Opens [url] outside Flick (Android ACTION_VIEW, handled natively on `flick/torrent`).

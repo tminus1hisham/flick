@@ -59,6 +59,11 @@ void main() {
         'a b.mkv');
   });
 
+  test('a stream without trackers (Torrentio) still gets public trackers', () {
+    final q = Uri.parse(magnetFor(stream(infoHash: hash, name: 'Torrentio\n1080p'))).queryParametersAll;
+    expect(q['tr'], fallbackTrackers);
+  });
+
   test('describe parses a Torrentio row', () {
     final i = describe(stream(
       name: 'Torrentio\n720p',
