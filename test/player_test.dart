@@ -3,31 +3,11 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 
-import 'package:flick/jellyfin.dart';
 import 'package:flick/screens/player.dart';
 
 // PlayerScreen can't be pumped headless: Player() needs libmpv, which
 // `flutter test` doesn't have. These cover the decisions it delegates to.
 void main() {
-  final movie = Item({'Id': 'x', 'Name': 'Movie', 'Type': 'Movie'});
-
-  test('downloaded Jellyfin titles keep the Jellyfin player', () {
-    // detail.dart plays downloads as PlayerScreen(item:, source: local).
-    expect(
-      PlayerScreen(item: movie, source: '/local.mkv').addonPlayback,
-      isFalse,
-    );
-    expect(PlayerScreen(item: movie).addonPlayback, isFalse);
-    expect(
-      PlayerScreen(
-        item: movie,
-        source: 'http://x/v.mkv',
-        report: false,
-      ).addonPlayback,
-      isTrue,
-    );
-  });
-
   group('stoppedEarly', () {
     const d = Duration(minutes: 100);
     bool early({

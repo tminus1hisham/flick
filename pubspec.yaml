@@ -36,11 +36,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.6.0
   shared_preferences: ^2.5.6
-  flutter_secure_storage: ^11.2.0
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
-  background_downloader: ^9.5.9
   path_provider: ^2.1.6
 
 dev_dependencies:
@@ -64,9 +62,6 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-
-  assets:
-    - assets/posters/
 
   fonts:
     - family: Manrope

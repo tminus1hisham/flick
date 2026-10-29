@@ -7,6 +7,7 @@ import 'package:flick/theme.dart';
 import 'package:flick/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _Addon implements Addon {
   @override
@@ -145,5 +146,22 @@ void main() {
 
     expect(_fake.requests.last, ('movie', 'year', null, 0));
     expect(find.text('movie year 0'), findsOneWidget);
+  });
+
+  testWidgets('saved titles show a Favourites chip for their type, with no account', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await saved.load();
+    await saved.toggleFavourite((id: 'tt0012349', type: 'movie', name: 'The Kid', poster: null, releaseInfo: '1921'));
+    addTearDown(() => saved.favourites.clear());
+    await _pump(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Favourites'));
+    await tester.pumpAndSettle();
+    expect(find.text('The Kid'), findsOneWidget);
+
+    await tester.tap(find.text('Series'));
+    await tester.pumpAndSettle();
+    expect(find.text('Favourites'), findsNothing);
   });
 }
