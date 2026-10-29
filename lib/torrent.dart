@@ -82,3 +82,9 @@ Future<Directory> torrentDir() async {
   await root.create(recursive: true);
   return root.createTemp('s');
 }
+
+/// Which file to play when a stream names none (enginefs guessFileIdx). A valid [fileIdx]-style choice is the
+/// caller's; this picks a unique SxxEyy match, else the sole video ([sure] true), else suggests the largest
+/// video for the file list ([sure] false). Null index when there is no video.
+({int? index, bool sure}) guessFile(List<TorrentFile> files, {int? season, int? episode}) =>
+    throw UnimplementedError();
