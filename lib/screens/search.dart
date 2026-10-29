@@ -5,13 +5,6 @@ import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
-const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
-  maxCrossAxisExtent: 130,
-  childAspectRatio: 0.46,
-  crossAxisSpacing: FlickTokens.railGap,
-  mainAxisSpacing: 20,
-);
-
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -77,17 +70,7 @@ class _SearchScreenState extends State<SearchScreen> {
             : Loader(
                 _results!,
                 onRetry: () => _run(_query),
-                placeholder: GridView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
-                  gridDelegate: _gridDelegate,
-                  itemCount: 12,
-                  itemBuilder: (_, _) => const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    AspectRatio(aspectRatio: 2 / 3, child: Skeleton(radius: FlickTokens.artworkRadius)),
-                    SizedBox(height: 8),
-                    Skeleton(width: 80, height: 12, radius: 4),
-                  ]),
-                ),
+                placeholder: const GridSkeleton(padding: EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter)),
                 (items) => items.isEmpty
                     ? _Message(
                         title: 'No matches for “$_query”',
@@ -106,7 +89,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 0, FlickTokens.pageGutter, 24),
                           sliver: SliverGrid.builder(
-                            gridDelegate: _gridDelegate,
+                            gridDelegate: posterGrid,
                             itemCount: items.length,
                             itemBuilder: (_, i) => Poster(items[i], width: double.infinity),
                           ),

@@ -5,13 +5,6 @@ import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
 
-const _gridDelegate = SliverGridDelegateWithMaxCrossAxisExtent(
-  maxCrossAxisExtent: 130,
-  childAspectRatio: 0.46,
-  crossAxisSpacing: FlickTokens.railGap,
-  mainAxisSpacing: 20,
-);
-
 const _gridPadding = EdgeInsets.fromLTRB(FlickTokens.pageGutter, 16, FlickTokens.pageGutter, 24);
 
 /// Every library as a tab above its poster grid.
@@ -117,7 +110,7 @@ class _GridState extends State<_Grid> with AutomaticKeepAliveClientMixin {
                   color: Theme.of(context).colorScheme.onSurfaceVariant)),
         );
       }
-      return const _GridSkeleton();
+      return const GridSkeleton(padding: _gridPadding);
     }
     return NotificationListener<ScrollNotification>(
       onNotification: (n) {
@@ -128,7 +121,7 @@ class _GridState extends State<_Grid> with AutomaticKeepAliveClientMixin {
         SliverPadding(
           padding: _gridPadding,
           sliver: SliverGrid.builder(
-            gridDelegate: _gridDelegate,
+            gridDelegate: posterGrid,
             itemCount: _items.length,
             itemBuilder: (_, i) => Poster(_items[i], width: double.infinity),
           ),
@@ -146,23 +139,6 @@ class _GridState extends State<_Grid> with AutomaticKeepAliveClientMixin {
       ]),
     );
   }
-}
-
-class _GridSkeleton extends StatelessWidget {
-  const _GridSkeleton();
-
-  @override
-  Widget build(BuildContext context) => GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        padding: _gridPadding,
-        gridDelegate: _gridDelegate,
-        itemCount: 12,
-        itemBuilder: (_, _) => const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          AspectRatio(aspectRatio: 2 / 3, child: Skeleton(radius: FlickTokens.artworkRadius)),
-          SizedBox(height: 8),
-          Skeleton(width: 80, height: 12, radius: 4),
-        ]),
-      );
 }
 
 class _BrowseSkeleton extends StatelessWidget {
@@ -183,6 +159,6 @@ class _BrowseSkeleton extends StatelessWidget {
             ]),
           ),
         ),
-        Expanded(child: _GridSkeleton()),
+        Expanded(child: GridSkeleton(padding: _gridPadding)),
       ]);
 }
