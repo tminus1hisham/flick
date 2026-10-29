@@ -14,6 +14,7 @@ import '../playback.dart';
 import '../stall.dart';
 import '../state.dart';
 import '../theme.dart';
+import '../torrent.dart';
 import '../widgets.dart';
 
 typedef _Caption = ({
@@ -140,6 +141,7 @@ class PlayerScreen extends StatefulWidget {
     this.filename,
     this.size,
     this.hash,
+    this.torrent,
     super.key,
   });
   final Playback? playback;
@@ -148,6 +150,9 @@ class PlayerScreen extends StatefulWidget {
   final Item item;
   final Map<String, String> headers;
   final List<Subtitle> subtitles;
+
+  /// The torrent behind [source] when it is the engine's loopback stream.
+  final ({TorrentEngine engine, int id})? torrent;
 
   /// Plays this file/URL instead of streaming from Jellyfin.
   final String? source;
@@ -169,6 +174,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   );
   late final _controller = VideoController(_player);
   final _stalls = StallDetector();
+  final _pauseWait = PauseWait();
   final _subs = <StreamSubscription>[];
   Quality _quality = Quality.original;
   bool _started = false, _prompted = false;
@@ -188,7 +194,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   _Caption? _failed;
   String? _applicationError;
   String? _lastPlaybackError;
-  Timer? _startTimer;
   // Subtitle file text and the mpv track id it was added as, by URL.
   final _subtitleFiles = <String, String>{};
   final _added = <String, String>{};
@@ -213,10 +218,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (p <= Duration.zero) return;
           _pos = p;
           if (!widget.addonPlayback) return;
+          _pauseWait.position(p, DateTime.now());
           if (!_started) {
             // Errors before playback started weren't fatal after all.
             _started = true;
-            _startTimer?.cancel();
             _lastPlaybackError = null;
             if (_error != null && mounted) setState(() => _error = null);
           }
@@ -288,12 +293,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return;
       }
       _lastPlaybackError = '$e';
+      // Before the first frame too, only a stopped player is a failure.
       _checkStopped();
-      // Some decoder errors are harmless: give playback a moment to start.
+      // mpv logs the error before it goes idle and media_kit reports no
+      // stop after a failed load, so look again shortly.
       if (!_started) {
-        _startTimer ??= Timer(const Duration(seconds: 10), () {
-          if (!_started) _fatalError();
-        });
+        for (final s in [1, 3]) {
+          Timer(Duration(seconds: s), () {
+            if (mounted && !_started && _lastPlaybackError != null) {
+              _checkStopped();
+            }
+          });
+        }
       }
       return;
     }
@@ -523,8 +534,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       _added.clear();
       _lastPlaybackError = null;
-      _startTimer?.cancel();
-      _startTimer = null;
       await _open(_pos);
     } catch (e) {
       _showError(e);
@@ -535,16 +544,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _init() async {
     final mpv = _player.platform as NativePlayer;
+    final addon = widget.addonPlayback;
     // Buffer hard up front and after a stall instead of stuttering.
-    // Read-ahead is bounded by bufferSize (demuxer-max-bytes) only.
+    // Jellyfin read-ahead is bounded by bufferSize (demuxer-max-bytes) only.
     for (final (k, v) in [
-      ('demuxer-max-back-bytes', '${100 * 1024 * 1024}'),
+      if (addon) ('demuxer-max-bytes', '${128 * 1024 * 1024}'),
+      ('demuxer-max-back-bytes', '${(addon ? 16 : 100) * 1024 * 1024}'),
       ('cache-pause-initial', 'yes'),
-      ('cache-pause-wait', '8'),
-      // Torrent sources: the server holds a request open until its piece downloads, so outwait
+      // Addon playback resumes sooner; _onBuffering raises it if stalls repeat.
+      ('cache-pause-wait', addon ? '${_pauseWait.seconds}' : '8'),
+      // The torrent server holds a request open until its piece downloads, so outwait
       // media_kit's 5 s network-timeout, and reconnect at the current offset if it drops an idle one.
-      if (!widget.report) ('network-timeout', '60'),
-      if (!widget.report)
+      if (addon) ('network-timeout', widget.torrent != null ? '120' : '30'),
+      if (addon)
         (
           'stream-lavf-o',
           'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5',
@@ -583,6 +595,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _onBuffering(bool buffering) {
+    if (widget.addonPlayback &&
+        _pauseWait.buffering(buffering, DateTime.now())) {
+      (_player.platform as NativePlayer)
+          .setProperty('cache-pause-wait', '${_pauseWait.seconds}')
+          .catchError((Object e) => debugPrint('cache-pause-wait: $e'));
+    }
     if (!buffering) {
       // The first buffer-complete after real playback position ends the initial fill.
       // Addon playback starts in the position listener, which also clears early errors.
@@ -628,7 +646,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final pos = _pos;
     _report((c) => c.reportStopped(widget.item.id, pos));
     _progress?.cancel();
-    _startTimer?.cancel();
     for (final s in _subs) {
       s.cancel();
     }

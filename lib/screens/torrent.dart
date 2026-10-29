@@ -247,7 +247,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
                     subtitles: widget.subtitles,
                     hash: widget.hash,
                     filename: f.name,
-                    size: f.size)));
+                    size: f.size,
+                    torrent: (engine: engine, id: id))));
       } finally {
         if (id == _id) _forget(engine.stopStream(id));
       }
