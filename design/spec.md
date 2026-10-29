@@ -23,6 +23,47 @@ Direction: Afterglow (REVAMP_PLAN.md), unchanged tokens unless listed under "New
 - Bundled addons are manifest snapshots in `lib/addons.dart`; Cinemeta is locked on, the other bundled ones have an on/off switch (state persisted). User-added manifest URLs + cached manifests are persisted in shared_preferences.
 - Stream text parsing (display only): quality from `\b(2160p|4k|1080p|720p|480p|360p)\b` over name+title (2160p→4K); none → `Unknown`, never SD; seeders after 👤 (absent = unknown, shown "—", distinct from 0); size after 💾 or `\d+(\.\d+)? (GB|MB)`; origin after ⚙️. Emoji are removed from displayed text.
 
+## Dart API (`lib/addons.dart`), the contract screens build against
+
+```dart
+typedef MetaPreview = ({String id, String type, String name, String? poster, String? releaseInfo});
+typedef Video = ({String id, String title, int? season, int? episode, DateTime? released, String? thumbnail});
+typedef Meta = ({String id, String type, String name, String? poster, String? background, String? logo,
+    String? description, String? releaseInfo, String? runtime, String? imdbRating, List<String> genres, List<Video> videos});
+typedef Catalog = ({Addon addon, String type, String id, String name, bool searchable});
+typedef AddonStream = ({String? name, String? title, String? infoHash, int? fileIdx, String? url,
+    String? externalUrl, List<String> trackers, String? filename});
+typedef StreamInfo = ({String quality, int? seeders, String? size, String? origin, List<String> lines});
+typedef Subtitle = ({String id, String url, String lang});
+
+class Addon {            // wraps one manifest
+  String get id; String get name; String get base; bool get bundled; bool get locked;
+  bool serves(String resource, String type, String id);
+  List<Catalog> get catalogs;   // movie/series, no required extra
+  String get capability;        // "Catalogs · Title details", "Streams · Movies & series", ...
+}
+class AddonException implements Exception { final AddonError kind; } // invalid, unreachable, duplicate, server
+enum AddonError { invalid, unreachable, duplicate, server }
+
+class Addons extends ChangeNotifier {   // global `addons` in state.dart, loaded in main() before runApp
+  Future<void> load();
+  List<Addon> get all;                  // bundled (incl. disabled) then user-added, for Sources
+  List<Addon> get active;               // enabled ones
+  bool isEnabled(Addon a); Future<void> setEnabled(Addon a, bool on);   // not for locked
+  Future<Addon> add(String input);      // stremio://, base or manifest URL; throws AddonException
+  Future<void> remove(Addon a); Future<void> restore(Addon a);          // restore = Undo, same position
+  List<Catalog> get catalogs;           // over active addons
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0});
+  Future<Meta> meta(String type, String id);
+  List<Addon> streamSources(String type, String videoId);
+  Future<List<AddonStream>> streams(Addon a, String type, String videoId);   // 15 s timeout
+  Future<List<Subtitle>> subtitles(String type, String videoId);           // all subtitle addons, merged
+}
+StreamInfo describe(AddonStream s);     // parsing rules above; emoji stripped
+String magnetFor(AddonStream s);
+Future<void> openExternal(String url);  // Android ACTION_VIEW over the `flick/torrent` channel
+```
+
 ## Torrent screen delta
 
 `TorrentScreen(magnet, {fileIdx, title})`: when metadata arrives and `fileIdx` names a **playable video** file, it opens that file once per attempt (the "Choose a video" stage reads "Opening {file}"). A missing, unknown or non-video index falls back to the existing video list. When the auto-opened player closes, Torrent start pops itself so the user lands on the unchanged stream list (scroll, filter and rows kept). The player header uses `title` when given.
@@ -75,3 +116,15 @@ Reduced motion (`MediaQuery.disableAnimations` / platform `disableAnimations`): 
 - Future episodes: disabled semantics with "Airs {date}".
 - Inline errors, "{Source} removed, Undo" and per-source failures are announced (live region) without moving focus.
 - Text scale: rows and telemetry wrap and grow; chips scroll; nothing clips at 1.3×.
+
+## Round 2: Stremio streaming extras (2026-10-29)
+
+From Stremio's enginefs, stremio-video and stremio-core, built in the same pass. YouTube (ytId, trailers, Channels) is deferred by the user.
+
+- **Contract:** `lib/addons.dart`, `lib/playback.dart` (`play(context, stream, playback)` is the screens' only way to start playback), `guessFile` in `lib/torrent.dart`.
+- **File guess (enginefs `guessFileIdx`):** a valid playable `fileIdx` wins; else a unique SxxEyy match or the sole video auto-opens; an ambiguous multi-video torrent shows the file list with the largest video marked "Suggested". Pasted magnets use the same rule.
+- **Request headers:** `behaviorHints.proxyHeaders.request` → media_kit `Media(httpHeaders:)`. Partial support: no response headers, no proxy.
+- **Recovery:** a player or torrent failure shows an overlay with **Retry** and **Choose another source** (pops to the unchanged stream list).
+- **Tracks panel:** audio + subtitles (Off, embedded, stream `subtitles[]`, OpenSubtitles v3 fetched when the panel opens, with loading and retry). Auto-pick the device language when a match exists.
+- **Warm torrent (enginefs `ENGINE_TIMEOUT`):** leaving the player releases the torrent: it stops downloading and is removed after 60 s unless the same infoHash is added again, which reuses it (metadata and verified pieces kept). Remove stays immediate elsewhere.
+- **Split:** Codex builds `addons.dart`, `playback.dart`, `torrent.dart`, `screens/torrent.dart`, `screens/player.dart`, `Torrents.kt` (+ external-link intent), unit tests (branch `discover-engine`). Claude builds `screens/discover.dart`, `title.dart`, `sources.dart`, `main.dart`, `theme.dart` tokens, widget tests (branch `discover-screens`). Engine merges first.
