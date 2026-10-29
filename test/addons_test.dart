@@ -1,0 +1,307 @@
+import 'dart:convert';
+
+import 'package:flick/addons.dart';
+import 'package:flick/torrent.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+AddonStream stream({
+  String? name,
+  String? title,
+  String? infoHash,
+  List<String> trackers = const [],
+  String? filename,
+}) =>
+    (
+      name: name,
+      title: title,
+      infoHash: infoHash,
+      fileIdx: null,
+      url: null,
+      externalUrl: null,
+      trackers: trackers,
+      filename: filename,
+    );
+
+Map<String, dynamic> manifest(String id, {List<Object> resources = const ['stream']}) =>
+    {'id': id, 'name': id, 'version': '1.0.0', 'resources': resources, 'types': ['movie', 'series'], 'catalogs': []};
+
+/// Fresh [Addons] over [handler], loaded from [prefs].
+Future<Addons> loaded(Future<http.Response> Function(http.Request) handler,
+    [Map<String, Object> prefs = const {}]) async {
+  SharedPreferences.setMockInitialValues(prefs);
+  final a = Addons(client: MockClient(handler));
+  await a.load();
+  return a;
+}
+
+// No charset header: JSON is UTF-8 regardless.
+http.Response json(Object body, [int status = 200]) => http.Response.bytes(utf8.encode(jsonEncode(body)), status);
+
+void main() {
+  const hash = 'ED0AFBC184168FCDD36BBB083C9EB304672B321D';
+  const tracker = 'udp://tracker.opentrackr.org:1337/announce';
+
+  test('magnetFor builds a valid magnet whose trackers round-trip', () {
+    final m = magnetFor(stream(
+        name: 'PDM', title: 'The Kid (1921)\n💾 1 GB', infoHash: hash, trackers: [tracker]));
+    expect(isMagnet(m), isTrue);
+    final q = Uri.parse(m).queryParametersAll;
+    expect(q['tr'], [tracker]);
+    expect(q['dn'], ['The Kid (1921)']);
+    expect(Uri.parse(magnetFor(stream(infoHash: hash, filename: 'a b.mkv', name: 'x'))).queryParameters['dn'],
+        'a b.mkv');
+  });
+
+  test('describe parses a Torrentio row', () {
+    final i = describe(stream(
+      name: 'Torrentio\n720p',
+      title: 'Rick.and.Morty.S04E02.720p.WEBRip.x264-TBS\n👤 96 💾 307 MB ⚙️ TorrentGalaxy',
+    ));
+    expect(i.quality, '720p');
+    expect(i.seeders, 96);
+    expect(i.size, '307 MB');
+    expect(i.origin, 'TorrentGalaxy');
+    expect(i.lines.first, 'Rick.and.Morty.S04E02.720p.WEBRip.x264-TBS');
+    expect(i.lines.join(), isNot(contains('💾')));
+  });
+
+  test('describe: Public Domain Movies shape, 4K and unknown quality', () {
+    final pdm = describe(stream(name: '1080p', title: '💾 859.37 MB'));
+    expect(pdm.quality, '1080p');
+    expect(pdm.seeders, isNull);
+    expect(pdm.size, '859.37 MB');
+    expect(describe(stream(name: 'x', title: 'Movie 2160p')).quality, '4K');
+    expect(describe(stream(name: 'x', title: 'Movie.4K.HDR')).quality, '4K');
+    expect(describe(stream(name: 'x', title: 'Movie 1.4 GB')).quality, 'Unknown');
+    expect(describe(stream(name: 'x', title: 'Movie 1.4 GB')).size, '1.4 GB');
+    expect(describe(stream(name: 'x', title: '👤 0')).seeders, 0);
+  });
+
+  group('add', () {
+    test('normalises stremio://, base and manifest URLs', () async {
+      final seen = <String>[];
+      final a = await loaded((r) async {
+        seen.add('${r.url}');
+        return json(manifest(r.url.host));
+      });
+      final x = await a.add('stremio://one.example/cfg/manifest.json');
+      final y = await a.add('https://two.example/cfg/');
+      final z = await a.add(' https://three.example/manifest.json ');
+      expect(seen, [
+        'https://one.example/cfg/manifest.json',
+        'https://two.example/cfg/manifest.json',
+        'https://three.example/manifest.json',
+      ]);
+      expect([x.base, y.base, z.base], ['https://one.example/cfg', 'https://two.example/cfg', 'https://three.example']);
+      expect(a.all.skip(4), [x, y, z]);
+    });
+
+    Future<AddonError?> kind(Future<http.Response> Function(http.Request) h, String input) async {
+      final a = await loaded(h);
+      try {
+        await a.add(input);
+        return null;
+      } on AddonException catch (e) {
+        return e.kind;
+      }
+    }
+
+    test('maps each failure to an AddonError', () async {
+      Future<http.Response> ok(http.Request r) async => json(manifest('x'));
+      expect(await kind(ok, 'not a url'), AddonError.invalid);
+      expect(await kind(ok, 'ftp://x.example/manifest.json'), AddonError.invalid);
+      expect(await kind((_) async => json({'id': 'x'}), 'https://x.example'), AddonError.invalid);
+      expect(await kind((_) async => http.Response('<html>', 200), 'https://x.example'), AddonError.invalid);
+      expect(await kind((_) async => throw http.ClientException('down'), 'https://x.example'),
+          AddonError.unreachable);
+      expect(await kind((_) async => json({}, 404), 'https://x.example'), AddonError.server);
+      expect(await kind(ok, 'https://v3-cinemeta.strem.io/manifest.json'), AddonError.duplicate);
+      expect(await kind((_) async => json(manifest('com.linvo.cinemeta')), 'https://other.example'),
+          AddonError.duplicate);
+    });
+  });
+
+  test('serves honours object resources and idPrefixes', () {
+    final a = Addon({
+      'id': 'x',
+      'name': 'X',
+      'resources': [
+        'catalog',
+        {'name': 'meta', 'types': ['series'], 'idPrefixes': ['kitsu:']},
+        {'name': 'stream', 'types': ['movie']},
+      ],
+      'types': ['movie', 'series'],
+      'idPrefixes': ['tt'],
+    }, 'https://x');
+    expect(a.serves('meta', 'series', 'kitsu:1'), isTrue);
+    expect(a.serves('meta', 'series', 'tt1'), isFalse);
+    expect(a.serves('meta', 'movie', 'kitsu:1'), isFalse);
+    expect(a.serves('stream', 'movie', 'tt1'), isTrue); // falls back to top-level idPrefixes
+    expect(a.serves('stream', 'movie', 'kitsu:1'), isFalse);
+    expect(a.serves('catalog', 'series', 'tt1'), isTrue);
+    expect(a.serves('subtitles', 'movie', 'tt1'), isFalse);
+    final any = Addon({'id': 'y', 'name': 'Y', 'resources': ['stream'], 'types': ['movie']}, 'https://y');
+    expect(any.serves('stream', 'movie', 'whatever'), isTrue);
+  });
+
+  test('catalogs skip required extras and flag search', () {
+    final a = Addon({
+      'id': 'x',
+      'name': 'X',
+      'resources': ['catalog'],
+      'types': ['movie', 'series'],
+      'catalogs': [
+        {'type': 'movie', 'id': 'top', 'name': 'Top', 'extra': [{'name': 'search'}, {'name': 'skip'}]},
+        {'type': 'series', 'id': 'new', 'extra': [{'name': 'genre', 'isRequired': true}]},
+        {'type': 'series', 'id': 'old', 'extraRequired': ['genre']},
+        {'type': 'channel', 'id': 'yt'},
+        {'type': 'series', 'id': 'plain'},
+      ],
+    }, 'https://x');
+    expect([for (final c in a.catalogs) '${c.type}/${c.id}/${c.name}/${c.searchable}'],
+        ['movie/top/Top/true', 'series/plain/X/false']);
+  });
+
+  test('catalog builds search and skip URLs and parses metas', () async {
+    final seen = <String>[];
+    final a = await loaded((r) async {
+      seen.add('${r.url}');
+      return json({
+        'metas': [
+          {'id': 'tt1', 'type': 'movie', 'name': 'One', 'poster': 'p', 'releaseInfo': 1999},
+          {'name': 'no id'},
+        ]
+      });
+    });
+    final c = a.catalogs.firstWhere((c) => c.addon.id == 'com.linvo.cinemeta' && c.type == 'movie');
+    final metas = await a.catalog(c, search: 'rick & morty');
+    await a.catalog(c, skip: 100);
+    await a.catalog(c);
+    expect(seen, [
+      'https://v3-cinemeta.strem.io/catalog/movie/top/search=rick%20%26%20morty.json',
+      'https://v3-cinemeta.strem.io/catalog/movie/top/skip=100.json',
+      'https://v3-cinemeta.strem.io/catalog/movie/top.json',
+    ]);
+    expect(metas.single, (id: 'tt1', type: 'movie', name: 'One', poster: 'p', releaseInfo: '1999'));
+  });
+
+  test('bundled catalogs exclude Cinemeta required-extra rows', () async {
+    final a = await loaded((_) async => json({}));
+    expect([for (final c in a.catalogs) '${c.addon.name}:${c.type}/${c.id}'], [
+      'Cinemeta:movie/top',
+      'Cinemeta:series/top',
+      'Cinemeta:movie/imdbRating',
+      'Cinemeta:series/imdbRating',
+      'Public Domain Movies:movie/publicdomainmovies',
+    ]);
+  });
+
+  test('meta and streams parse real-shaped responses', () async {
+    final seen = <String>[];
+    final a = await loaded((r) async {
+      seen.add('${r.url}');
+      if (r.url.path.contains('/meta/')) {
+        return json({
+          'meta': {
+            'id': 'tt0096697',
+            'type': 'series',
+            'name': 'The Simpsons',
+            'genres': ['Animation'],
+            'imdbRating': '8.7',
+            'videos': [
+              {'id': 'tt0096697:1:1', 'name': 'Pilot', 'season': 1, 'episode': 1, 'released': '1989-12-17T00:00:00.000Z'},
+            ],
+          }
+        });
+      }
+      return json({
+        'streams': [
+          {
+            'name': '1080p',
+            'title': 'x\n💾 1 GB',
+            'infoHash': hash.toLowerCase(),
+            'fileIdx': 0,
+            'sources': ['tracker:$tracker', 'dht:${hash.toLowerCase()}'],
+            'behaviorHints': {'filename': 'x.mkv'},
+          },
+          {'name': 'yt', 'ytId': 'abc'},
+          {'name': 'Netflix', 'externalUrl': 'https://netflix.com/title/1'},
+        ]
+      });
+    });
+    final m = await a.meta('series', 'tt0096697:1:1');
+    expect(m.name, 'The Simpsons');
+    expect(m.videos.single.season, 1);
+    expect(m.videos.single.released, DateTime.utc(1989, 12, 17));
+    expect(seen.single, 'https://v3-cinemeta.strem.io/meta/series/tt0096697:1:1.json');
+
+    final src = a.streamSources('series', 'tt0096697:1:1');
+    expect([for (final s in src) s.name], ['WatchHub']); // PDM is movie-only
+    final ss = await a.streams(src.single, 'series', 'tt0096697:1:1');
+    expect(seen.last, 'https://watchhub.strem.io/stream/series/tt0096697:1:1.json');
+    expect(ss.length, 2);
+    expect(ss.first.trackers, [tracker]);
+    expect(ss.first.title, 'x\n💾 1 GB');
+    expect(ss.first.filename, 'x.mkv');
+    expect(ss.first.fileIdx, 0);
+    expect(ss.last.externalUrl, 'https://netflix.com/title/1');
+  });
+
+  test('subtitles merge across addons and ignore failures', () async {
+    final a = await loaded((r) async {
+      if (r.url.host == 'subs.example') {
+        if (r.url.path.endsWith('manifest.json')) return json(manifest('subs', resources: ['subtitles']));
+        return json({}, 500);
+      }
+      return json({
+        'subtitles': [
+          {'id': '1', 'url': 'https://s/1.srt', 'lang': 'eng'},
+        ]
+      });
+    });
+    await a.add('https://subs.example');
+    expect(await a.subtitles('movie', 'tt1'), [(id: '1', url: 'https://s/1.srt', lang: 'eng')]);
+  });
+
+  test('persistence round trip, remove then restore keeps position', () async {
+    var notified = 0;
+    final a = await loaded((r) async => json(manifest(r.url.host)));
+    a.addListener(() => notified++);
+    final x = await a.add('https://x.example');
+    await a.add('https://y.example');
+    final pdm = a.all.firstWhere((b) => b.name == 'Public Domain Movies');
+    await a.setEnabled(pdm, false);
+    await a.setEnabled(a.all.first, false); // Cinemeta is locked
+    expect(a.isEnabled(pdm), isFalse);
+    expect(a.active.contains(pdm), isFalse);
+
+    final again = Addons(client: MockClient((_) async => throw StateError('no network on load')));
+    await again.load();
+    expect([for (final b in again.all) b.id].skip(4), ['x.example', 'y.example']);
+    expect(again.all.skip(4).first.base, 'https://x.example');
+    expect(again.isEnabled(again.all[1]), isFalse);
+    expect(again.isEnabled(again.all.first), isTrue);
+
+    await a.remove(x);
+    expect([for (final b in a.all.skip(4)) b.id], ['y.example']);
+    await a.restore(x);
+    expect([for (final b in a.all.skip(4)) b.id], ['x.example', 'y.example']);
+    expect(notified, 5);
+  });
+
+  test('corrupt prefs fall back to defaults', () async {
+    for (final prefs in <Map<String, Object>>[
+      {'addons': '{not json', 'addonsDisabled': ['org.stremio.watchhub']},
+      {'addons': jsonEncode({'url': 1}), 'addonsDisabled': 'oops'},
+      {'addons': 42},
+      {'addons': jsonEncode([{'url': 'https://a', 'manifest': {'id': 'a'}}, 'junk'])},
+    ]) {
+      final a = await loaded((_) async => json({}), prefs);
+      expect(a.all.length, 4);
+      expect(a.all.every((b) => b.bundled), isTrue);
+    }
+  });
+}
