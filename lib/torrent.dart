@@ -68,6 +68,9 @@ class TorrentEngine {
 
   /// Removes the torrent and deletes its data. Unknown ids are ignored.
   Future<void> remove(int id) => _ch.invokeMethod('remove', {'id': id});
+
+  /// Stops playback and keeps the torrent available for 60 seconds.
+  Future<void> release(int id) => _ch.invokeMethod('release', {'id': id});
 }
 
 Future<Directory> _root() async =>
@@ -86,5 +89,16 @@ Future<Directory> torrentDir() async {
 /// Which file to play when a stream names none (enginefs guessFileIdx). A valid [fileIdx]-style choice is the
 /// caller's; this picks a unique SxxEyy match, else the sole video ([sure] true), else suggests the largest
 /// video for the file list ([sure] false). Null index when there is no video.
-({int? index, bool sure}) guessFile(List<TorrentFile> files, {int? season, int? episode}) =>
-    throw UnimplementedError();
+({int? index, bool sure}) guessFile(List<TorrentFile> files, {int? season, int? episode}) {
+  var videos = files.where((f) => isVideo(f.name)).toList();
+  if (season != null && episode != null) {
+    final pattern = RegExp(r'(?:^|[^0-9])(?:s(\d+)\.?e(\d+)|(\d+)x(\d+))(?![0-9])',
+        caseSensitive: false);
+    final matches = videos.where((f) => pattern.allMatches(f.name).any((m) =>
+        int.parse(m[1] ?? m[3]!) == season && int.parse(m[2] ?? m[4]!) == episode)).toList();
+    if (matches.isNotEmpty) videos = matches;
+  }
+  if (videos.isEmpty) return (index: null, sure: false);
+  videos.sort((a, b) => b.size.compareTo(a.size));
+  return (index: videos.first.index, sure: videos.length == 1);
+}
