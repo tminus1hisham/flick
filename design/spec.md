@@ -18,8 +18,9 @@ Direction: Afterglow (REVAMP_PLAN.md), unchanged tokens unless listed under "New
 - Catalogs shown in Discover: every installed addon's catalog of type movie/series with no required extra (`extra[].isRequired` false or absent, and not the legacy `extraRequired`).
 - Meta: first addon serving `meta` for (type, id); Cinemeta for `tt…` ids.
 - Streams: every addon serving `stream` for (type, videoId), queried in parallel, each with its own 15 s timeout, results grouped by addon.
-- `infoHash` stream → `magnet:?xt=urn:btih:{hash}&dn={filename or name}` + `&tr=` for each `sources` entry starting `tracker:`. `fileIdx` is passed to the torrent screen. `url` stream → player directly. `ytId`/`externalUrl` streams are dropped.
-- Installed addon manifest URLs are persisted in shared_preferences (`addons`, JSON list); Cinemeta is built in and not removable.
+- `infoHash` stream → `magnet:?xt=urn:btih:{hash}&dn={filename or name}` + `&tr=` for each `sources` entry starting `tracker:`. `fileIdx` is passed to the torrent screen. `url` stream → player directly. `externalUrl` stream (WatchHub) → opens outside Flick (Android `ACTION_VIEW` via the `flick/torrent` channel). `ytId` streams are dropped.
+- Subtitles: `{base}/subtitles/{type}/{videoId}.json` → `{subtitles: [{id, url, lang}]}` from every addon serving `subtitles`; passed to the player as media_kit `SubtitleTrack.uri`.
+- Bundled addons are manifest snapshots in `lib/addons.dart`; Cinemeta is locked on, the other bundled ones have an on/off switch (state persisted). User-added manifest URLs + cached manifests are persisted in shared_preferences.
 - Stream text parsing (display only): quality from `\b(2160p|4k|1080p|720p|480p|360p)\b` over name+title (2160p→4K); none → `Unknown`, never SD; seeders after 👤 (absent = unknown, shown "—", distinct from 0); size after 💾 or `\d+(\.\d+)? (GB|MB)`; origin after ⚙️. Emoji are removed from displayed text.
 
 ## Torrent screen delta

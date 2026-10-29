@@ -25,3 +25,21 @@
 ## Accepted deviations from build-mobile hard rules (pre-existing app)
 - The app has no `lib/kit/`, no presets and no theme changer; it went through the earlier UI revamp, not this pipeline. The new screens use no stock dialog, snackbar, picker or spinner at all, so no kit is needed for them. Kit + presets are a separate job.
 - `gates.py` already fails on the existing files (theme in lib/theme.dart, Colors.* in older screens). Gate for this feature: zero hits in the new files.
+
+## Bundled addons (user request 2026-10-29: "addons come full package")
+
+Source: github.com/stremio/stremio-official-addons `index.json`. stremio-core's `Profile::default()` installs exactly this list (`addons: OFFICIAL_ADDONS`). Every endpoint probed live on 2026-10-29.
+
+| Addon | Gives | Flick |
+|---|---|---|
+| Cinemeta | catalogs, title + episode metadata | **bundled**, locked on (as Stremio: `protected`) |
+| Public Domain Movies | a movie catalog + torrent streams (`infoHash`, `fileIdx`) | **bundled**; also our legal end-to-end torrent test (The Kid, 1921, 1080p) |
+| WatchHub | "where to watch" streams (`externalUrl`: Netflix, Rakuten, …) | **bundled**; rows open the service's app or site (Android intent via the existing Kotlin channel, no new package) |
+| OpenSubtitles v3 | subtitles per video id | **bundled**; subtitles in the player (auto-pick device language, switch/off in a player panel) |
+| OpenSubtitles (legacy v1) | old subtitles protocol | skip: superseded by v3 |
+| YouTube | `channel` catalogs, `ytId` streams | skip: needs a YouTube extractor; media_kit can't play a ytId |
+| Local Files | needs Stremio's desktop server on 127.0.0.1:11470 | skip: Flick's Downloads tab already plays local files |
+
+Bundled addons ship as manifest snapshots in code, so they work on first launch with no fetch. Cinemeta is locked; the other bundled ones get an on/off switch on Sources (no remove/re-paste needed). User-pasted addons keep remove + Undo.
+
+Not bundled: third-party torrent indexers (Torrentio and similar). None is part of the Stremio org; Stremio leaves them to the user, and Flick does the same via "Add a source".

@@ -9,7 +9,7 @@ Owner: Claude (senior UX). Visual layer: Codex, inside the approved Afterglow di
 Stremio's model, copied on purpose:
 - **Addons** supply everything over HTTP: `manifest.json`, `/catalog/{type}/{id}[/{extra}].json`, `/meta/{type}/{id}.json`, `/stream/{type}/{videoId}.json`.
 - **Cinemeta** (`https://v3-cinemeta.strem.io`, Stremio's official metadata addon) is built in: Popular / New / Featured for movies and series, search, title metadata and full episode lists.
-- **Stream sources are addons the user installs** by pasting a manifest URL, as in Stremio. Flick ships no stream source; it is a client.
+- **Bundled:** Stremio's official addon set (decisions.md, "Bundled addons"): Cinemeta, Public Domain Movies, WatchHub, OpenSubtitles v3. Third-party stream sources are added by pasting a manifest URL, as in Stremio.
 - A stream with `infoHash` (+ `fileIdx`, `sources`) becomes a magnet for the existing libtorrent engine. A stream with `url` plays directly.
 
 Users: one person, on a phone, in the evening, often on flaky Wi-Fi. Already signed in to Jellyfin (Discover lives in the signed-in shell).
@@ -66,7 +66,7 @@ D1, D2, D3, D4 (list). Torrent start must fit 360×640.
 
 ## Out of scope (say so, don't build)
 
-Library/watch history sync, subtitles addons, trailers, addon catalogue browsing (`addon_catalog`), deep links (`stremio://` intents), offline Discover.
+Library/watch history sync, YouTube and Local Files addons, trailers, addon catalogue browsing (`addon_catalog`), deep links (`stremio://` intents), offline Discover.
 
 ## Applied
 
