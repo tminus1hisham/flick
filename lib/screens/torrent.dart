@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../addons.dart' show Subtitle;
 import '../jellyfin.dart';
+import '../playback.dart';
 import '../theme.dart';
 import '../torrent.dart';
 import 'player.dart';
@@ -100,10 +102,15 @@ class _MagnetDialogState extends State<_MagnetDialog> {
 }
 
 class TorrentScreen extends StatefulWidget {
-  const TorrentScreen(this.magnet, {this.fileIdx, this.season, this.episode, this.title, super.key});
+  const TorrentScreen(this.magnet,
+      {this.fileIdx, this.season, this.episode, this.title, this.playback, this.subtitles = const [], this.hash,
+      super.key});
   final String magnet;
   final int? fileIdx, season, episode;
   final String? title;
+  final Playback? playback;
+  final List<Subtitle> subtitles;
+  final String? hash;
 
   @override
   State<TorrentScreen> createState() => _TorrentScreenState();
@@ -233,8 +240,14 @@ class _TorrentScreenState extends State<TorrentScreen> {
             context,
             MaterialPageRoute(
                 builder: (_) => PlayerScreen(
-                    item: Item({'Id': 'torrent', 'Name': widget.title ?? f.name}),
-                    source: url, report: false)));
+                    item: Item({'Id': widget.playback?.videoId ?? 'torrent', 'Name': widget.title ?? f.name}),
+                    source: url,
+                    report: false,
+                    playback: widget.playback,
+                    subtitles: widget.subtitles,
+                    hash: widget.hash,
+                    filename: f.name,
+                    size: f.size)));
       } finally {
         if (id == _id) _forget(engine.stopStream(id));
       }
