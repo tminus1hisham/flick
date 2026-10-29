@@ -23,7 +23,6 @@ class Cancelled : Exception()
 /** One HTTP connection. Closing it unblocks a write stalled by a paused player. */
 class Conn(val socket: Socket) {
     @Volatile var cancelled = false
-    @Volatile var waiting = false
     @Volatile var lastProgress = System.nanoTime()
 
     fun cancel() {
@@ -87,7 +86,8 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
 
     private fun serve(c: Conn) {
         c.socket.soTimeout = 10_000
-        val head = readHead(BufferedInputStream(c.socket.getInputStream())) ?: return
+        val input = BufferedInputStream(c.socket.getInputStream())
+        val head = readHead(input) ?: return
         c.socket.soTimeout = 0
         val out = c.socket.getOutputStream()
         val parts = head.first().split(' ')
@@ -104,8 +104,8 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
         val claim = if (entry == null || file == null) null else synchronized(entry) {
             if (!entry.alive || entry.activeFile != file) return@synchronized null
             val ti = entry.th.torrentFile() ?: return@synchronized null
-            // mpv reconnects on seek; a request still waiting for a piece is superseded.
-            entry.conns.filter { o -> o.waiting }.forEach(Conn::cancel)
+            // No cancelling of other requests here: mpv probes the file's tail on a second connection while the
+            // head request still waits. A waiting request ends when its own client hangs up (awaitVerified).
             entry.conns += c
             entry.gen to ti
         }
@@ -114,13 +114,13 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
             return
         }
         try {
-            body(c, entry, claim.first, claim.second, file, method, head)
+            body(c, input, entry, claim.first, claim.second, file, method, head)
         } finally {
             synchronized(entry) { entry.conns -= c }
         }
     }
 
-    private fun body(c: Conn, e: Entry, gen: Int, ti: TorrentInfo, file: Int, method: String, head: List<String>) {
+    private fun body(c: Conn, input: InputStream, e: Entry, gen: Int, ti: TorrentInfo, file: Int, method: String, head: List<String>) {
         val fs = ti.files()
         val size = fs.fileSize(file)
         val fileOffset = fs.fileOffset(file)
@@ -140,7 +140,7 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
         try {
             while (pos <= to) {
                 val ch = chunk(fileOffset, pos, to, ti.pieceLength(), ti::pieceSize)
-                awaitVerified(c, e, gen, ti, ch.piece, last)
+                awaitVerified(c, input, e, gen, ti, ch.piece, last)
                 val raf = opened ?: RandomAccessFile(fs.filePath(file, e.dir), "r").also { opened = it }
                 raf.seek(pos)
                 var left = ch.len
@@ -161,43 +161,42 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
     /**
      * Blocks until piece [p] is downloaded and its bytes on disk hash to the torrent's piece hash. libtorrent can
      * report a piece before its last blocks leave the store buffer, so a downloaded piece is not yet readable.
+     * Ends when the client hangs up; while it stays connected the wait counts as progress for the watchdog.
      */
-    private fun awaitVerified(c: Conn, e: Entry, gen: Int, ti: TorrentInfo, p: Int, last: Int) {
+    private fun awaitVerified(c: Conn, input: InputStream, e: Entry, gen: Int, ti: TorrentInfo, p: Int, last: Int) {
         val window = maxOf(4, (16 shl 20) / ti.pieceLength())
         var first = true
         var mismatches = 0
-        c.waiting = true
-        try {
-            while (true) {
-                if (c.cancelled) throw Cancelled()
-                val have = synchronized(e) {
-                    if (!e.alive || e.gen != gen) throw Cancelled()
-                    if (e.verified[p]) return
-                    if (first) {
-                        for ((k, q) in (p..minOf(p + window, last)).withIndex()) {
-                            if (!e.th.havePiece(q)) e.th.setPieceDeadline(q, k * 200)
-                        }
-                        first = false
+        while (true) {
+            if (c.cancelled) throw Cancelled()
+            val have = synchronized(e) {
+                if (!e.alive || e.gen != gen) throw Cancelled()
+                if (e.verified[p]) return
+                if (first) {
+                    for ((k, q) in (p..minOf(p + window, last)).withIndex()) {
+                        if (!e.th.havePiece(q)) e.th.setPieceDeadline(q, k * 200)
                     }
-                    e.th.havePiece(p)
+                    first = false
                 }
-                if (have) {
-                    val slices = ti.mapBlock(p, 0, ti.pieceSize(p)).map {
-                        Slice(if (ti.files().padFileAt(it.fileIndex())) null else ti.files().filePath(it.fileIndex(), e.dir),
-                            it.offset(), it.size())
-                    }
-                    val digest = try { sha1(slices) { c.cancelled } } catch (_: IOException) { null }
-                    if (digest != null && digest.toHex() == ti.hashForPiece(p).toHex()) {
-                        synchronized(e) { e.verified.set(p) }
-                        return
-                    }
-                    if (c.cancelled) throw Cancelled()
-                    if (++mismatches >= 50) throw IOException("piece $p does not verify")
-                }
-                Thread.sleep(if (have) 100 else 50)
+                e.th.havePiece(p)
             }
-        } finally {
-            c.waiting = false
+            if (have) {
+                val slices = ti.mapBlock(p, 0, ti.pieceSize(p)).map {
+                    Slice(if (ti.files().padFileAt(it.fileIndex())) null else ti.files().filePath(it.fileIndex(), e.dir),
+                        it.offset(), it.size())
+                }
+                val digest = try { sha1(slices) { c.cancelled } } catch (_: IOException) { null }
+                if (digest != null && digest.toHex() == ti.hashForPiece(p).toHex()) {
+                    synchronized(e) { e.verified.set(p) }
+                    return
+                }
+                if (c.cancelled) throw Cancelled()
+                if (++mismatches >= 50) throw IOException("piece $p does not verify")
+            }
+            // Still waiting: only the client hanging up ends it, so the watchdog must not count this as a stall.
+            if (clientGone(c.socket, input)) { c.cancel(); throw Cancelled() }
+            c.lastProgress = System.nanoTime()
+            Thread.sleep(if (have) 100 else 50)
         }
     }
 
