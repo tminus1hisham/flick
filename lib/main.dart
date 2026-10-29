@@ -25,6 +25,7 @@ class FlickApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Flick',
+        debugShowCheckedModeBanner: false,
         theme: flickTheme(),
         home: ListenableBuilder(
           listenable: session,
