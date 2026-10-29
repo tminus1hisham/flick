@@ -1,84 +1,67 @@
 # Flick: project handoff
 
-Flick is a Flutter 3.41 / Dart 3.11 Android app (package `flick`, Material 3, dark "Afterglow" theme). It is a Jellyfin client plus Stremio-style streaming: addon catalogs, torrent streams through a native libtorrent4j engine, direct URL streams, and subtitles. One user, on a phone, often on flaky Wi-Fi.
+Flick is a Flutter 3.41 / Dart 3.11 Android app (package `flick`, Material 3, dark "Afterglow" theme). It is a Stremio-style streaming app: Cinemeta catalogs, addon streams (Torrentio built in), torrents through a native libtorrent4j engine, direct URL streams, subtitles, and offline torrent downloads. There is no Jellyfin and no account (user decision, 2026-10-29). One user, on a phone, often on flaky Wi-Fi.
 
 This file is the shared source for continuing the work in a new session. Read it before you change anything. Update the **Status** and **Next** sections when you finish a piece of work.
 
 ## Gates (run before calling anything done)
 - `flutter analyze`: must print `No issues found!`
-- `flutter test`: 72 tests pass on branch `guest`.
-- `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`).
-- Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits. Older files (player.dart, widgets.dart, library.dart) have known hits; that is expected.
+- `flutter test`: 65 tests pass on branch `stremio-only`.
+- `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`). Kotlin unit tests: `android/gradlew -p android :app:testDebugUnitTest`.
+- Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits (`lib/kit/` is exempt by design). Older files (player.dart, torrent.dart, theme.dart) have known hits; that is expected.
 - `PlayerScreen` can't be pumped in `flutter test` because media_kit needs native libmpv. Put player logic in pure helpers or getters and test those (see test/player_test.dart).
+- Emulator: AVD `Pixel_9a` (not `Pixel_9a_Guardian`, another project's). media_kit forces software rendering on emulators, so video frames can stay black while playback progresses; judge by the time readout. Use public-domain titles for torrent tests (The Kid, 1921).
 
 ## Branches and history
 - `main`: the UI revamp ("Afterglow", REVAMP_PLAN.md).
-- `discover`: everything below; not yet merged to main. Head 653e238 + this file. Merge to main only when the user asks.
-- `guest`: branched from `discover`; optional sign-in (guest mode). See design/guest.md. Not merged.
-- Untracked and deliberately not committed: the 3 large mockups `design/mockups/{d3-watchhub,d4-sources-bundled,player-subtitles}.png` (~1.5 MB each), and the test torrent `ED0AFBC1….torrent` (Rick and Morty S04E02, used as a hash in tests).
+- `discover`: addon streaming (Discover, Title, Streams, Sources, torrents, subtitles). Not merged.
+- `guest`: optional sign-in on top of `discover` (design/guest.md). Superseded: the user then dropped Jellyfin and accounts.
+- `stremio-only`: current. Branched from `guest`: Jellyfin, accounts and Jellyfin downloads removed; Torrentio built in; offline torrent downloads. Not merged. Merge only when the user asks.
+- Untracked and deliberately not committed: the 3 large mockups `design/mockups/{d3-watchhub,d4-sources-bundled,player-subtitles}.png`, the test torrent `ED0AFBC1….torrent`, and `assets/posters/p09–p12.webp` (another session's).
 
 ## Architecture
 | File | Holds |
 |---|---|
-| `lib/addons.dart` | Stremio addon protocol client: manifest / catalog / meta / stream / subtitles over `http`, 15 s timeout, UTF-8 decoding. Bundled addons are manifest snapshots (Cinemeta locked; Public Domain Movies, WatchHub and OpenSubtitles v3 can be switched on and off). User addons and the switches persist in shared_preferences. Every network failure becomes `AddonException(AddonError.unreachable)`, so the client can't tell offline from an addon that is down. `describe()` parses stream text (quality, seeders, size, origin). `magnetFor()` builds a magnet with `tr=` trackers. `openExternal()` calls the native channel. |
-| `lib/state.dart` | Globals: `session`, `downloads`, `addons`. `addons` is not final so tests can swap in a fake. |
-| `lib/playback.dart` | `Playback` record (title, subtitle, type, canonical Stremio `videoId` such as `tt123:4:2`, season, episode) and `play(context, stream, playback)`, the only way screens start playback. Routing: externalUrl → Android ACTION_VIEW; url → `PlayerScreen` with headers; infoHash → `TorrentScreen`. |
-| `lib/torrent.dart` | `TorrentEngine` (MethodChannel `flick/torrent`: add / status / files / stream / stopStream / release / remove), `isMagnet`, `isVideo`, `guessFile` (Stremio enginefs guessFileIdx: unique SxxEyy match or sole video means sure; otherwise suggest the largest). |
-| `android/.../Torrents.kt` | libtorrent4j session. `add` reuses a live entry with the same info-hash. `release` stops streaming and removes the torrent after 60 s (enginefs ENGINE_TIMEOUT); only a re-`add` cancels that. `openExternal` (http/https only) answers on the main thread. All TorrentHandle calls run on the single `ctl` executor under `synchronized(e)` after checking `alive`. |
-| `android/.../StreamServer.kt` | Loopback HTTP server: Range requests, piece deadlines over a 16 MB window, and hash verification of each piece before serving it. |
-| `lib/screens/discover.dart` | D1 Discover tab (2nd tab): 3-column poster grid, Movies/Series switch, catalog chips, search on submit, paging with skip=n, Hero to Title. Hidden feeds sit inside `HeroMode(enabled: visible)`. |
-| `lib/screens/title.dart` | D2 Title (movie: streams inline; series: season chips and episodes) and D3 Streams (one episode). Shared stream list: one group per source, each resolving on its own, per-source Retry, filter chips when there are 2 or more sources, WatchHub "Where to watch" rows. `describeStream` is a test seam. |
-| `lib/screens/sources.dart` | D4 Sources at route `/sources`: bundled switches, add by manifest URL with inline errors, remove with an inline Undo row. |
-| `lib/screens/torrent.dart` | Torrent start screen (stage spine, peers and speed): auto-opens `fileIdx` or a sure guess, otherwise the file list with "Suggested"; Retry / Choose another source; releases (not removes) the torrent on exit. |
-| `lib/screens/account.dart` | Guest mode: `Gate`, `requireSignIn(context, gate, poster:)` (sheet, then pushed Login; the caller applies the action afterwards), `openSignIn`, `SignInSheet`, `ToggleAction` (favourite/like; `onPressed` answers whether state changed, haptics only then), `SignInPrompt` (guest Downloads). |
-| `lib/kit/sheet.dart` | `showFlickSheet`: the first kit piece (themed, content-sized, reduced-motion aware). New sheets go through it. |
-| `lib/screens/player.dart` | media_kit player, the only dart-formatted file in the repo. Jellyfin playback (`report: true`, streamed or downloaded) behaves as before this work. Addon playback (`PlayerScreen.addonPlayback => !report`) adds request headers, a recovery overlay (only before playback starts or when it ends early), and a tracks panel: audio; subtitles Off / embedded / stream-provided / addon subtitles downloaded in Dart **without** the stream's headers and loaded with `SubtitleTrack.data`; device-language auto-pick once, which never overrides a manual choice. |
+| `lib/addons.dart` | Stremio addon client: manifest / catalog / meta / stream / subtitles over `http`, 15 s timeout. Bundled snapshots: Cinemeta (locked), Public Domain Movies, WatchHub, **Torrentio** (on by default), OpenSubtitles v3; a link-added copy of a bundled addon is dropped on load. Every network failure becomes `AddonError.unreachable`. `describe()` parses stream text. `magnetFor()` adds `tr=` trackers, and `fallbackTrackers` when a stream has none (Torrentio sends none; DHT alone never delivered metadata on the emulator). |
+| `lib/state.dart` | Globals: `addons` (not final, tests swap it), `saved`, `downloads`. |
+| `lib/saved.dart` | `Saved`: device favourites (`MetaPreview` list) and likes, shared_preferences. No account. |
+| `lib/downloads.dart` | Offline downloads registry (`Download`, `DownloadState`, `Downloads`): JSON in shared_preferences, engine ids per process, `load()` re-adds unfinished downloads, polls `progress` every second while any is active. Test seam: `Downloads({engine, dirFor})`, fake via `implements TorrentEngine`. |
+| `lib/playback.dart` | `Playback` record and `play(context, stream, playback)`: externalUrl → ACTION_VIEW; url → `PlayerScreen`; infoHash → `TorrentScreen`. |
+| `lib/torrent.dart` | `TorrentEngine` on MethodChannel `flick/torrent`: add / status / files / stream / stopStream / release / remove, plus download / progress / pause / resume / delete / requestNotifications. `isMagnet`, `isVideo`, `guessFile`. Streaming data lives in `<cache>/flick-torrents/s*`, downloads in `<filesDir>/downloads/<hash>`. |
+| `android/.../Torrents.kt` | libtorrent4j session. `add` reuses a live entry with the same hash. `release` removes after 60 s unless the entry is **pinned** (a download). The first-add sweep only touches `<cache>/flick-torrents`. `download` moves a streaming entry into the downloads folder and pins it; done = all pieces verified, then paused. On engine detach, pinned entries are removed without deleting files. |
+| `android/.../DownloadService.kt` | dataSync foreground service while any pinned download is active ("Downloading N" + percent), 2 s ticker; sweep/inside-downloads helpers unit-tested in `android/app/src/test/.../DownloadsTest.kt`. Swiping the app away stops downloads until the next launch re-adds them. |
+| `android/.../StreamServer.kt` | Loopback HTTP server: Range requests, piece deadlines over 16 MB, hash verification before serving. |
+| `lib/main.dart` | Shell: Discover + Downloads (NavigationBar). No login. |
+| `lib/screens/discover.dart` | Discover: poster grid, Movies/Series, catalog chips plus a Favourites chip, search on submit, "Stream a link" in the header. |
+| `lib/screens/title.dart` | Title (movie streams inline; series seasons/episodes) and Streams (one episode). Favourite/like toggles, stream groups per source, `DownloadButton` on torrent rows only, hero line while a download runs. |
+| `lib/screens/downloads.dart` | Downloads tab (Codex visual layer): storage line, rows with progress/paused/ready/failed, delete via kit sheet; a ready row plays the local file. |
+| `lib/screens/torrent.dart` | Torrent start screen; `download: true` registers a download and pops instead of playing. |
+| `lib/screens/player.dart` | media_kit player, the only dart-formatted file. Headers, recovery overlay ("Back" for local files), tracks panel with OpenSubtitles fetched in Dart without stream headers, device-language auto-pick. |
+| `lib/kit/` | `sheet.dart` (`showFlickSheet`), `toggle.dart` (`ToggleAction`), `download_button.dart`. |
 
 ## Design sources (approved; follow them, don't reinvent)
-- `design/RULES.md`: hard UI rules. Afterglow tokens only (`FlickTokens`, `FlickText`, `context.flick`, `monoStyle`, `streamMonoStyle`). No raw colours, `showDialog`, `SnackBar` or `CircularProgressIndicator` in new screens. Skeletons, not spinners. 48 dp targets. Honour `MediaQuery.disableAnimationsOf`.
-- `design/brief.md`: the job, flow map, state matrix and scope.
-- `design/spec.md`: protocol contract, Dart API, motion, accessibility, and the "Round 2" Stremio extras.
-- `design/codex-visual.md` (D1–D4 geometry), `design/codex-pieces.md` (WatchHub rows, player subtitles panel, bundled Sources), `design/decisions.md` (cuts and overrides; these win over the Codex docs), and `design/mockups/`.
+- `design/RULES.md`: hard UI rules (Afterglow tokens only; no raw colours, `showDialog`, `SnackBar`, `CircularProgressIndicator` in new code; 48 dp; reduced motion).
+- `design/downloads.md` + `design/downloads-visual.md` (Codex): offline downloads.
+- `design/brief.md`, `design/spec.md`, `design/codex-visual.md`, `design/codex-pieces.md`, `design/decisions.md` (wins over Codex docs). `design/guest*.md` are historical.
 - `REVAMP_PLAN.md`: the Afterglow direction and tokens.
 
 ## How the user works
-- **Roles:** Claude is senior UX designer, reviewer and orchestrator; Codex CLI is chief UI designer and co-builder. Visual-language calls go to Codex; flows, IA, copy and final review stay with Claude. Show the user both voices.
-- **Codex on this Windows machine** can't run shell commands in any sandbox, so it can't read files or run flutter. `codex exec -s workspace-write -C <worktree> -o <reply.md> - < brief.md` can write files. Paste the full source of every file it must edit into the brief, then run analyze and tests yourself. Codex output has needed small lint fixes each round.
-- **No new packages** (deps: http, shared_preferences, flutter_secure_storage, media_kit, background_downloader, path_provider). Mobile features go through the `build-mobile` skill (global CLAUDE.md).
-- **Parallel building:** one git worktree per maker (`git worktree add ../stremio-<name> -b <branch> discover`). Another session (`stremio-99`) worked on this repo the same day, so check `git worktree list` and ListAgents before you start.
-- **Don't run `dart format` on files other than player.dart.** The repo is hand-formatted and a format reflows whole files.
-- On Windows, a worktree whose `build/` paths are too long won't delete with `git worktree remove`. Use `git worktree prune`, then PowerShell `Remove-Item -LiteralPath '\\?\C:\...\stremio-<name>' -Recurse -Force`.
-- `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
+- **Roles:** Claude is senior UX designer, reviewer and orchestrator; Codex CLI is chief UI designer and co-builder. Show the user both voices.
+- **Codex on this Windows machine** can't run shell commands (sandbox "Access is denied"). Use bridge mode: `python ~/.claude/skills/build-mobile/scripts/codex_files.py pack` into stdin (set `PYTHONIOENCODING=utf-8`), and ask for `=== FILE: … ===` blocks in the reply. If it answers with a review instead, resume its session and say it needs no shell.
+- **No new packages** (deps now: http, shared_preferences, media_kit, path_provider). Mobile features go through the `build-mobile` skill.
+- **Don't run `dart format` on files other than player.dart.**
+- On Windows, a worktree with long `build/` paths won't delete with `git worktree remove`: `git worktree prune`, then PowerShell `Remove-Item -LiteralPath '\\?\C:\...' -Recurse -Force`.
+- `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex; leave it.
+- Torrentio lists mostly copyrighted releases; test with public-domain titles only.
 
 ## Status (2026-10-29)
-Done on `discover`: Discover / Title / Streams / Sources screens, the addon client with bundled official addons, file guessing, warm torrent reuse, request headers, external links, playback recovery, and the subtitles and audio panel. One fresh review round has been run and all its findings are fixed: a header leak to subtitle hosts, Jellyfin downloads picking up the addon player, a stale call keeping a released torrent alive, false failure screens, subtitle duplicates, and offline copy.
-
-**Not verified:**
-- Nothing has run on a device. Subtitle loading assumes mpv returns `track-list` as JSON; media_kit observes it as a node, and mpv prints nodes as JSON.
-- The player fix commit 653e238 has not had a second review.
-
-### Guest mode (branch `guest`, 2026-10-29)
-Sign-in is optional. First launch shows Login with "Continue as guest" (top right); later launches open the guest Shell (Discover + Downloads). Sign-out lands there too. Favourites and likes: Jellyfin titles save to Jellyfin (`/UserFavoriteItems`, `/UserItems/{id}/Rating`, 10.9+ routes), Discover titles save on the device (`saved` in state.dart, `Saved` in session.dart). Guests hit a sign-in sheet; after signing in, the tapped action completes (and sets, never toggles off). Comments are out (no backend; user's call). Surfaces: Discover "Favourites" chip, Home "Favourites" row. Design: design/guest.md (brief + spec), design/guest-visual.md (Codex), decisions.md last section.
-- Review: round 1 (code + design critic) failed and was fixed. Round 2: code PASS-WITH-NITS, design critic PASS (distinct 8, hierarchy 8, motion 8, craft 8, states 8, theme 9, a11y 8, space 8). Nits fixed, except one: tapping a guest's download whose file is gone does nothing (no crash, no feedback).
-- **Not ours:** login.dart's `_posters` lists p09–p12.webp, added by another session. Those asset files are untracked. Commit them with that session's work, or drop the 4 lines before merging.
-- Not verified on a device.
+Emulator-verified on `stremio-only` (Pixel_9a, debug APK):
+- Opens straight into Discover (no login). Torrentio rows on titles; Torrentio torrents play (time advances, subtitles auto-load).
+- Downloads: ⤓ on a torrent row → TorrentScreen download mode ("The Kid") → back on the title with a progress ring → notification permission prompt → Downloads row with live % / speed / peers → continues in the background ("Downloading 1" notification) → Ready · 859.4 MB → plays in airplane mode → delete via confirm sheet frees the space.
+- Not verified: an unfinished download resuming after a relaunch (unit-tested only); streaming a paused download.
 
 ## Next
-0. **Guest mode:** device-check: first launch → Continue as guest → Discover; ♥ as guest → sheet → Sign in → back on the title with ♥ on; sign out → guest shell; guest Downloads prompt.
-1. **Device acceptance** (APK: `build/app/outputs/flutter-apk/app-debug.apk`):
-   - Jellyfin streamed and downloaded playback still works.
-   - Discover → "The Kid" (1921, Public Domain Movies) torrent plays end to end.
-   - A user-added stream addon plays a series episode.
-   - Wi-Fi off mid-load shows the recovery overlay.
-   - Subtitles load and switch.
-   - Reopening the same stream within 60 s doesn't reconnect, and the data dir is gone after 60 s.
-2. Optional second review of 653e238 (player state machine).
-3. **P2, deferred by the user:** YouTube (Stremio's YouTube addon `https://v3-channels.strem.io`, `ytId` streams, Cinemeta trailers; Claude and Codex both recommend handing off to the YouTube app via the `openExternal` intent, not embedding). Then "Up next": at 90 % show the next episode and pick the stream with the same `behaviorHints.bingeGroup` (stremio-core next_video).
-4. **Known gaps and follow-ups:**
-   - No size cap on subtitle downloads.
-   - WatchHub loading skeleton rows and the "No services listed" state aren't built.
-   - Movie streams wait for meta before querying.
-   - Discover search runs on submit, not as you type.
-   - Sources can't show "You're offline" separately (needs a connectivity signal).
-   - The player overlay copy is generic.
-   - Skipped, with reasons: peer-id spoofing, Rar/Zip/Nzb streams (they need Stremio's server), casting, history sync, addon catalogue browsing.
+1. Device check of relaunch-resume (start a download, swipe the app away, reopen).
+2. A fresh review (code + design critic) of the downloads work (`git diff c019cb3..HEAD`), since it hasn't had one.
+3. Known gaps: Torrentio rows repeat their metadata line (raw "190 6.91 GB YTS" above the formatted one, stray "/" lines) in `describe()`; the pinned back/Sources bar has no backdrop when scrolled; streaming a paused download stalls; a failed `moveStorage` isn't reported; polling also runs in the background; subtitle downloads have no size cap; Discover search is on submit; deleting takes two sheets (a one-item menu, then the confirm) where one would do.
+4. Deferred by the user: YouTube addon, "Up next".
