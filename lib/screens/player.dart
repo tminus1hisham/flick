@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -16,6 +18,9 @@ import '../widgets.dart';
 
 typedef _Caption = ({
   SubtitleTrack track,
+
+  /// Addon or stream subtitle file; null for embedded tracks and Off.
+  String? url,
   String lang,
   String label,
   String detail,
@@ -75,6 +80,55 @@ String subtitleLanguageName(String code) {
   return code.isEmpty ? 'Unknown language' : code;
 }
 
+/// Embedded subtitle tracks: mpv lists files added by sub-add as numbered tracks
+/// too, so leave out the ids in [added].
+List<SubtitleTrack> embeddedSubtitles(
+  List<SubtitleTrack> tracks,
+  Iterable<String> added,
+) => [
+  for (final t in tracks)
+    if (t.id != 'auto' &&
+        t.id != 'no' &&
+        !t.uri &&
+        !t.data &&
+        !added.contains(t.id))
+      t,
+];
+
+/// The id of the subtitle track sub-add just added and selected, or null if it
+/// didn't load: mpv then leaves [sid] on the previous track. [trackList] is
+/// mpv's `track-list` as JSON; [known] are the ids of files added earlier.
+String? addedSubtitle(String trackList, String sid, Iterable<String> known) {
+  if (known.contains(sid)) return null;
+  final tracks = jsonDecode(trackList);
+  return tracks is List &&
+          tracks.any(
+            (t) =>
+                t is Map &&
+                t['type'] == 'sub' &&
+                '${t['id']}' == sid &&
+                t['external'] == true,
+          )
+      ? sid
+      : null;
+}
+
+/// Whether playback stopping is a failure rather than the video ending. Past
+/// 90% (Stremio's CREDITS_THRESHOLD_COEF) or with an unknown duration it ended:
+/// .ts files and some MKVs overstate their duration. Short of that it failed
+/// only after a stream error with nothing left buffered.
+bool stoppedEarly({
+  required bool started,
+  required bool error,
+  required Duration position,
+  required Duration duration,
+  required Duration buffer,
+}) {
+  if (!started) return true;
+  if (duration <= Duration.zero || position >= duration * 0.9) return false;
+  return error && buffer - position < const Duration(seconds: 1);
+}
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     required this.item,
@@ -100,6 +154,10 @@ class PlayerScreen extends StatefulWidget {
 
   /// Report playback progress to Jellyfin for [item].
   final bool report;
+
+  /// Stremio addon or torrent stream. Jellyfin items, streamed or downloaded
+  /// (those pass [source] too), keep the plain Jellyfin player.
+  bool get addonPlayback => !report;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -128,10 +186,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final _scrolls = <String, ScrollController>{};
   SubtitleTrack? _selected;
   _Caption? _failed;
-  _Caption? _attemptedCaption;
-  SubtitleTrack? _previousSubtitle;
   String? _applicationError;
   String? _lastPlaybackError;
+  Timer? _startTimer;
+  // Subtitle file text and the mpv track id it was added as, by URL.
+  final _subtitleFiles = <String, String>{};
+  final _added = <String, String>{};
   ScaffoldMessengerState? _messenger;
   // open() resets state.position to 0 until mpv reports time-pos; report this instead.
   late Duration _pos = widget.item.resumePosition;
@@ -150,12 +210,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subs
       ..add(
         _player.stream.position.listen((p) {
-          if (p > Duration.zero) {
-            _pos = p;
+          if (p <= Duration.zero) return;
+          _pos = p;
+          if (!widget.addonPlayback) return;
+          if (!_started) {
+            // Errors before playback started weren't fatal after all.
             _started = true;
+            _startTimer?.cancel();
             _lastPlaybackError = null;
-            _autoPick();
+            if (_error != null && mounted) setState(() => _error = null);
           }
+          _autoPick();
         }),
       )
       ..add(
@@ -171,25 +236,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
       )
       ..add(
         _player.stream.completed.listen((done) {
-          if (done && !_atEnd && widget.source != null) _fatalError();
+          if (done && widget.addonPlayback && _stoppedEarly) _fatalError();
         }),
       )
       ..add(
         _player.stream.playing.listen((playing) {
-          if (!playing && _lastPlaybackError != null && !_atEnd) {
-            _checkStopped();
-          }
+          if (!playing && _lastPlaybackError != null) _checkStopped();
         }),
       )
       ..add(_player.stream.buffering.listen(_onBuffering))
       ..add(_player.stream.error.listen(_showError));
     _init().catchError(_showError);
-    if (widget.source != null && widget.playback != null) _fetchSubtitles();
+    if (widget.addonPlayback && widget.playback != null) _fetchSubtitles();
   }
 
-  bool get _atEnd =>
-      _player.state.duration > Duration.zero &&
-      _pos >= _player.state.duration - const Duration(seconds: 2);
+  bool get _stoppedEarly => stoppedEarly(
+    started: _started,
+    error: _lastPlaybackError != null,
+    position: _pos,
+    duration: _player.state.duration,
+    buffer: _player.state.buffer,
+  );
 
   void _fatalError() {
     if (mounted) {
@@ -205,9 +272,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       final idle = await (_player.platform as NativePlayer).getProperty(
         'idle-active',
       );
-      if (mounted && idle == 'yes' && _lastPlaybackError != null && !_atEnd) {
-        _fatalError();
-      }
+      if (mounted && idle == 'yes' && _stoppedEarly) _fatalError();
     } catch (e) {
       debugPrint('player stop check: $e');
     }
@@ -215,41 +280,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _showError(Object e) {
     debugPrint('player: $e');
-    if (widget.source != null) {
-      final subtitle = '$e'.toLowerCase();
-      if (_pending != null ||
-          subtitle.contains('subtitle') ||
-          subtitle.contains('sub-add') ||
-          (_attemptedCaption?.track.uri == true &&
-              subtitle.contains(_attemptedCaption!.track.id.toLowerCase()))) {
-        _applicationError = '$e';
-        _lastPlaybackError = '$e';
-        _checkStopped();
-        if (mounted) {
-          setState(() {
-            _subtitleError = 'Couldn’t load this subtitle file';
-            _failed = _attemptedCaption;
-          });
-        }
-        if (_pending == null && _previousSubtitle != null) {
-          final previous = _previousSubtitle!;
-          _previousSubtitle = null;
-          () async {
-            try {
-              await _player.setSubtitleTrack(previous);
-              if (mounted) setState(() => _selected = previous);
-            } catch (e) {
-              debugPrint('subtitle restore: $e');
-            }
-          }();
-        }
+    if (widget.addonPlayback) {
+      final message = '$e'.toLowerCase();
+      if (message.contains('subtitle') || message.contains('sub-add')) {
+        // _choose reports a file that failed to load; these never end playback.
+        if (_pending != null) _applicationError = '$e';
         return;
       }
       _lastPlaybackError = '$e';
-      if (!_started || _player.state.position == Duration.zero) {
-        _fatalError();
-      } else {
-        _checkStopped();
+      _checkStopped();
+      // Some decoder errors are harmless: give playback a moment to start.
+      if (!_started) {
+        _startTimer ??= Timer(const Duration(seconds: 10), () {
+          if (!_started) _fatalError();
+        });
       }
       return;
     }
@@ -291,10 +335,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   List<_Caption> get _captions {
     final result = <_Caption>[];
-    for (final t in _player.state.tracks.subtitle) {
-      if (t.id == 'auto' || t.id == 'no' || t.uri == true) continue;
+    for (final t in embeddedSubtitles(
+      _player.state.tracks.subtitle,
+      _added.values,
+    )) {
       result.add((
         track: t,
+        url: null,
         lang: subtitleLanguage(t.language ?? 'und'),
         label:
             t.title ??
@@ -316,7 +363,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         caseSensitive: false,
       ).hasMatch(name);
       result.add((
-        track: SubtitleTrack.uri(s.url, title: s.id, language: s.lang),
+        // Until _choose loads the file, the URL stands in for its track id.
+        track: SubtitleTrack(_added[s.url] ?? s.url, s.id, s.lang),
+        url: s.url,
         lang: lang,
         label: filename
             ? name
@@ -352,9 +401,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Stream entries take precedence over addon and embedded entries.
     final streamUrls = widget.subtitles.map((s) => s.url).toSet();
     final preferred = matching
-        .where((c) => streamUrls.contains(c.track.id))
+        .where((c) => streamUrls.contains(c.url))
         .toList();
-    final external = matching.where((c) => c.track.uri == true).toList();
+    final external = matching.where((c) => c.url != null).toList();
     if (preferred.isNotEmpty || external.isNotEmpty) {
       _choose(
         preferred.isNotEmpty ? preferred.first : external.first,
@@ -372,23 +421,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_pending != null) return;
     final previous = _selected ?? _player.state.track.subtitle;
     _applicationError = null;
-    _attemptedCaption = caption;
-    _previousSubtitle = previous;
     setState(() {
       _selected = previous;
-      _pending = caption.track.id;
+      _pending = caption.url ?? caption.track.id;
       _subtitleError = null;
       _notice = null;
     });
     try {
-      await _player.setSubtitleTrack(caption.track);
-      // shortcut: media_kit acknowledges selection, not rendering; verify native external-file loading below.
-      if (caption.track.uri == true) {
+      var track = caption.track;
+      final url = caption.url;
+      if (url != null && !_added.containsKey(url)) {
+        final text = await _subtitleText(url);
+        await _player.setSubtitleTrack(
+          SubtitleTrack.data(
+            text,
+            title: track.title,
+            language: track.language,
+          ),
+        );
         final mpv = _player.platform as NativePlayer;
-        final tracks = await mpv.getProperty('track-list');
-        if (!tracks.contains(caption.track.id)) {
-          throw StateError('Subtitle did not load');
-        }
+        final sid = addedSubtitle(
+          await mpv.getProperty('track-list'),
+          await mpv.getProperty('sid'),
+          _added.values,
+        );
+        if (sid == null) throw StateError('Subtitle did not load');
+        _added[url] = sid;
+        track = SubtitleTrack(sid, track.title, track.language);
+      } else {
+        await _player.setSubtitleTrack(track);
       }
       if (_applicationError != null) throw StateError(_applicationError!);
       if (automatic && _manual) {
@@ -397,7 +458,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       if (!mounted) return;
       setState(() {
-        _selected = caption.track;
+        _selected = track;
         _failed = null;
         _language = caption.lang;
       });
@@ -421,6 +482,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  /// Fetched here rather than by mpv, which would send the stream's request
+  /// headers (e.g. a debrid token) to the third-party subtitle host.
+  Future<String> _subtitleText(String url) async {
+    if (_subtitleFiles[url] case final text?) return text;
+    final r = await http
+        .get(Uri.parse(url))
+        .timeout(const Duration(seconds: 20));
+    if (r.statusCode ~/ 100 != 2) throw StateError('HTTP ${r.statusCode}');
+    String text;
+    try {
+      text = utf8.decode(r.bodyBytes);
+    } on FormatException {
+      text = latin1.decode(r.bodyBytes); // older .srt files are often Latin-1
+    }
+    return _subtitleFiles[url] = text;
+  }
+
   void _togglePanel([bool? open]) {
     _languageSearch.clear();
     setState(() {
@@ -438,8 +516,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_retrying) return;
     setState(() => _retrying = true);
     try {
-      setState(() => _error = null);
+      setState(() {
+        _error = null;
+        // Reloading the file drops the subtitle files added to it.
+        _selected = null;
+      });
+      _added.clear();
       _lastPlaybackError = null;
+      _startTimer?.cancel();
+      _startTimer = null;
       await _open(_pos);
     } catch (e) {
       _showError(e);
@@ -500,7 +585,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onBuffering(bool buffering) {
     if (!buffering) {
       // The first buffer-complete after real playback position ends the initial fill.
-      if (_player.state.position > Duration.zero) _started = true;
+      // Addon playback starts in the position listener, which also clears early errors.
+      if (_player.state.position > Duration.zero && !widget.addonPlayback) {
+        _started = true;
+      }
       return;
     }
     // ponytail: out-of-cache seeks also count as stalls.
@@ -540,6 +628,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final pos = _pos;
     _report((c) => c.reportStopped(widget.item.id, pos));
     _progress?.cancel();
+    _startTimer?.cancel();
     for (final s in _subs) {
       s.cancel();
     }
@@ -557,7 +646,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         title: widget.playback?.title ?? headline(item),
         subtitle: widget.playback?.subtitle ?? episodeLine(item),
         buffer: _BufferAhead(_player),
-        subtitles: widget.source == null
+        subtitles: !widget.addonPlayback
             ? null
             : Semantics(
                 label: 'Subtitles, $_activeSubtitle',
@@ -609,7 +698,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       topButtonBar: bar,
       topButtonBarMargin: EdgeInsets.zero,
       buttonBarHeight: 64,
-      bottomButtonBar: widget.source == null
+      bottomButtonBar: !widget.addonPlayback
           ? MaterialVideoControlsThemeData().bottomButtonBar
           : [
               const MaterialPositionIndicator(),
@@ -701,7 +790,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
-              if (widget.source != null) ...[
+              if (widget.addonPlayback) ...[
                 if (_panel)
                   Positioned.fill(
                     child: GestureDetector(
@@ -970,7 +1059,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             '${subtitleLanguageName(lang)} · ${groups[lang]!.length} files',
                                         selected: lang == language,
                                         onTap: () {
-                                          _manual = true;
                                           setState(() {
                                             _language = lang;
                                             _languages = false;
@@ -1009,6 +1097,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               onTap: _pending == null
                                   ? () => _choose((
                                       track: SubtitleTrack.no(),
+                                      url: null,
                                       lang: language ?? 'und',
                                       label: 'Off',
                                       detail: '',
@@ -1115,7 +1204,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                       label: caption.label,
                                       detail: caption.detail,
                                       height: 72,
-                                      pending: _pending == caption.track.id,
+                                      pending:
+                                          _pending ==
+                                          (caption.url ?? caption.track.id),
                                       selected: active.id == caption.track.id,
                                       onTap: _pending == null
                                           ? () => _choose(caption)
@@ -1145,7 +1236,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                             track.id ==
                                             _player.state.track.audio.id,
                                         onTap: () async {
-                                          _manual = true;
                                           try {
                                             await _player.setAudioTrack(track);
                                           } catch (e) {
