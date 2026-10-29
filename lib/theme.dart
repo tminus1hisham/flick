@@ -26,6 +26,7 @@ abstract final class FlickTokens {
   static const controlRadius = 12.0;
   static const modalRadius = 24.0;
   static const minTouchTarget = 48.0;
+  static const streamQualityWidth = 60.0;
 
   static const stateDuration = Duration(milliseconds: 120);
   static const artworkFadeDuration = Duration(milliseconds: 180);
@@ -137,6 +138,9 @@ const monoStyle = TextStyle(
   letterSpacing: 0,
   fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
 );
+
+/// Seeders and size in a stream row's telemetry line.
+final streamMonoStyle = monoStyle.copyWith(fontSize: 12, height: 16 / 12);
 
 @immutable
 class FlickColors extends ThemeExtension<FlickColors> {
