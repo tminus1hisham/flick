@@ -3,6 +3,7 @@ package dev.local.flick
 import java.io.InputStream
 import java.io.RandomAccessFile
 import java.net.Socket
+import java.net.SocketException
 import java.net.SocketTimeoutException
 import java.security.MessageDigest
 
@@ -102,6 +103,8 @@ fun clientGone(socket: Socket, input: InputStream): Boolean {
         return input.read() < 0
     } catch (_: SocketTimeoutException) {
         return false
+    } catch (_: SocketException) {
+        return true // reset: the client closed with response bytes unread
     } finally {
         socket.soTimeout = timeout
     }

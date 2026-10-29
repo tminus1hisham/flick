@@ -37,6 +37,8 @@ class Conn(val socket: Socket) {
  */
 class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
     private val socket = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+    // ponytail: 4 workers; a waiting request holds one (head + tail probe + seek overlap = 3). Raise if devices
+    // show requests closed at accept.
     private val pool = ThreadPoolExecutor(4, 4, 0, TimeUnit.SECONDS, SynchronousQueue()) { r ->
         Thread(r, "torrent-http").apply { isDaemon = true }
     }
