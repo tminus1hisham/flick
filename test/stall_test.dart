@@ -66,7 +66,8 @@ void main() {
     test('a seek jump reported after buffering began does not count', () {
       final w = PauseWait()..position(s(10), at(0));
       expect(stall(w, 0, 3), isFalse);
-      w.position(s(20), at(30));
+      w.position(s(19), at(29));
+      w.position(s(20), at(30)); // normal playback: no jump just before the stall
       w.buffering(true, at(31));
       w.position(s(600), at(31, 200));
       expect(w.buffering(false, at(36)), isFalse);

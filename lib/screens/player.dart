@@ -295,6 +295,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _lastPlaybackError = '$e';
       // Before the first frame too, only a stopped player is a failure.
       _checkStopped();
+      // mpv logs the error before it goes idle and media_kit reports no
+      // stop after a failed load, so look again shortly.
+      if (!_started) {
+        for (final s in [1, 3]) {
+          Timer(Duration(seconds: s), () {
+            if (mounted && !_started && _lastPlaybackError != null) {
+              _checkStopped();
+            }
+          });
+        }
+      }
       return;
     }
     if (mounted) {
