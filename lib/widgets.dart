@@ -9,7 +9,7 @@ import 'theme.dart';
 /// A sentence a viewer can act on, instead of an exception dump.
 String friendlyError(Object e) => switch (e) {
       SocketException() || ClientException() || TimeoutException() =>
-        "Can't reach your server. Check your connection and try again.",
+        "Couldn't connect. Check your connection and try again.",
       _ => '$e',
     };
 
