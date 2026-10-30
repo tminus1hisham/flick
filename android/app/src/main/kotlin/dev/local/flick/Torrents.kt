@@ -51,8 +51,10 @@ class Entry(val th: TorrentHandle, val dir: String) {
         val file = activeFile ?: return
         val last = pieceRange(ti.files().fileOffset(file), ti.files().fileSize(file), ti.pieceLength()).last
         val now = System.currentTimeMillis()
-        due.keys.removeAll { it < reader || th.havePiece(it) }
-        for ((p, ms) in schedule(reader, last, ti.pieceLength(), rate, now, th::havePiece, due)) {
+        // One call into libtorrent for the whole bitfield instead of one havePiece per piece.
+        val have = th.status(TorrentHandle.QUERY_PIECES).pieces()
+        due.keys.removeAll { it < reader || have.getBit(it) }
+        for ((p, ms) in schedule(reader, last, ti.pieceLength(), rate, now, have::getBit, due)) {
             th.setPieceDeadline(p, ms)
             due[p] = now + ms
         }

@@ -158,6 +158,11 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
                 // Forward only, within the window: a stale request elsewhere in the file must not drag the reader.
                 if (!probe) synchronized(e) {
                     if (e.alive && e.gen == gen && ch.piece in e.reader + 1..e.reader + window(e.rate, pieceLen)) {
+                        // A jump leaves deadlines on the skipped pieces; they would sort first and download first.
+                        if (ch.piece > e.reader + 1) {
+                            e.th.clearPieceDeadlines()
+                            e.due.clear()
+                        }
                         e.reader = ch.piece
                         e.reschedule()
                     }
