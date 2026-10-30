@@ -5,25 +5,50 @@ import '../jellyfin.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../upnext.dart';
 import 'account.dart';
 import 'player.dart';
 
 bool canDownload(TaskStatus? s) =>
     s == null || s == TaskStatus.canceled || s == TaskStatus.failed || s == TaskStatus.notFound;
 
+/// Plays [item], then each next episode the player's Up Next pops with.
 Future<void> play(BuildContext context, Item item) async {
-  final local = await downloads.localPath(item.id);
-  // A guest's download whose file is gone: there is no server to stream it from instead.
-  if (local == null && session.client == null) return;
-  if (session.online) {
-    // The passed-in item's resume position may be stale.
-    try {
-      item = await session.client!.item(item.id);
-    } catch (_) {}
+  while (true) {
+    final local = await downloads.localPath(item.id);
+    // A guest's download whose file is gone: there is no server to stream it from instead.
+    if (local == null && session.client == null) return;
+    if (session.online) {
+      // The passed-in item's resume position may be stale.
+      try {
+        item = await session.client!.item(item.id);
+      } catch (_) {}
+    }
+    if (!context.mounted) return;
+    final result = await Navigator.push<Object?>(context,
+        MaterialPageRoute(builder: (_) => PlayerScreen(item: item, source: local, next: _nextUp(item))));
+    if (result is! Item || !context.mounted) return;
+    item = result;
   }
-  if (!context.mounted) return;
-  await Navigator.push(context,
-      MaterialPageRoute(builder: (_) => PlayerScreen(item: item, source: local)));
+}
+
+/// Up Next for a Jellyfin episode, online only: the next episode and this one's Outro start, asked together.
+Future<NextUp?>? _nextUp(Item item) {
+  final client = session.client;
+  if (!session.online || client == null || item.type != 'Episode') return null;
+  return () async {
+    final (next, outro) = await (client.nextEpisode(item), client.outro(item.id)).wait;
+    if (next == null) return null;
+    return (
+      episode: (
+        label: episodeLabel(next.season, next.episode),
+        title: next.name,
+        thumbnail: client.imageUrl(next.id, maxHeight: 300),
+      ),
+      outro: outro,
+      resolve: () async => next,
+    );
+  }();
 }
 
 Future<Quality?> pickQuality(BuildContext context) => showModalBottomSheet<Quality>(

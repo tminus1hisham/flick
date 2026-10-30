@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'screens/discover.dart';
+import 'screens/anime.dart';
 import 'screens/downloads.dart';
 import 'screens/home.dart';
 import 'screens/library.dart';
@@ -29,7 +30,7 @@ class FlickApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Flick',
-        routes: {'/sources': (_) => const SourcesScreen()},
+        routes: {'/sources': (_) => const SourcesScreen(), '/anime': (_) => const AnimeScreen()},
         debugShowCheckedModeBanner: false,
         theme: flickTheme(),
         builder: (_, child) => SplashHandoff(child: child!),

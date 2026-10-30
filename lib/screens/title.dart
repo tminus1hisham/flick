@@ -6,6 +6,7 @@ import '../addons.dart';
 import '../playback.dart';
 import '../state.dart';
 import '../theme.dart';
+import '../upnext.dart';
 import '../widgets.dart';
 import 'account.dart';
 
@@ -162,7 +163,8 @@ class _TitleScreenState extends State<TitleScreen> {
     if (!_series) {
       return [
         const SliverToBoxAdapter(child: _Heading('Streams', style: FlickText.railHeading)),
-        _StreamList((title: m.name, subtitle: null, type: m.type, videoId: m.id, season: null, episode: null)),
+        _StreamList(
+            (title: m.name, subtitle: null, type: m.type, videoId: m.id, season: null, episode: null, meta: null)),
       ];
     }
     if (m.videos.isEmpty) {
@@ -244,7 +246,7 @@ class StreamsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ep = 'S${video.season ?? 0} E${video.episode ?? 0}';
+    final ep = episodeLabel(video.season, video.episode);
     return Scaffold(
       appBar: AppBar(title: const Text('Streams'), actions: [
         TextButton(onPressed: () => _openSources(context), child: const Text('Sources')),
@@ -263,14 +265,7 @@ class StreamsScreen extends StatelessWidget {
             ]),
           ),
         ),
-        _StreamList((
-          title: meta.name,
-          subtitle: video.title.isEmpty ? ep : '$ep · ${video.title}',
-          type: meta.type,
-          videoId: video.id,
-          season: video.season,
-          episode: video.episode,
-        )),
+        _StreamList(episodePlayback(meta, video)),
         SliverPadding(padding: EdgeInsets.only(bottom: 28 + MediaQuery.paddingOf(context).bottom)),
       ]),
     );
@@ -387,7 +382,7 @@ class _StreamListState extends State<_StreamList> {
           child: Text('${{for (final (a, _) in services) a.name}.join(', ')} · Opens another app or website.',
               style: FlickText.metadata.merge(_muted)),
         ),
-        for (final (_, s) in services) _ServiceRow(s, widget.playback, key: ValueKey(s.externalUrl)),
+        for (final (a, s) in services) _ServiceRow(s, widget.playback, a, key: ValueKey(s.externalUrl)),
       ],
     ];
   }
@@ -395,7 +390,7 @@ class _StreamListState extends State<_StreamList> {
   List<Widget> _group(Addon a) {
     final r = _results[a.id];
     if (r is List<AddonStream>) {
-      final rows = [for (final s in r) if (s.externalUrl == null) _StreamRow(s, widget.playback)];
+      final rows = [for (final s in r) if (s.externalUrl == null) _StreamRow(s, widget.playback, a)];
       // A services-only answer lives under "Where to watch" and must not read as streams found.
       if (rows.isEmpty && r.isNotEmpty) return const [];
       return [
@@ -424,9 +419,10 @@ class _StreamListState extends State<_StreamList> {
 }
 
 class _StreamRow extends StatelessWidget {
-  const _StreamRow(this.stream, this.playback);
+  const _StreamRow(this.stream, this.playback, this.addon);
   final AddonStream stream;
   final Playback playback;
+  final Addon addon;
 
   @override
   Widget build(BuildContext context) {
@@ -462,7 +458,7 @@ class _StreamRow extends StatelessWidget {
       ].join(', '),
       onTap: () async {
         HapticFeedback.lightImpact();
-        await play(context, stream, playback);
+        await play(context, stream, playback, addon: addon);
       },
       child: Container(
         constraints: const BoxConstraints(minHeight: 60),
@@ -504,9 +500,10 @@ class _StreamRow extends StatelessWidget {
 
 /// A "where to watch" offer (externalUrl): opens the service's app or site.
 class _ServiceRow extends StatefulWidget {
-  const _ServiceRow(this.stream, this.playback, {super.key});
+  const _ServiceRow(this.stream, this.playback, this.addon, {super.key});
   final AddonStream stream;
   final Playback playback;
+  final Addon addon;
 
   @override
   State<_ServiceRow> createState() => _ServiceRowState();
@@ -519,7 +516,7 @@ class _ServiceRowState extends State<_ServiceRow> {
     HapticFeedback.lightImpact();
     setState(() => _failed = false);
     try {
-      await play(context, widget.stream, widget.playback);
+      await play(context, widget.stream, widget.playback, addon: widget.addon);
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }

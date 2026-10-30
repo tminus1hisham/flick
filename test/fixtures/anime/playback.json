@@ -1,0 +1,123 @@
+{
+  "episode_number": 1,
+  "tracks": [
+    {
+      "track": "sub",
+      "providers": [
+        {
+          "provider": "animepahe",
+          "subtitles": [],
+          "downloads": [
+            {
+              "url": "https://media.example/fixture-3",
+              "quality": "800p",
+              "size": "86MB",
+              "fansub": "df68"
+            },
+            {
+              "url": "https://media.example/fixture-4",
+              "quality": "360p",
+              "size": "46MB",
+              "fansub": "df68"
+            }
+          ],
+          "servers": [
+            {
+              "server": "animepahe",
+              "headers": {
+                "Referer": "https://media.example/fixture-5"
+              },
+              "streams": [
+                {
+                  "url": "https://media.example/fixture-6.m3u8",
+                  "format": "hls",
+                  "quality": "360p",
+                  "resolution": {
+                    "width": 640,
+                    "height": 360
+                  },
+                  "codec": "h264",
+                  "embed": {
+                    "url": "https://media.example/fixture-7"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "track": "ssub",
+      "providers": [
+        {
+          "provider": "anikoto",
+          "subtitles": [
+            {
+              "language": "en",
+              "label": "English",
+              "file": "https://media.example/fixture-8",
+              "format": "vtt",
+              "default": true
+            }
+          ],
+          "downloads": [],
+          "servers": [
+            {
+              "server": "Vidstream-1",
+              "headers": {
+                "Referer": "https://media.example/fixture-9"
+              },
+              "streams": [
+                {
+                  "url": "https://media.example/fixture-10.m3u8",
+                  "format": "hls",
+                  "quality": null,
+                  "resolution": null,
+                  "codec": null,
+                  "embed": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "track": "dub",
+      "providers": [
+        {
+          "provider": "anikoto",
+          "subtitles": [
+            {
+              "language": "en",
+              "label": "English",
+              "file": "https://media.example/fixture-8",
+              "format": "vtt",
+              "default": true
+            }
+          ],
+          "downloads": [],
+          "servers": [
+            {
+              "server": "Vidstream-1",
+              "headers": {
+                "Referer": "https://media.example/fixture-9"
+              },
+              "streams": [
+                {
+                  "url": "https://media.example/fixture-11.m3u8",
+                  "format": "hls",
+                  "quality": null,
+                  "resolution": null,
+                  "codec": null,
+                  "embed": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
