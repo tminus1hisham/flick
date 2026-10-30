@@ -1,0 +1,528 @@
+{
+  "data": {
+    "Page": {
+      "pageInfo": {
+        "currentPage": 1,
+        "hasNextPage": false
+      },
+      "airingSchedules": [
+        {
+          "id": 421793,
+          "episode": 5,
+          "airingAt": 1793321400,
+          "media": {
+            "id": 217577,
+            "idMal": 65007,
+            "title": {
+              "romaji": "Mazenchu",
+              "english": null,
+              "native": "マゼンチュ"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx217577-bYfoFScj9Pwi.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx217577-bYfoFScj9Pwi.jpg"
+            },
+            "bannerImage": null,
+            "format": "TV_SHORT",
+            "status": "RELEASING",
+            "episodes": null,
+            "duration": null,
+            "averageScore": null,
+            "genres": [
+              "Slice of Life"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 6,
+              "airingAt": 1793926200
+            }
+          }
+        },
+        {
+          "id": 421372,
+          "episode": 1,
+          "airingAt": 1793332800,
+          "media": {
+            "id": 206244,
+            "idMal": null,
+            "title": {
+              "romaji": "Luo Xiaohei Zhan Ji: Xue Qian Pian",
+              "english": null,
+              "native": "罗小黑战记 学前篇"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx206244-ke6bcfsL40qY.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx206244-ke6bcfsL40qY.jpg"
+            },
+            "bannerImage": null,
+            "format": "ONA",
+            "status": "RELEASING",
+            "episodes": 6,
+            "duration": null,
+            "averageScore": null,
+            "genres": [
+              "Action",
+              "Adventure",
+              "Comedy",
+              "Supernatural"
+            ],
+            "season": null,
+            "seasonYear": null,
+            "nextAiringEpisode": {
+              "episode": 2,
+              "airingAt": 1793937600
+            }
+          }
+        },
+        {
+          "id": 420969,
+          "episode": 6,
+          "airingAt": 1793347200,
+          "media": {
+            "id": 210482,
+            "idMal": 61469,
+            "title": {
+              "romaji": "JoJo no Kimyou na Bouken: Steel Ball Run - 2nd & 3rd STAGE",
+              "english": "STEEL BALL RUN JoJo's Bizarre Adventure 2nd - 3rd STAGE",
+              "native": "ジョジョの奇妙な冒険 スティール・ボール・ラン 2nd＆3rd STAGE"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx210482-P1VNKbqdJ6Zj.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx210482-P1VNKbqdJ6Zj.jpg"
+            },
+            "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/210482-pYAD0IbzNbgS.jpg",
+            "format": "ONA",
+            "status": "RELEASING",
+            "episodes": 11,
+            "duration": null,
+            "averageScore": 86,
+            "genres": [
+              "Action",
+              "Adventure",
+              "Drama",
+              "Mystery",
+              "Supernatural"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 7,
+              "airingAt": 1793952000
+            }
+          }
+        },
+        {
+          "id": 420232,
+          "episode": 5,
+          "airingAt": 1793353200,
+          "media": {
+            "id": 194207,
+            "idMal": 62039,
+            "title": {
+              "romaji": "Pan Dorobou",
+              "english": null,
+              "native": "パンどろぼう"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx194207-7n4M6jOwLdcF.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx194207-7n4M6jOwLdcF.jpg"
+            },
+            "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/194207-6yQitDZ3uOi5.jpg",
+            "format": "TV_SHORT",
+            "status": "RELEASING",
+            "episodes": null,
+            "duration": 9,
+            "averageScore": null,
+            "genres": [
+              "Comedy"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 6,
+              "airingAt": 1793958000
+            }
+          }
+        },
+        {
+          "id": 421007,
+          "episode": 155,
+          "airingAt": 1793354100,
+          "media": {
+            "id": 158871,
+            "idMal": 53876,
+            "title": {
+              "romaji": "Pocket Monsters (2023)",
+              "english": "Pokémon Horizons: The Series",
+              "native": "ポケットモンスター (2023)"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx158871-GBM9AMDfDRSu.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx158871-GBM9AMDfDRSu.jpg"
+            },
+            "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/158871-PtipBrtn93hB.jpg",
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": null,
+            "duration": 24,
+            "averageScore": 73,
+            "genres": [
+              "Action",
+              "Adventure",
+              "Fantasy"
+            ],
+            "season": "SPRING",
+            "seasonYear": 2023,
+            "nextAiringEpisode": {
+              "episode": 156,
+              "airingAt": 1793958900
+            }
+          }
+        },
+        {
+          "id": 422660,
+          "episode": 86,
+          "airingAt": 1793354400,
+          "media": {
+            "id": 146004,
+            "idMal": 51768,
+            "title": {
+              "romaji": "Girigiri Warukunai Watame",
+              "english": "Watame Did Borderline Nothing Wrong",
+              "native": "ギリギリわるくないわため"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx146004-hH08KAB1yHlN.png",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx146004-hH08KAB1yHlN.png"
+            },
+            "bannerImage": null,
+            "format": "ONA",
+            "status": "RELEASING",
+            "episodes": null,
+            "duration": 1,
+            "averageScore": 70,
+            "genres": [
+              "Comedy",
+              "Slice of Life"
+            ],
+            "season": "WINTER",
+            "seasonYear": 2022,
+            "nextAiringEpisode": {
+              "episode": 87,
+              "airingAt": 1793959200
+            }
+          }
+        },
+        {
+          "id": 423102,
+          "episode": 138,
+          "airingAt": 1793354400,
+          "media": {
+            "id": 165159,
+            "idMal": 56566,
+            "title": {
+              "romaji": "BEYBLADE X",
+              "english": "BEYBLADE X",
+              "native": "BEYBLADE X"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx165159-aCFC9Sng7t4M.png",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx165159-aCFC9Sng7t4M.png"
+            },
+            "bannerImage": null,
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": null,
+            "duration": 22,
+            "averageScore": 65,
+            "genres": [
+              "Action",
+              "Adventure",
+              "Sports"
+            ],
+            "season": "FALL",
+            "seasonYear": 2023,
+            "nextAiringEpisode": {
+              "episode": 139,
+              "airingAt": 1793959200
+            }
+          }
+        },
+        {
+          "id": 419663,
+          "episode": 4,
+          "airingAt": 1793361600,
+          "media": {
+            "id": 208367,
+            "idMal": 64848,
+            "title": {
+              "romaji": "Duel Masters LOST: Danzai no Shounen",
+              "english": null,
+              "native": "Duel Masters LOST ～断罪の少年～"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx208367-qWKRaOpokGoG.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx208367-qWKRaOpokGoG.jpg"
+            },
+            "bannerImage": null,
+            "format": "ONA",
+            "status": "RELEASING",
+            "episodes": 4,
+            "duration": 24,
+            "averageScore": null,
+            "genres": [
+              "Adventure",
+              "Supernatural"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": null
+          }
+        },
+        {
+          "id": 420192,
+          "episode": 5,
+          "airingAt": 1793363160,
+          "media": {
+            "id": 216895,
+            "idMal": 65009,
+            "title": {
+              "romaji": "Aoki Denshou: Welsh & Shedar",
+              "english": "Welsh & Shedar",
+              "native": "蒼き伝承 ウェルシュ&シェーダー"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx216895-Ofx4FSKFa4CQ.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx216895-Ofx4FSKFa4CQ.jpg"
+            },
+            "bannerImage": null,
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": 12,
+            "duration": 23,
+            "averageScore": 55,
+            "genres": [
+              "Adventure",
+              "Fantasy"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 6,
+              "airingAt": 1793967960
+            }
+          }
+        },
+        {
+          "id": 419705,
+          "episode": 4,
+          "airingAt": 1793367000,
+          "media": {
+            "id": 186742,
+            "idMal": 61014,
+            "title": {
+              "romaji": "Toaru Anbu no ITEM",
+              "english": "A Certain Dark Item",
+              "native": "とある暗部の少女共棲"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx186742-v7yfbefc8fuO.png",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx186742-v7yfbefc8fuO.png"
+            },
+            "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/186742-nZP1PcuUpcGg.jpg",
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": null,
+            "duration": 23,
+            "averageScore": 68,
+            "genres": [
+              "Action",
+              "Sci-Fi"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 4,
+              "airingAt": 1793367000
+            }
+          }
+        },
+        {
+          "id": 418785,
+          "episode": 5,
+          "airingAt": 1793368800,
+          "media": {
+            "id": 195516,
+            "idMal": 61987,
+            "title": {
+              "romaji": "Kusuriya no Hitorigoto 3rd Season",
+              "english": "The Apothecary Diaries Season 3",
+              "native": "薬屋のひとりごと 第3期"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx195516-MJpUZlOberqH.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx195516-MJpUZlOberqH.jpg"
+            },
+            "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/195516-B5M0cPaQbQXI.jpg",
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": 12,
+            "duration": 24,
+            "averageScore": 85,
+            "genres": [
+              "Drama",
+              "Mystery"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 5,
+              "airingAt": 1793368800
+            }
+          }
+        },
+        {
+          "id": 418468,
+          "episode": 4,
+          "airingAt": 1793370600,
+          "media": {
+            "id": 205909,
+            "idMal": 63293,
+            "title": {
+              "romaji": "Hotaru no Yomeiri",
+              "english": "Firefly Wedding",
+              "native": "ホタルの嫁入り"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx205909-DM0fAzNQulod.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx205909-DM0fAzNQulod.jpg"
+            },
+            "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/205909-hGeuFYrdhf9S.jpg",
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": 12,
+            "duration": 23,
+            "averageScore": 75,
+            "genres": [
+              "Drama",
+              "Romance"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 4,
+              "airingAt": 1793370600
+            }
+          }
+        },
+        {
+          "id": 422239,
+          "episode": 5,
+          "airingAt": 1793370600,
+          "media": {
+            "id": 204650,
+            "idMal": 63181,
+            "title": {
+              "romaji": "Tougen Anki: Nikko・Kegon no Taki-hen",
+              "english": "TOUGEN ANKI: Nikko Kegon Falls Arc",
+              "native": "桃源暗鬼 日光・華厳の滝編"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx204650-cAQOzQ84Lwk8.png",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx204650-cAQOzQ84Lwk8.png"
+            },
+            "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/204650-MpownoVlYv69.jpg",
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": 12,
+            "duration": 24,
+            "averageScore": 72,
+            "genres": [
+              "Action",
+              "Mystery",
+              "Supernatural"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 5,
+              "airingAt": 1793370600
+            }
+          }
+        },
+        {
+          "id": 421092,
+          "episode": 17,
+          "airingAt": 1793372400,
+          "media": {
+            "id": 203490,
+            "idMal": 63061,
+            "title": {
+              "romaji": "Uchi no Otouto-domo ga Sumimasen",
+              "english": "Please Excuse My Younger Brothers",
+              "native": "うちの弟どもがすみません"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx203490-YQXiymUiDQNA.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx203490-YQXiymUiDQNA.jpg"
+            },
+            "bannerImage": null,
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": 24,
+            "duration": 24,
+            "averageScore": 69,
+            "genres": [
+              "Comedy",
+              "Romance",
+              "Slice of Life"
+            ],
+            "season": "SUMMER",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 17,
+              "airingAt": 1793372400
+            }
+          }
+        },
+        {
+          "id": 418625,
+          "episode": 5,
+          "airingAt": 1793379180,
+          "media": {
+            "id": 178083,
+            "idMal": 59088,
+            "title": {
+              "romaji": "Tokyo Revengers: Santen Sensou-hen",
+              "english": "Tokyo Revengers: War of the Three Titans Arc",
+              "native": "東京リベンジャーズ 三天戦争編"
+            },
+            "coverImage": {
+              "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx178083-bg7pg6TCHwtG.jpg",
+              "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx178083-bg7pg6TCHwtG.jpg"
+            },
+            "bannerImage": null,
+            "format": "TV",
+            "status": "RELEASING",
+            "episodes": 13,
+            "duration": null,
+            "averageScore": 76,
+            "genres": [
+              "Action",
+              "Drama",
+              "Romance",
+              "Supernatural"
+            ],
+            "season": "FALL",
+            "seasonYear": 2026,
+            "nextAiringEpisode": {
+              "episode": 5,
+              "airingAt": 1793379180
+            }
+          }
+        }
+      ]
+    }
+  }
+}

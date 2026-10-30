@@ -1,0 +1,245 @@
+{
+  "data": {
+    "Media": {
+      "id": 20,
+      "idMal": 20,
+      "title": {
+        "romaji": "NARUTO",
+        "english": "Naruto",
+        "native": "NARUTO -ナルト-"
+      },
+      "coverImage": {
+        "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx20-dE6UHbFFg1A5.jpg",
+        "extraLarge": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx20-dE6UHbFFg1A5.jpg"
+      },
+      "bannerImage": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/20-HHxhPj5JD13a.jpg",
+      "format": "TV",
+      "status": "FINISHED",
+      "episodes": 220,
+      "duration": 23,
+      "averageScore": 80,
+      "genres": [
+        "Action",
+        "Adventure",
+        "Comedy",
+        "Drama",
+        "Fantasy",
+        "Supernatural"
+      ],
+      "season": "FALL",
+      "seasonYear": 2002,
+      "nextAiringEpisode": null,
+      "description": "Naruto Uzumaki, a hyperactive and knuckle-headed ninja, lives in Konohagakure, the Hidden Leaf village. Moments prior to his birth, a huge demon known as the Kyuubi, the Nine-tailed Fox, attacked Konohagakure and wreaked havoc. In order to put an end to the Kyuubi's rampage, the leader of the village, the 4th Hokage, sacrificed his life and sealed the monstrous beast inside the newborn Naruto. <br><br>\nShunned because of the presence of the Kyuubi inside him, Naruto struggles to find his place in the village. He strives to become the Hokage of Konohagakure, and he meets many friends and foes along the way. <br><br>\n(Source: MAL Rewrite)",
+      "streamingEpisodes": [
+        {
+          "title": "Episode 1 - Enter: Naruto Uzumaki!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/ea976df50bf201db97c78c2e2ed72f641233900918_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYK5PJV7R/enter-naruto-uzumaki",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 2 - My Name is Konohamaru!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire1-tmb/1e6648f8636de8fd224e3aa9b1901f3e1233899665_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYP8130KY/my-name-is-konohamaru",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 3 - Sasuke and Sakura: Friends or Foes?",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire1-tmb/732076f3b53c9eecc4e21002c1668a1f1233902304_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GR8VJQ0WR/sasuke-and-sakura-friends-or-foes",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 4 - Pass or Fail: Survival Test",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/628eda0744f33b26eb2109ee7d86217b1233903583_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/G6DQ4M3KR/pass-or-fail-survival-test",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 5 - You Failed! Kakashi's Final Decision",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/beaa9dbd3c851e7edb34f888840fdb541233901039_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GRGGPKWPR/you-failed-kakashis-final-decision",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 6 - A Dangerous Mission! Journey to the Land of Waves!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/6369edad5c49d017efd508d26be35fc21233901038_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GRE5PJQ96/a-dangerous-mission-journey-to-the-land-of-waves",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 7 - The Assassin of the Mist!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/7ba79a8d58748f28eb7936ea33243d511233901096_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/G64907Q8Y/the-assassin-of-the-mist",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 8 - The Oath of Pain",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/8587a0b48de7a0924485c0b7cb2bfca91233902952_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYNQ13DWY/the-oath-of-pain",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 9 - Kakashi: Sharingan Warrior!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire1-tmb/89158a698894e941ab1b2b76bdd8acb11233905153_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/G6P813JK6/kakashi-sharingan-warrior",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 10 - The Forest of Chakra",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire3-tmb/f9426116306b2388fa06de84752a4bab1233903447_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GY8VJQPWY/the-forest-of-chakra",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 11 - The Land Where a Hero Once Lived",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire1-tmb/3bd485e2707578b2e69be7f1596768591233899639_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GRDQ4MJKY/the-land-where-a-hero-once-lived",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 12 - Battle on the Bridge! Zabuza Returns!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/1d671253e8b8674463fca562ee3dbf531233899593_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYGGPKMPY/battle-on-the-bridge-zabuza-returns",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 13 - Haku's Secret Jutsu: Crystal Ice Mirrors",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire3-tmb/9c8627b71df02dcc7e5647fbb51ef6671234325534_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYE5PJD9R/hakus-secret-jutsu-crystal-ice-mirrors",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 14 - The Number One Hyperactive, Knucklehead Ninja Joins the Fight!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/cb90198f0ed1df5cb0bf36828a07891b1234329464_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GR4907K86/the-number-one-hyperactive-knucklehead-ninja-joins-the-fight",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 15 - Zero Visibility: The Sharingan Shatters",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire2-tmb/b6fce9d24590fef7edda662a52648bbf1234330721_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GRJQ2NP4Y/zero-visibility-the-sharingan-shatters",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 16 - The Broken Seal",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/2f4f04fe9370de2432301b558e479d8a1234329650_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/G609QW4P6/the-broken-seal",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 17 - White Past: Hidden Ambition",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/cead3f1685a32f7d28fd539f6773831d1234329942_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/G67524XVR/white-past-hidden-ambition",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 18 - The Weapons Known as Shinobi",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire1-tmb/b480b0c71b50dd1490bb03b14ac70ba31234330310_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYX042G0R/the-weapons-known-as-shinobi",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 19 - The Demon in the Snow",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire2-tmb/90ea795e3acb23a8f0a1b48f3b6f98f61234331010_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYNQ13NXY/the-demon-in-the-snow",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 20 - A New Chapter Begins: The Chūnin Exam!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/f3404b85d3d49679ce3f5d00bc6167391234330944_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/G63VGE0EY/a-new-chapter-begins-the-chnin-exam",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 21 - Identify Yourself: Powerful New Rivals",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire1-tmb/01d92833730507a6883770cd547a73641234331344_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GRZXQKEZY/identify-yourself-powerful-new-rivals",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 22 - Chūnin Challenge: Rock Lee vs. Sasuke!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire1-tmb/64a13c04ae1dffb1dfc91ce87777beed1234331688_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GYWEXKWNY/chnin-challenge-rock-lee-vs-sasuke",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 23 - Genin Takedown! All Nine Rookies Face Off!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire3-tmb/ae3db32043055f3a1c0f85d76e62773c1234333305_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GR09QW5PR/genin-takedown-all-nine-rookies-face-off",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 24 - Start Your Engines: The Chūnin Exam Begins!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire4-tmb/215e74fe403867e351e3ad12ddde881e1234332307_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GR75240VY/start-your-engines-the-chnin-exam-begins",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 25 - The Tenth Question: All or Nothing!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire3-tmb/b98f7b16bf95310f399a81e00be459951234332670_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/G6NQ139X6/the-tenth-question-all-or-nothing",
+          "site": "Crunchyroll"
+        },
+        {
+          "title": "Episode 26 - Special Report: Live from the Forest of Death!",
+          "thumbnail": "https://img1.ak.crunchyroll.com/i/spire3-tmb/4602dbfcd777f038fde7abefcd8543091234332769_full.jpg",
+          "url": "http://www.crunchyroll.com/watch/GR3VGEQE6/special-report-live-from-the-forest-of-death",
+          "site": "Crunchyroll"
+        }
+      ],
+      "externalLinks": [
+        {
+          "site": "Crunchyroll",
+          "url": "http://www.crunchyroll.com/naruto",
+          "type": "STREAMING"
+        },
+        {
+          "site": "Hulu",
+          "url": "http://www.hulu.com/naruto",
+          "type": "STREAMING"
+        },
+        {
+          "site": "Netflix",
+          "url": "https://www.netflix.com/title/70205012",
+          "type": "STREAMING"
+        },
+        {
+          "site": "Tubi TV",
+          "url": "https://tubitv.com/series/1622/naruto",
+          "type": "STREAMING"
+        },
+        {
+          "site": "Bilibili",
+          "url": "https://www.bilibili.tv/en/play/1005144",
+          "type": "STREAMING"
+        },
+        {
+          "site": "iQ",
+          "url": "https://www.iq.com/album/naruto-1evx2uy83ah",
+          "type": "STREAMING"
+        },
+        {
+          "site": "Official Site",
+          "url": "https://www.tv-tokyo.co.jp/anime/naruto2002/",
+          "type": "INFO"
+        },
+        {
+          "site": "YouTube",
+          "url": "https://youtube.com/playlist?list=PLDDFkfLheQ9hNru7WoTa26dpn6o9-AEJK",
+          "type": "STREAMING"
+        },
+        {
+          "site": "Hoopla",
+          "url": "https://www.hoopladigital.com/series/naruto-dubbed/11802118009",
+          "type": "STREAMING"
+        },
+        {
+          "site": "Hoopla",
+          "url": "https://www.hoopladigital.com/television/naruto-subbed-season-1/14608874",
+          "type": "STREAMING"
+        }
+      ]
+    }
+  }
+}

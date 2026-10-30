@@ -1,0 +1,249 @@
+{
+  "data": [
+    {
+      "id": "254608",
+      "type": "mappings",
+      "links": {
+        "self": "https://kitsu.io/api/edge/mappings/254608"
+      },
+      "attributes": {
+        "createdAt": "2020-05-02T14:54:36.795Z",
+        "updatedAt": "2020-05-02T14:54:36.795Z",
+        "externalSite": "anilist/anime",
+        "externalId": "20"
+      },
+      "relationships": {
+        "item": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/mappings/254608/relationships/item",
+            "related": "https://kitsu.io/api/edge/mappings/254608/item"
+          },
+          "data": {
+            "type": "anime",
+            "id": "11"
+          }
+        }
+      }
+    }
+  ],
+  "included": [
+    {
+      "id": "11",
+      "type": "anime",
+      "links": {
+        "self": "https://kitsu.io/api/edge/anime/11"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T16:00:24.797Z",
+        "updatedAt": "2026-10-30T12:00:25.454Z",
+        "slug": "naruto",
+        "synopsis": "Moments prior to Naruto Uzumaki's birth, a huge demon known as the Kyuubi, the Nine-Tailed Fox, attacked Konohagakure, the Hidden Leaf Village, and wreaked havoc. In order to put an end to the Kyuubi's rampage, the leader of the village, the Fourth Hokage, sacrificed his life and sealed the monstrous beast inside the newborn Naruto.\nNow, Naruto is a hyperactive and knuckle-headed ninja still living in Konohagakure. Shunned because of the Kyuubi inside him, Naruto struggles to find his place in the village, while his burning desire to become the Hokage of Konohagakure leads him not only to some great new friends, but also some deadly foes.\n[Written by MAL Rewrite]",
+        "description": "Moments prior to Naruto Uzumaki's birth, a huge demon known as the Kyuubi, the Nine-Tailed Fox, attacked Konohagakure, the Hidden Leaf Village, and wreaked havoc. In order to put an end to the Kyuubi's rampage, the leader of the village, the Fourth Hokage, sacrificed his life and sealed the monstrous beast inside the newborn Naruto.\nNow, Naruto is a hyperactive and knuckle-headed ninja still living in Konohagakure. Shunned because of the Kyuubi inside him, Naruto struggles to find his place in the village, while his burning desire to become the Hokage of Konohagakure leads him not only to some great new friends, but also some deadly foes.\n[Written by MAL Rewrite]",
+        "coverImageTopOffset": 209,
+        "titles": {
+          "en": "Naruto",
+          "en_jp": "Naruto",
+          "ja_jp": "ナルト"
+        },
+        "canonicalTitle": "Naruto",
+        "abbreviatedTitles": [
+          "NARUTO"
+        ],
+        "averageRating": "80.22",
+        "ratingFrequencies": {
+          "2": "718",
+          "3": "3",
+          "4": "507",
+          "5": "18",
+          "6": "547",
+          "7": "34",
+          "8": "2654",
+          "9": "55",
+          "10": "3004",
+          "11": "112",
+          "12": "6695",
+          "13": "336",
+          "14": "19269",
+          "15": "810",
+          "16": "14692",
+          "17": "1181",
+          "18": "9863",
+          "19": "536",
+          "20": "27760"
+        },
+        "userCount": 165774,
+        "favoritesCount": 4684,
+        "startDate": "2002-10-03",
+        "endDate": "2007-02-08",
+        "nextRelease": null,
+        "popularityRank": 41,
+        "ratingRank": 800,
+        "ageRating": "PG",
+        "ageRatingGuide": "Teens 13 or older",
+        "subtype": "TV",
+        "status": "finished",
+        "tba": null,
+        "posterImage": {
+          "tiny": "https://media.kitsu.app/anime/11/poster_image/tiny-47d378c5faf258491fd1a2025fc1507c.jpeg",
+          "large": "https://media.kitsu.app/anime/11/poster_image/large-5e901605066f7f2727f49d01859bbfe4.jpeg",
+          "small": "https://media.kitsu.app/anime/11/poster_image/small-db4debb693482e09f5d9615864b99b3d.jpeg",
+          "medium": "https://media.kitsu.app/anime/11/poster_image/medium-410cee5d114a5f70d69e795755e8348a.jpeg",
+          "original": "https://media.kitsu.app/anime/11/poster_image/4512d403727b2a19a6eb7e7a959be0c3.jpg",
+          "meta": {
+            "dimensions": {
+              "tiny": {
+                "width": 110,
+                "height": 156
+              },
+              "large": {
+                "width": 550,
+                "height": 780
+              },
+              "small": {
+                "width": 284,
+                "height": 402
+              },
+              "medium": {
+                "width": 390,
+                "height": 554
+              }
+            }
+          }
+        },
+        "coverImage": {
+          "tiny": "https://media.kitsu.app/anime/cover_images/11/tiny.jpg",
+          "large": "https://media.kitsu.app/anime/cover_images/11/large.jpg",
+          "small": "https://media.kitsu.app/anime/cover_images/11/small.jpg",
+          "original": "https://media.kitsu.app/anime/cover_images/11/original.jpg",
+          "meta": {
+            "dimensions": {
+              "tiny": {
+                "width": 840,
+                "height": 200
+              },
+              "large": {
+                "width": 3360,
+                "height": 800
+              },
+              "small": {
+                "width": 1680,
+                "height": 400
+              }
+            }
+          }
+        },
+        "episodeCount": 220,
+        "episodeLength": 23,
+        "totalLength": 5060,
+        "youtubeVideoId": "j2hiC9BmJlQ",
+        "showType": "TV",
+        "nsfw": false
+      },
+      "relationships": {
+        "genres": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/genres",
+            "related": "https://kitsu.io/api/edge/anime/11/genres"
+          }
+        },
+        "categories": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/categories",
+            "related": "https://kitsu.io/api/edge/anime/11/categories"
+          }
+        },
+        "castings": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/castings",
+            "related": "https://kitsu.io/api/edge/anime/11/castings"
+          }
+        },
+        "installments": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/installments",
+            "related": "https://kitsu.io/api/edge/anime/11/installments"
+          }
+        },
+        "mappings": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/mappings",
+            "related": "https://kitsu.io/api/edge/anime/11/mappings"
+          }
+        },
+        "reviews": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/reviews",
+            "related": "https://kitsu.io/api/edge/anime/11/reviews"
+          }
+        },
+        "mediaRelationships": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/media-relationships",
+            "related": "https://kitsu.io/api/edge/anime/11/media-relationships"
+          }
+        },
+        "characters": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/characters",
+            "related": "https://kitsu.io/api/edge/anime/11/characters"
+          }
+        },
+        "staff": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/staff",
+            "related": "https://kitsu.io/api/edge/anime/11/staff"
+          }
+        },
+        "productions": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/productions",
+            "related": "https://kitsu.io/api/edge/anime/11/productions"
+          }
+        },
+        "quotes": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/quotes",
+            "related": "https://kitsu.io/api/edge/anime/11/quotes"
+          }
+        },
+        "episodes": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/episodes",
+            "related": "https://kitsu.io/api/edge/anime/11/episodes"
+          }
+        },
+        "streamingLinks": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/streaming-links",
+            "related": "https://kitsu.io/api/edge/anime/11/streaming-links"
+          }
+        },
+        "animeProductions": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/anime-productions",
+            "related": "https://kitsu.io/api/edge/anime/11/anime-productions"
+          }
+        },
+        "animeCharacters": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/anime-characters",
+            "related": "https://kitsu.io/api/edge/anime/11/anime-characters"
+          }
+        },
+        "animeStaff": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/anime/11/relationships/anime-staff",
+            "related": "https://kitsu.io/api/edge/anime/11/anime-staff"
+          }
+        }
+      }
+    }
+  ],
+  "meta": {
+    "count": 1
+  },
+  "links": {
+    "first": "https://kitsu.io/api/edge/mappings?filter%5BexternalId%5D=20&filter%5BexternalSite%5D=anilist%2Fanime&include=item&page%5Blimit%5D=10&page%5Boffset%5D=0",
+    "last": "https://kitsu.io/api/edge/mappings?filter%5BexternalId%5D=20&filter%5BexternalSite%5D=anilist%2Fanime&include=item&page%5Blimit%5D=10&page%5Boffset%5D=0"
+  }
+}
