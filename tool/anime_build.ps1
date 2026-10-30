@@ -34,8 +34,8 @@ function Run-Gates([string]$check) {
   $fail = @()
   $a = flutter analyze 2>&1 | Out-String
   if ($a -notmatch 'No issues found!') { $fail += "flutter analyze:`n$($a.Trim())" }
-  $t = flutter test 2>&1 | Out-String
-  if ($LASTEXITCODE -ne 0) { $fail += "flutter test (last 80 lines):`n" + (($t -split "`n") | Select-Object -Last 80 | Out-String) }
+  $t = flutter test -r failures-only 2>&1 | Out-String
+  if ($LASTEXITCODE -ne 0) { $fail += "flutter test failures:`n" + (($t -split "`n") | Select-Object -Last 300 | Out-String) }
   else { Log ("  tests: " + (($t -split "`n") | Where-Object { $_ -match 'All tests passed|\+\d+' } | Select-Object -Last 1)) }
   $now = GateHits
   foreach ($k in $now.Keys) {
@@ -70,8 +70,8 @@ foreach ($s in $steps) {
   if ($n -lt $From) { continue }
   if ($n -gt $To) { Log "STOP after -To $To"; exit 0 }
   $body = Get-Content $s.FullName -Raw
-  $files = if ($body -match '(?m)^files:\s*(.+)$') { $Matches[1].Trim() -split '\s+' } else { @() }
-  $check = if ($body -match '(?m)^check:\s*(.+)$') { $Matches[1].Trim() } else { '' }
+  $files = if ($body -match '(?m)^files:[ \t]*(\S.*)$') { $Matches[1].Trim() -split '\s+' } else { @() }
+  $check = if ($body -match '(?m)^check:[ \t]*(\S.*)$') { $Matches[1].Trim() } else { '' }
   Log "STEP $($s.BaseName) start"
   $packed = python "$skill/codex_files.py" pack . design/RULES.md CLAUDE.md @($files | Where-Object { Test-Path $_ }) | Out-String
   $prompt = "$common`n`n# STEP`n$body"
