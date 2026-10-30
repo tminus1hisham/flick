@@ -13,9 +13,9 @@ This file is the shared source for continuing the work in a new session. Read it
 - `PlayerScreen` can't be pumped in `flutter test` because media_kit needs native libmpv. Put player logic in pure helpers or getters and test those (see test/player_test.dart).
 
 ## Branches and history
-- `main`: the UI revamp ("Afterglow", REVAMP_PLAN.md).
-- `discover`: everything below; not yet merged to main. Head 653e238 + this file. Merge to main only when the user asks.
-- `guest`: branched from `discover`; optional sign-in (guest mode). See design/guest.md. Not merged.
+- `main`: fast-forwarded to `guest` on 2026-10-30 at the user's request, so it holds the revamp, `discover`, `guest` and the buffering work. No git remote is configured, so nothing has been pushed.
+- `discover`, `guest`: merged into main (see above). `guest` is still the working branch of other sessions.
+- `anime`: worktree `../stremio-anime`, from main. Anime in Discover, built by Codex through `tool/anime_build.ps1` (plan: `~/.claude/plans/with-codex-debate-between-glimmering-koala.md`; log and status in `design/anime/`). Not merged.
 - Untracked and deliberately not committed: the 3 large mockups `design/mockups/{d3-watchhub,d4-sources-bundled,player-subtitles}.png` (~1.5 MB each), and the test torrent `ED0AFBC1….torrent` (Rick and Morty S04E02, used as a hash in tests).
 
 ## Architecture
