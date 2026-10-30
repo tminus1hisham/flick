@@ -105,6 +105,7 @@ class _BufferingPanelState extends State<BufferingPanel> {
                         child: _BufferRail(
                           progress: view.progress,
                           offline: view.phase == BufferPhase.offline,
+                          enter: enter,
                         ),
                       ),
                       IgnorePointer(
@@ -144,7 +145,12 @@ class _BufferingPanelState extends State<BufferingPanel> {
                                           type: MaterialType.transparency,
                                           child: OutlinedButton(
                                             onPressed: widget.onSwitch,
-                                            child: const Text('Try another source'),
+                                            child: Text(
+                                              'Try another source',
+                                              style: FlickText.metadata.copyWith(
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -261,10 +267,15 @@ class _PhaseText extends StatelessWidget {
 }
 
 class _BufferRail extends StatelessWidget {
-  const _BufferRail({required this.progress, required this.offline});
+  const _BufferRail({
+    required this.progress,
+    required this.offline,
+    required this.enter,
+  });
 
   final double? progress;
   final bool offline;
+  final Duration enter;
 
   @override
   Widget build(BuildContext context) {
@@ -275,30 +286,39 @@ class _BufferRail extends StatelessWidget {
         opacity: offline ? 0.4 : 1,
         child: SizedBox(
           height: FlickTokens.grid,
-          child: Row(
-            children: [
-              for (var index = 0; index < 6; index++) ...[
-                if (index > 0) const SizedBox(width: FlickTokens.grid),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(FlickTokens.grid),
-                    child: ColoredBox(
-                      color: value == null ? FlickTokens.outline : FlickTokens.surface2,
-                      child: value == null
-                          ? const SizedBox.expand()
-                          : Align(
-                              alignment: Alignment.centerLeft,
-                              child: FractionallySizedBox(
-                                widthFactor: (value * 6 - index).clamp(0.0, 1.0).toDouble(),
-                                heightFactor: 1,
-                                child: const ColoredBox(color: FlickTokens.progress),
-                              ),
-                            ),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(end: value ?? 0),
+            duration: enter,
+            curve: FlickTokens.curveIn,
+            builder: (context, animatedValue, child) {
+              return Row(
+                children: [
+                  for (var index = 0; index < 6; index++) ...[
+                    if (index > 0) const SizedBox(width: FlickTokens.grid),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(FlickTokens.grid),
+                        child: ColoredBox(
+                          color: FlickTokens.outline,
+                          child: value == null
+                              ? const SizedBox.expand()
+                              : Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: FractionallySizedBox(
+                                    widthFactor: (animatedValue * 6 - index)
+                                        .clamp(0.0, 1.0)
+                                        .toDouble(),
+                                    heightFactor: 1,
+                                    child: const ColoredBox(color: FlickTokens.progress),
+                                  ),
+                                ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
-            ],
+                  ],
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -313,10 +333,7 @@ class _BufferStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final numberStyle = FlickText.metadata.copyWith(
-      fontFeatures: const [FontFeature.tabularFigures()],
-      color: FlickTokens.textSecondary,
-    );
+    final numberStyle = streamMonoStyle.copyWith(color: FlickTokens.textSecondary);
     final rate = stats.rate;
     final formattedRate = rate == null ? null : formatRate(rate);
     final separator = formattedRate?.indexOf(' ') ?? -1;
