@@ -71,6 +71,10 @@ class TorrentEngine {
 
   /// Stops playback and keeps the torrent available for 60 seconds.
   Future<void> release(int id) => _ch.invokeMethod('release', {'id': id});
+
+  /// The playing file's average bytes per second, which spaces the piece deadlines ahead of the player.
+  Future<void> bitrate(int id, int bytesPerSec) =>
+      _ch.invokeMethod('bitrate', {'id': id, 'bytesPerSec': bytesPerSec});
 }
 
 Future<Directory> _root() async =>

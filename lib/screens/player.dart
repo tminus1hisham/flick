@@ -182,7 +182,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String? _error;
   bool _retrying = false;
   bool _panel = false, _languages = false, _loading = false, _fetched = false;
-  bool _manual = false, _autoPicked = false;
+  bool _manual = false, _autoPicked = false, _bitrateSent = false;
   String? _catalogueError, _subtitleError, _notice, _language, _pending;
   String _search = '';
   final _languageSearch = TextEditingController();
@@ -247,6 +247,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ..add(
         _player.stream.playing.listen((playing) {
           if (!playing && _lastPlaybackError != null) _checkStopped();
+        }),
+      )
+      ..add(
+        _player.stream.duration.listen((d) {
+          final t = widget.torrent, size = widget.size;
+          if (_bitrateSent || t == null || size == null || d.inSeconds <= 0) {
+            return;
+          }
+          _bitrateSent = true;
+          // Best-effort: without it the engine assumes 1 MiB/s.
+          t.engine.bitrate(t.id, size ~/ d.inSeconds).catchError((_) {});
         }),
       )
       ..add(_player.stream.buffering.listen(_onBuffering))

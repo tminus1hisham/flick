@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -34,10 +35,31 @@ class Entry(val th: TorrentHandle, val dir: String) {
     var activeFile: Int? = null
     val verified = BitSet()
     val conns = mutableSetOf<Conn>()
+    /** Piece of the latest non-probe read, the player's bytes/s, and the absolute ms each deadline was set for. */
+    var reader = 0
+    var rate = DEFAULT_RATE
+    val due = mutableMapOf<Int, Long>()
 
     fun closeConns() {
         conns.forEach(Conn::cancel)
         conns.clear()
+    }
+
+    /** Forgets had and passed deadlines, then sets new ones ahead of [reader]. Under the lock, alive and streaming. */
+    fun reschedule() {
+        val ti = th.torrentFile() ?: return
+        val file = activeFile ?: return
+        val last = pieceRange(ti.files().fileOffset(file), ti.files().fileSize(file), ti.pieceLength()).last
+        val now = System.currentTimeMillis()
+        due.keys.removeAll { it < reader || th.havePiece(it) }
+        for ((p, ms) in schedule(reader, last, ti.pieceLength(), rate, now, th::havePiece, due)) {
+            th.setPieceDeadline(p, ms)
+            due[p] = now + ms
+        }
+    }
+
+    companion object {
+        const val DEFAULT_RATE = 1L shl 20
     }
 }
 
@@ -101,6 +123,15 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
             // The channel cannot encode Unit, so these answer null explicitly.
             "stopStream" -> { entries[id]?.let(::stop); null }
             "release" -> { release(id!!); null }
+            "bitrate" -> {
+                entries[id]?.let { e ->
+                    synchronized(e) {
+                        e.rate = maxOf(call.argument<Number>("bytesPerSec")!!.toLong(), 256L shl 10)
+                        if (e.alive && e.activeFile != null) e.reschedule()
+                    }
+                }
+                null
+            }
             "remove" -> { remove(id!!); null }
             else -> throw IllegalArgumentException("unknown method ${call.method}")
         }
@@ -159,7 +190,11 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
 
     private fun stream(e: Entry, id: Int, file: Int): String {
         // Server first: if it cannot start, nothing has been activated yet.
-        val s = server ?: StreamServer { entries[it] }.also { server = it }
+        val s = server ?: StreamServer { entries[it] }.also {
+            server = it
+            // Keeps deadlines ahead of each reader between requests. Shut down with timer on detach.
+            timer.scheduleWithFixedDelay({ ctl.execute(::tick) }, 1, 1, TimeUnit.SECONDS)
+        }
         try {
             synchronized(e) {
                 check(e.alive) { "torrent was removed" }
@@ -177,6 +212,17 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
                 val wanted = pieceRange(fs.fileOffset(file), fs.fileSize(file), ti.pieceLength())
                 e.th.prioritizePieces(Array(ti.numPieces()) { if (it in wanted) Priority.DEFAULT else Priority.IGNORE })
                 e.th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+                // The window covers the head mpv reads first; the last piece holds MKV cues or an MP4 moov,
+                // which mpv probes at startup. The player reports the real bitrate once it knows the duration.
+                e.th.clearPieceDeadlines()
+                e.due.clear()
+                e.rate = Entry.DEFAULT_RATE
+                e.reader = wanted.first
+                e.reschedule()
+                if (!e.th.havePiece(wanted.last)) {
+                    e.th.setPieceDeadline(wanted.last, 0)
+                    e.due[wanted.last] = System.currentTimeMillis()
+                }
             }
         } catch (t: Throwable) {
             stop(e) // roll back a partial activation so nothing keeps downloading behind the error
@@ -191,7 +237,18 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
         e.closeConns()
         if (e.alive) {
             e.th.clearPieceDeadlines()
+            e.due.clear()
             e.th.torrentFile()?.let { ti -> e.th.prioritizePieces(Array(ti.numPieces()) { Priority.IGNORE }) }
+        }
+    }
+
+    private fun tick() {
+        for (e in entries.values) {
+            try {
+                synchronized(e) { if (e.alive && e.activeFile != null) e.reschedule() }
+            } catch (t: Exception) {
+                Log.w("torrent", "deadline tick failed", t) // an uncaught throw on ctl would kill the app
+            }
         }
     }
 
