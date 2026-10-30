@@ -261,7 +261,10 @@ class _TorrentScreenState extends State<TorrentScreen> {
       // Up Next: hand the player's answer on to play(), from the file list too. The isCurrent check keeps a late
       // answer from popping a route pushed above this one.
       if (result != null && mounted && id == _id && ModalRoute.of(context)?.isCurrent == true) {
-        Navigator.pop(context, result);
+        // Release before popping: the next episode's add (same season pack) must come after it, or the release
+        // from dispose would remove the torrent under it 60 s later.
+        await _teardown();
+        if (mounted) Navigator.pop(context, result);
       } else if (automatic && mounted && id == _id) {
         Navigator.pop(context);
       }

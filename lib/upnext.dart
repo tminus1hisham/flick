@@ -48,7 +48,8 @@ UpNextView upNextView({required Duration position, required Duration duration, D
     required bool dismissed, required bool forced, required bool autoplay, required Duration counted,
     required bool resolving}) {
   final at = upNextAt(duration, outro: outro);
-  final visible = forced || (!dismissed && at != null && position >= at);
+  // A commit in flight stays on screen ("Finding next episode…") even after a seek back.
+  final visible = forced || resolving || (!dismissed && at != null && position >= at);
   final left = countdownLength - counted;
   return (
     visible: visible,

@@ -99,15 +99,19 @@ Future<NextUp?>? _nextUp(AddonStream s, Playback p, Addon? addon) {
   final NextUp up = (
     episode: (label: episodeLabel(video.season, video.episode), title: video.title, thumbnail: video.thumbnail),
     outro: null,
-    resolve: () async {
-      if (addon != null && group != null) {
-        try {
-          final match = bingeMatch(await addons.streams(addon, meta.type, video.id), group);
-          if (match != null) return NextStream(match, episodePlayback(meta, video), addon);
-        } catch (_) {}
-      }
-      return PickStream(meta, video);
-    },
+    resolve: () => resolveNext(addon, meta, video, group),
   );
   return Future.value(up);
+}
+
+/// The stremio-core rule: the same addon's stream in the same binge group plays on; no addon, no group, no match
+/// or a failed fetch means the user picks a stream. Never throws.
+Future<AddonNext> resolveNext(Addon? addon, Meta meta, Video video, String? group) async {
+  if (addon != null && group != null) {
+    try {
+      final match = bingeMatch(await addons.streams(addon, meta.type, video.id), group);
+      if (match != null) return NextStream(match, episodePlayback(meta, video), addon);
+    } catch (_) {}
+  }
+  return PickStream(meta, video);
 }

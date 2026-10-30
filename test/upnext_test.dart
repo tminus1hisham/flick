@@ -1,4 +1,6 @@
 import 'package:flick/addons.dart';
+import 'package:flick/playback.dart';
+import 'package:flick/state.dart';
 import 'package:flick/upnext.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,9 +26,22 @@ AddonStream _s(String name, String? group) => (
 const _min = Duration(minutes: 1), _sec = Duration(seconds: 1);
 
 UpNextView _view({Duration position = Duration.zero, bool dismissed = false, bool forced = false,
-        bool autoplay = true, Duration counted = Duration.zero}) =>
+        bool autoplay = true, Duration counted = Duration.zero, bool resolving = false}) =>
     upNextView(position: position, duration: _min * 40, dismissed: dismissed, forced: forced, autoplay: autoplay,
-        counted: counted, resolving: false);
+        counted: counted, resolving: resolving);
+
+/// Answers streams() from [result]: a list, or anything else thrown.
+class _Addons extends Addons {
+  _Addons(this.result);
+  final Object result;
+  @override
+  Future<List<AddonStream>> streams(Addon a, String type, String videoId) async =>
+      switch (result) { final List<AddonStream> l => l, final e => throw e };
+}
+
+final _addon = Addon({'id': 'org.test', 'name': 'Test', 'resources': const []}, 'https://example.invalid');
+final Meta _series = (id: 'tt1', type: 'series', name: 'Show', poster: null, background: null, logo: null,
+    description: null, releaseInfo: null, runtime: null, imdbRating: null, genres: const [], videos: [_v(1, 2)]);
 
 void main() {
   group('nextVideo', () {
@@ -86,6 +101,31 @@ void main() {
       expect(over.countdown, 1.0);
       expect(over.secondsLeft, 0);
       expect(_view(position: at, counted: const Duration(milliseconds: 3500)).secondsLeft, 7);
+    });
+    test('a commit in flight stays visible after a seek back', () {
+      expect(_view(position: at - _min, resolving: true).visible, isTrue);
+    });
+  });
+
+  group('resolveNext', () {
+    final video = _v(1, 2);
+    Future<AddonNext> resolve(Object result, {Addon? addon, String? group = 'g'}) {
+      addons = _Addons(result);
+      return resolveNext(addon ?? _addon, _series, video, group);
+    }
+
+    test('the same binge group plays on, with the next episode playback', () async {
+      final r = await resolve([_s('other', 'h'), _s('same', 'g')]);
+      expect(r, isA<NextStream>());
+      r as NextStream;
+      expect(r.stream.name, 'same');
+      expect(r.addon, same(_addon));
+      expect(r.playback.videoId, 'tt1:1:2');
+    });
+    test('no group, no match or a failed fetch: pick a stream', () async {
+      expect(await resolve([_s('same', 'g')], group: null), isA<PickStream>());
+      expect(await resolve([_s('other', 'h')]), isA<PickStream>());
+      expect(await resolve(AddonException(AddonError.unreachable)), isA<PickStream>());
     });
   });
   test('countdownEligible: every condition can hold the countdown', () {

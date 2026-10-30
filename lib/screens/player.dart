@@ -227,7 +227,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _dismissed = false, _forced = false, _resolving = false;
   bool _committed = false, _completed = false, _endedEarly = false;
   int _token = 0;
+  // _open() reports position 0 until mpv seeks to its start: not a seek back.
+  bool _reopening = false;
   final _video = GlobalKey<VideoState>();
+
+  // Up Next pushes the next player before this one is disposed: only the last
+  // one out restores the system bars and rotation.
+  static int _live = 0;
 
   JellyfinClient? get _client =>
       widget.report && session.online ? session.client : null;
@@ -235,6 +241,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _live++;
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -244,6 +251,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ..add(
         _player.stream.position.listen((p) {
           // Before the early return: a seek to the start must reset Up Next.
+          if (p > Duration.zero) _reopening = false;
           _upNext(p);
           if (p <= Duration.zero) return;
           _pos = p;
@@ -328,12 +336,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (next == null || !mounted) return;
     final p = position ?? _player.state.position;
     final at = upNextAt(_player.state.duration, outro: next.outro);
-    if (at != null && p < at) {
+    if (at != null && p < at && !_reopening) {
       _counted = Duration.zero;
       _dismissed = false;
     }
     final view = _upNextView(next, p);
     if (view.visible) _prefetch(next);
+    if (view.visible && _shown?.visible != true) {
+      // media_kit's fullscreen is a route above this one: leave it so the
+      // card (and its stop controls) can be seen while it counts.
+      if (_video.currentState?.isFullscreen() == true) {
+        _video.currentState?.exitFullscreen();
+      }
+    } else if (!view.visible && _shown?.visible == true) {
+      // The card's controls are gone: hand focus back to the player.
+      _entryFocus.requestFocus();
+    }
     if (view.visible && session.autoplayNext && !_committed) {
       _countdown ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     } else {
@@ -844,6 +862,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _open(Duration start) {
+    _reopening = start > Duration.zero;
     if (widget.addonPlayback) {
       _openedAt = start;
       _beginEpisode(opening: true);
@@ -925,8 +944,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       s.cancel();
     }
     _player.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([]);
+    if (--_live == 0) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations([]);
+    }
     super.dispose();
   }
 
