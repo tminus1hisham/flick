@@ -73,7 +73,11 @@ void main() {
   testWidgets('fits 640x360 at 1.3x text, also with reduced motion', (tester) async {
     await pump(tester, view(BufferPhase.offline, offer: true), textScale: 1.3, reduce: true);
     expect(tester.takeException(), isNull);
-    final panel = tester.getRect(find.byType(BufferingPanel));
-    expect(panel.height, lessThanOrEqualTo(360));
+    // The card itself, not BufferingPanel (which fills the screen to place the card).
+    final card = tester.getRect(find.descendant(
+        of: find.byType(BufferingPanel), matching: find.byType(DecoratedBox)).first);
+    expect(card.top, greaterThanOrEqualTo(0));
+    expect(card.bottom, lessThanOrEqualTo(360));
+    expect(card.width, 320);
   });
 }

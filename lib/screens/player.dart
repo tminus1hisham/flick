@@ -186,6 +186,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // frame or the error screen (_opening), or from a stall's start to its end.
   DateTime? _since;
   bool _opening = false;
+  // Where the current Starting episode opened: mpv can report it before the first frame.
+  Duration _openedAt = Duration.zero;
   double? _lastProgress;
   ({int peers, int rate})? _status;
   DateTime? _statusAt;
@@ -235,7 +237,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _lastPlaybackError = null;
             if (_error != null && mounted) setState(() => _error = null);
           }
-          if (_opening) {
+          if (_opening && p != _openedAt) {
             _endEpisode();
             if (_player.state.buffering) _beginEpisode(opening: false);
           }
@@ -674,7 +676,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _open(Duration start) {
-    if (widget.addonPlayback) _beginEpisode(opening: true);
+    if (widget.addonPlayback) {
+      _openedAt = start;
+      _beginEpisode(opening: true);
+    }
     return _player.open(
       Media(
         widget.source ?? session.client!.playUrl(widget.item, _quality),
@@ -866,11 +871,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               if (widget.addonPlayback && _error == null)
                 Positioned.fill(
-                  child: Center(
-                    child: BufferingPanel(
-                      view: _bufferView,
-                      onSwitch: () => Navigator.pop(context),
-                    ),
+                  child: BufferingPanel(
+                    view: _bufferView,
+                    onSwitch: () => Navigator.pop(context),
                   ),
                 ),
               if (_error != null)
