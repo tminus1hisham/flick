@@ -16,6 +16,7 @@ import '../state.dart';
 import '../theme.dart';
 import '../torrent.dart';
 import '../widgets.dart';
+import 'buffering.dart';
 
 typedef _Caption = ({
   SubtitleTrack track,
@@ -181,6 +182,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _progress;
   String? _error;
   bool _retrying = false;
+  // Buffering panel (addon playback). An episode runs from open() to the first
+  // frame or the error screen (_opening), or from a stall's start to its end.
+  DateTime? _since;
+  bool _opening = false;
+  // Where the current Starting episode opened: mpv can report it before the first frame.
+  Duration _openedAt = Duration.zero;
+  double? _lastProgress;
+  ({int peers, int rate})? _status;
+  DateTime? _statusAt;
+  bool _online = true;
+  Timer? _ticker, _reveal;
   bool _panel = false, _languages = false, _loading = false, _fetched = false;
   bool _manual = false, _autoPicked = false, _bitrateSent = false;
   String? _catalogueError, _subtitleError, _notice, _language, _pending;
@@ -224,6 +236,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _started = true;
             _lastPlaybackError = null;
             if (_error != null && mounted) setState(() => _error = null);
+          }
+          if (_opening && p != _openedAt) {
+            _endEpisode();
+            if (_player.state.buffering) _beginEpisode(opening: false);
           }
           _autoPick();
         }),
@@ -280,7 +296,85 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _error = 'playback';
         _panel = false;
       });
+      _endEpisode();
     }
+  }
+
+  /// Starts a buffering episode: Starting when [opening], else a stall.
+  void _beginEpisode({required bool opening}) {
+    _endTimers();
+    _opening = opening;
+    _since = DateTime.now();
+    _lastProgress = null;
+    _status = null;
+    _statusAt = null;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => _poll());
+    // A stall's panel appears at 600 ms, not at the next tick.
+    if (!opening) {
+      _reveal = Timer(const Duration(milliseconds: 600), () {
+        if (mounted) setState(() {});
+      });
+    }
+    _poll();
+  }
+
+  void _endEpisode() {
+    _endTimers();
+    _opening = false;
+    _since = null;
+    if (mounted) setState(() {});
+  }
+
+  void _endTimers() {
+    _ticker?.cancel();
+    _reveal?.cancel();
+  }
+
+  /// Advances the episode's wait and refreshes the torrent status and network state.
+  void _poll() {
+    if (!mounted || _since == null) return;
+    setState(() {});
+    networkOnline().then((on) {
+      if (mounted) setState(() => _online = on);
+    });
+    final t = widget.torrent;
+    t?.engine.status(t.id).then((s) {
+      if (!mounted || s == null) return;
+      setState(() {
+        _status = (peers: s.peers, rate: s.rate);
+        _statusAt = DateTime.now();
+      });
+    }, onError: (Object e) => debugPrint('torrent status: $e'));
+  }
+
+  BufferView get _bufferView {
+    final since = _since, status = _status, statusAt = _statusAt;
+    final now = DateTime.now();
+    final BufferView view = since == null
+        ? (
+            phase: BufferPhase.hidden,
+            progress: null,
+            stats: null,
+            offerSwitch: false,
+          )
+        : bufferView(
+            started: !_opening,
+            buffering: _player.state.buffering,
+            waited: now.difference(since),
+            percent: _player.state.bufferingPercentage,
+            lastProgress: _lastProgress,
+            online: _online,
+            repeatedStalls: _pauseWait.repeated,
+            torrent: status == null || statusAt == null
+                ? null
+                : (
+                    peers: status.peers,
+                    rate: status.rate,
+                    age: now.difference(statusAt),
+                  ),
+          );
+    _lastProgress = view.progress;
+    return view;
   }
 
   Future<void> _checkStopped() async {
@@ -592,13 +686,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  Future<void> _open(Duration start) => _player.open(
-    Media(
-      widget.source ?? session.client!.playUrl(widget.item, _quality),
-      start: start,
-      httpHeaders: widget.headers,
-    ),
-  );
+  Future<void> _open(Duration start) {
+    if (widget.addonPlayback) {
+      _openedAt = start;
+      _beginEpisode(opening: true);
+    }
+    return _player.open(
+      Media(
+        widget.source ?? session.client!.playUrl(widget.item, _quality),
+        start: start,
+        httpHeaders: widget.headers,
+      ),
+    );
+  }
 
   void _report(Future<void> Function(JellyfinClient) call) {
     final c = _client;
@@ -611,6 +711,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       (_player.platform as NativePlayer)
           .setProperty('cache-pause-wait', '${_pauseWait.seconds}')
           .catchError((Object e) => debugPrint('cache-pause-wait: $e'));
+    }
+    if (widget.addonPlayback && _started && !_opening) {
+      if (buffering && _since == null) _beginEpisode(opening: false);
+      if (!buffering && _since != null) _endEpisode();
     }
     if (!buffering) {
       // The first buffer-complete after real playback position ends the initial fill.
@@ -657,6 +761,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final pos = _pos;
     _report((c) => c.reportStopped(widget.item.id, pos));
     _progress?.cancel();
+    _endTimers();
     for (final s in _subs) {
       s.cancel();
     }
@@ -743,6 +848,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       seekBarBufferColor: Colors.white.withValues(alpha: 0.45),
       seekBarPositionColor: FlickTokens.accent,
       seekBarThumbColor: FlickTokens.accent,
+      // Addon playback shows BufferingPanel instead.
+      bufferingIndicatorBuilder: widget.addonPlayback
+          ? (_) => const SizedBox.shrink()
+          : null,
     );
     return PopScope(
       canPop: !_panel,
@@ -771,6 +880,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Video(controller: _controller),
                 ),
               ),
+              if (widget.addonPlayback && _error == null)
+                Positioned.fill(
+                  child: ExcludeFocus(
+                    excluding: _panel,
+                    child: ExcludeSemantics(
+                      excluding: _panel,
+                      child: BufferingPanel(
+                        view: _bufferView,
+                        onSwitch: () => Navigator.pop(context),
+                      ),
+                    ),
+                  ),
+                ),
               if (_error != null)
                 Positioned.fill(
                   child: ColoredBox(

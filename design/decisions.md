@@ -72,3 +72,7 @@ Codex spec review: REVISE, REVISE, APPROVED (round 3).
 - kept (Codex): reserved 48 dp action slot, so "Try another source" appearing never recentres the panel.
 - changed (Codex): opaque `surface1` panel instead of translucent; offline hides stats instead of showing a fake 0.0 rate; progress never forced to full on resume.
 - ponytail: Jellyfin playback keeps media_kit's spinner and its 1.5 Mbps prompt; the overlay is addon-only.
+- critic round 1 FAIL (space 6): reserved action slot cut → card above centre (`Alignment(0, -0.3)`) growing with `AnimatedSize`; Codex's fixed-top pin overflowed at 1.3× text, so the plain Align stays (the card's top moves ~22 dp when the button appears, animated).
+- critic round 2 FAIL (craft 7); user chose fix + a 3rd round. Codex (UI lead) chose `streamMonoStyle` for peers/speed numbers over Manrope tabular figures, for consistency with the Torrent screen's telemetry; RobotoMono's wide decimal ("1.8") is accepted as the mono voice, as on the Torrent screen.
+- button height is a 48 dp minimum, not fixed: a fixed height clipped the label's descenders at 1.3× text.
+- critic round 3 PASS (distinct 8, hierarchy 9, motion 8, craft 8, states 9, theme 9, a11y 8, space 8). Fixed after: rail dims to 40 % with a fade; the panel is out of focus/semantics while the tracks panel is open. Left open (follow-up): the rail switches from filled to the unknown rail without a fade if progress resets to null after offline; mono decimal spacing.

@@ -26,12 +26,16 @@ class PauseWait {
   /// Seconds of cache mpv waits for after a stall.
   final int initial, escalated;
   final _stalls = StallDetector(threshold: 2, window: const Duration(seconds: 60));
-  bool _escalated = false;
+  final _genuine = StallDetector();
+  bool _escalated = false, _repeated = false;
   Duration? _position; // null until playback has started
   DateTime? _jump, _since;
   bool _seek = false;
 
   int get seconds => _escalated ? escalated : initial;
+
+  /// True once 3 genuine stalls have fallen inside 2 minutes; stays true.
+  bool get repeated => _repeated;
 
   /// Records a position report; a jump of more than 5 s is a seek.
   void position(Duration p, DateTime t) {
@@ -53,8 +57,49 @@ class PauseWait {
     }
     final since = _since;
     _since = null;
-    if (since == null || _seek || _escalated) return false;
+    if (since == null || _seek) return false;
     if (t.difference(since) <= const Duration(seconds: 2)) return false;
+    if (_genuine.record(since)) _repeated = true;
+    if (_escalated) return false;
     return _escalated = _stalls.record(since);
   }
+}
+
+enum BufferPhase { hidden, starting, stalled, offline }
+
+typedef BufferView = ({
+  BufferPhase phase,
+  double? progress, // 0..1 toward resuming in this episode; null = unknown
+  ({int peers, int? rate})? stats, // torrent only; null = hide the line; rate null = not fresh
+  bool offerSwitch, // show "Try another source"
+});
+
+/// What the addon player's buffering panel shows (design/buffering.md, Contract).
+BufferView bufferView({
+  required bool started,
+  required bool buffering,
+  required Duration waited,
+  required double percent,
+  required double? lastProgress,
+  required bool online,
+  required bool repeatedStalls,
+  ({int peers, int rate, Duration age})? torrent,
+}) {
+  final visible = !started || (buffering && waited >= const Duration(milliseconds: 600));
+  final phase = !visible
+      ? BufferPhase.hidden
+      : !online
+          ? BufferPhase.offline
+          : started
+              ? BufferPhase.stalled
+              : BufferPhase.starting;
+  final offline = phase == BufferPhase.offline;
+  return (
+    phase: phase,
+    progress: offline ? lastProgress : percent > 0 ? (percent / 100).clamp(0.0, 1.0) : null,
+    stats: torrent == null || offline
+        ? null
+        : (peers: torrent.peers, rate: torrent.age > const Duration(seconds: 2) ? null : torrent.rate),
+    offerSwitch: visible && (waited >= const Duration(seconds: 15) || repeatedStalls),
+  );
 }
