@@ -69,6 +69,14 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('a failed thumbnail drops the image and its gap', (tester) async {
+    await _pump(tester, _card());
+    await tester.pump(); // the post-frame error report
+    expect(find.byType(Image), findsNothing);
+    final card = tester.getRect(find.byType(UpNextCard));
+    expect(tester.getTopLeft(find.text('S1 E3')).dx, card.left + FlickTokens.railGap);
+  });
+
   testWidgets('a hidden card takes no taps', (tester) async {
     var taps = 0;
     await _pump(tester, _card(view: _view(visible: false), onNext: () => taps++));

@@ -49,9 +49,12 @@ String? timeLeft(Item i) {
 
 /// Network artwork that fades in, falling back to [fallback] and then to a quiet placeholder.
 class NetImage extends StatelessWidget {
-  const NetImage(this.url, {this.fallback, this.icon = true, super.key});
+  const NetImage(this.url, {this.fallback, this.icon = true, this.onError, super.key});
   final String url;
   final String? fallback;
+
+  /// Told after the image (and any [fallback]) failed, for callers that drop the image instead of showing the tile.
+  final VoidCallback? onError;
 
   /// Whether the placeholder shows a media icon; off where text sits on the artwork.
   final bool icon;
@@ -68,17 +71,19 @@ class NetImage extends StatelessWidget {
                 curve: Curves.easeOutCubic,
                 child: child,
               ),
-        errorBuilder: (context, _, _) => fallback != null
-            ? NetImage(fallback!, icon: icon)
-            : ColoredBox(
-                color: Theme.of(context).colorScheme.surfaceContainerHigh,
-                child: icon
-                    ? Center(
-                        child: Icon(Icons.movie_outlined,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      )
-                    : null,
-              ),
+        errorBuilder: (context, _, _) {
+          if (fallback != null) return NetImage(fallback!, icon: icon, onError: onError);
+          final told = onError;
+          if (told != null) WidgetsBinding.instance.addPostFrameCallback((_) => told());
+          return ColoredBox(
+            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+            child: icon
+                ? Center(
+                    child: Icon(Icons.movie_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  )
+                : null,
+          );
+        },
       );
 }
 

@@ -2,6 +2,7 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 
 import '../jellyfin.dart';
+import '../kit/route.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -14,7 +15,7 @@ bool canDownload(TaskStatus? s) =>
 
 /// Plays [item], then each next episode the player's Up Next pops with.
 Future<void> play(BuildContext context, Item item) async {
-  while (true) {
+  for (var moved = false;; moved = true) {
     final local = await downloads.localPath(item.id);
     // A guest's download whose file is gone: there is no server to stream it from instead.
     if (local == null && session.client == null) return;
@@ -26,7 +27,7 @@ Future<void> play(BuildContext context, Item item) async {
     }
     if (!context.mounted) return;
     final result = await Navigator.push<Object?>(context,
-        MaterialPageRoute(builder: (_) => PlayerScreen(item: item, source: local, next: _nextUp(item))));
+        EpisodeRoute(builder: (_) => PlayerScreen(item: item, source: local, next: _nextUp(item)), next: moved));
     if (result is! Item || !context.mounted) return;
     item = result;
   }

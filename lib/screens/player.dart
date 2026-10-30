@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../jellyfin.dart';
+import '../kit/route.dart';
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
 import '../stall.dart';
@@ -230,8 +231,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // media_kit 2.0.1 never rebuilds its button bars when the theme changes
   // (its updateShouldNotify is inverted), so the Next button listens itself.
   final _nextBar = ValueNotifier(0);
-  // _open() reports position 0 until mpv seeks to its start: not a seek back.
-  bool _reopening = false;
   final _video = GlobalKey<VideoState>();
 
   // Up Next pushes the next player before this one is disposed: only the last
@@ -245,16 +244,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _live++;
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    _immersive();
     _subs
       ..add(
         _player.stream.position.listen((p) {
           // Before the early return: a seek to the start must reset Up Next.
-          if (p > Duration.zero) _reopening = false;
           _upNext(p);
           if (p <= Duration.zero) return;
           _pos = p;
@@ -321,6 +315,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }, onError: (Object e) => debugPrint('up next: $e'));
   }
 
+  /// The player is landscape and full-bleed, also after leaving fullscreen.
+  static Future<void> _immersive() async {
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
   UpNextView _upNextView(NextUp next, Duration position) => upNextView(
     position: position,
     duration: _player.state.duration,
@@ -340,7 +343,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (next == null || !mounted) return;
     final p = position ?? _player.state.position;
     final at = upNextAt(_player.state.duration, outro: next.outro);
-    if (at != null && p < at && !_reopening) {
+    // Not at 0: open() (Retry, a quality switch) reports 0 until mpv seeks to
+    // its start, and that is no seek back.
+    if (at != null && p > Duration.zero && p < at) {
       _counted = Duration.zero;
       _dismissed = false;
     }
@@ -432,7 +437,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (!mounted || token != _token) return;
     if (ok && ModalRoute.of(context)?.isCurrent == true) {
-      Navigator.pop(context, result);
+      popForNext(context, result);
       return;
     }
     // Failed (or covered by another route): hide the card so nothing retries
@@ -444,6 +449,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _counted = Duration.zero;
     });
     _nextBar.value++;
+    _upNext();
   }
 
   void _setAutoplay(bool on) {
@@ -868,7 +874,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _open(Duration start) {
-    _reopening = start > Duration.zero;
     if (widget.addonPlayback) {
       _openedAt = start;
       _beginEpisode(opening: true);
@@ -1074,7 +1079,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 excluding: _panel,
                 child: ExcludeSemantics(
                   excluding: _panel,
-                  child: Video(key: _video, controller: _controller),
+                  child: Video(
+                    key: _video,
+                    controller: _controller,
+                    // media_kit's default shows the bars and unlocks rotation.
+                    onExitFullscreen: _immersive,
+                  ),
                 ),
               ),
               if (widget.addonPlayback && _error == null)

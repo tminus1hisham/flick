@@ -90,6 +90,9 @@ class UpNextCard extends StatelessWidget {
       );
 }
 
+// The label's font with tabular figures: RobotoMono's space read as a gap ("6  s"). Claude override, decisions.md.
+const _seconds = TextStyle(fontFeatures: [FontFeature.tabularFigures()]);
+
 class _NextAction extends StatelessWidget {
   const _NextAction({required this.view, required this.onPressed});
 
@@ -174,9 +177,9 @@ class _NextAction extends StatelessWidget {
                                   maintainState: true,
                                   maintainAnimation: true,
                                   maintainSize: true,
-                                  child: Text('${countdownLength.inSeconds} s', style: monoStyle),
+                                  child: Text('${countdownLength.inSeconds} s', style: _seconds),
                                 ),
-                                Text('${view.secondsLeft} s', style: monoStyle),
+                                Text('${view.secondsLeft} s', style: _seconds),
                               ],
                             ),
                           ],
@@ -244,19 +247,27 @@ class _AutoplayControl extends StatelessWidget {
       );
 }
 
-class _EpisodeHeader extends StatelessWidget {
+class _EpisodeHeader extends StatefulWidget {
   const _EpisodeHeader(this.episode);
 
   final NextEpisode episode;
 
   @override
+  State<_EpisodeHeader> createState() => _EpisodeHeaderState();
+}
+
+class _EpisodeHeaderState extends State<_EpisodeHeader> {
+  // A failed thumbnail removes the image and its gap; the text takes the width.
+  bool _failed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final url = episode.thumbnail;
+    final episode = widget.episode;
+    final url = _failed ? null : episode.thumbnail;
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: FlickTokens.grid * 13.5),
       child: Row(children: [
         if (url != null && url.isNotEmpty) ...[
-          // ponytail: a failed thumbnail leaves NetImage's plain tile rather than collapsing the row.
           ClipRRect(
             borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
             child: SizedBox(
@@ -264,7 +275,9 @@ class _EpisodeHeader extends StatelessWidget {
               height: FlickTokens.grid * 13.5,
               child: Stack(fit: StackFit.expand, children: [
                 const Skeleton(radius: FlickTokens.artworkRadius),
-                NetImage(url, icon: false),
+                NetImage(url, icon: false, onError: () {
+                  if (mounted) setState(() => _failed = true);
+                }),
               ]),
             ),
           ),

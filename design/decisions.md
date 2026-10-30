@@ -85,3 +85,10 @@ User: Jellyfin and addon/torrent series; Autoplay switch in the player (card + a
 - override of Codex: the card always sits above the bottom bar's band (64 + 12 dp) and never moves; media_kit 2.0.1 keeps the controls' visibility private.
 - Codex review: stepped countdown (1 s ticks, no tween) instead of a pause-aware interpolation; no press scale or resolving cross-fade; one guarded commit (pause, resolve, pop only if still the current route); typed `AddonNext` results; Wrap footer for 1.3× text.
 - known: subtitles centred at the bottom can sit under the card's left edge during the last 30 s (usually credits).
+- Review round (2026-10-31, code review FAIL then PASS-WITH-NITS; QA critic FAIL round 1: motion 6, distinct 7, states 7):
+  - Episode handoff (Claude, UX): episode screens open on `EpisodeRoute` (lib/kit/route.dart). Moving on pops the player and torrent start screen with no exit animation (`popForNext`), and the next episode fades in over the background (`artworkFadeDuration`, `curveIn`), so the old stream list never shows. Back from it is a plain fade.
+  - Override of Codex: the countdown seconds use the button font with tabular figures, not `monoStyle` (RobotoMono's space read as "6  s").
+  - A failed thumbnail now removes the image and its gap (spec), via `NetImage.onError`.
+  - The torrent start screen titles itself with the episode ("Slow Horses · S1 E3 · …") instead of "Stream a link". Its stock AppBar and raw file path stay: a redesign of that screen is a follow-up for Codex, not part of Up Next.
+  - Leaving media_kit fullscreen (on its own or when the card appears) re-applies immersive landscape; media_kit's default showed the bars and unlocked rotation.
+  - media_kit 2.0.1 never rebuilds its button bars on a theme change (inverted `updateShouldNotify`): anything in a bar that changes after the first build must listen for itself (the Next button does).

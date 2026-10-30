@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'addons.dart';
 import 'jellyfin.dart';
+import 'kit/route.dart';
 import 'screens/player.dart';
 import 'screens/title.dart';
 import 'screens/torrent.dart';
@@ -55,7 +56,7 @@ final class PickStream extends AddonNext {
 /// externalUrl → the service's app or site. [addon] (the source of [s]) lets Up Next find the next episode's
 /// stream in the same binge group. Returns when the user is back on a stream list.
 Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon}) async {
-  while (true) {
+  for (var moved = false;; moved = true) {
     final external = s.externalUrl, url = s.url;
     if (external != null) {
       await openExternal(external);
@@ -76,13 +77,13 @@ Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon
     } else {
       throw ArgumentError('Stream has no playable source');
     }
-    final result = await Navigator.push<Object?>(context, MaterialPageRoute(builder: (_) => screen));
+    final result = await Navigator.push<Object?>(context, EpisodeRoute(builder: (_) => screen, next: moved));
     if (!context.mounted) return;
     switch (result) {
       case NextStream r:
         (s, p, addon) = (r.stream, r.playback, r.addon);
       case PickStream r:
-        Navigator.push(context, MaterialPageRoute(builder: (_) => StreamsScreen(r.meta, r.video)));
+        Navigator.push(context, EpisodeRoute(builder: (_) => StreamsScreen(r.meta, r.video), next: true));
         return;
       default:
         return;

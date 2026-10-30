@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../addons.dart' show Subtitle;
 import '../jellyfin.dart';
+import '../kit/route.dart';
 import '../playback.dart';
 import '../theme.dart';
 import '../torrent.dart';
@@ -243,7 +244,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
       try {
         result = await Navigator.push<Object?>(
             context,
-            MaterialPageRoute(
+            EpisodeRoute(
                 builder: (_) => PlayerScreen(
                     item: Item({'Id': widget.playback?.videoId ?? 'torrent', 'Name': widget.title ?? f.name}),
                     source: url,
@@ -264,7 +265,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
         // Release before popping: the next episode's add (same season pack) must come after it, or the release
         // from dispose would remove the torrent under it 60 s later.
         await _teardown();
-        if (mounted) Navigator.pop(context, result);
+        if (mounted && ModalRoute.of(context)?.isCurrent == true) popForNext(context, result);
       } else if (automatic && mounted && id == _id) {
         Navigator.pop(context);
       }
@@ -312,7 +313,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
           ],
         );
     return Scaffold(
-      appBar: AppBar(title: const Text('Stream a link')),
+      appBar: AppBar(title: Text(widget.title ?? 'Stream a link')),
       body: error != null
           ? _Notice(
               icon: Icons.report_outlined,
