@@ -230,6 +230,7 @@ AddonStream animeStream(AnimeVariant variant, AnimeLink link) => (
   subtitles: variant.subtitles,
   videoSize: null,
   videoHash: null,
+  bingeGroup: null,
 );
 
 /// AniList supplies search metadata; Miruro identities are matched by exact external ID.

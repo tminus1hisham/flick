@@ -345,6 +345,7 @@ class _AnimeSourcesScreenState extends State<AnimeSourcesScreen> {
           videoId: 'anilist:${widget.card.id}:${widget.episode.number}',
           season: null,
           episode: widget.episode.number,
+          meta: null,
         ));
       }
     } catch (e) {
