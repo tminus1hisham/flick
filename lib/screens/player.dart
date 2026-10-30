@@ -18,6 +18,7 @@ import '../torrent.dart';
 import '../upnext.dart';
 import '../widgets.dart';
 import 'buffering.dart';
+import 'upnext.dart';
 
 typedef _Caption = ({
   SubtitleTrack track,
@@ -217,6 +218,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
   ScaffoldMessengerState? _messenger;
   // open() resets state.position to 0 until mpv reports time-pos; report this instead.
   late Duration _pos = widget.item.resumePosition;
+  // Up Next (design/upnext.md). _token invalidates a commit in flight on dispose.
+  NextUp? _next;
+  Future<Object?>? _resolved;
+  UpNextView? _shown;
+  Timer? _countdown;
+  Duration _counted = Duration.zero;
+  bool _dismissed = false, _forced = false, _resolving = false;
+  bool _committed = false, _completed = false, _endedEarly = false;
+  int _token = 0;
+  final _video = GlobalKey<VideoState>();
 
   JellyfinClient? get _client =>
       widget.report && session.online ? session.client : null;
@@ -232,6 +243,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subs
       ..add(
         _player.stream.position.listen((p) {
+          // Before the early return: a seek to the start must reset Up Next.
+          _upNext(p);
           if (p <= Duration.zero) return;
           _pos = p;
           if (!widget.addonPlayback) return;
@@ -262,7 +275,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       )
       ..add(
         _player.stream.completed.listen((done) {
-          if (done && widget.addonPlayback && _stoppedEarly) _fatalError();
+          _completed = done;
+          _endedEarly = done && widget.addonPlayback && _stoppedEarly;
+          if (_endedEarly) _fatalError();
+          _upNext();
         }),
       )
       ..add(
@@ -272,6 +288,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       )
       ..add(
         _player.stream.duration.listen((d) {
+          _upNext();
           final t = widget.torrent, size = widget.size;
           if (_bitrateSent || t == null || size == null || d.inSeconds <= 0) {
             return;
@@ -285,6 +302,132 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ..add(_player.stream.error.listen(_showError));
     _init().catchError(_showError);
     if (widget.addonPlayback && widget.playback != null) _fetchSubtitles();
+    widget.next?.then((next) {
+      if (!mounted) return;
+      setState(() => _next = next);
+      _upNext();
+    }, onError: (Object e) => debugPrint('up next: $e'));
+  }
+
+  UpNextView _upNextView(NextUp next, Duration position) => upNextView(
+    position: position,
+    duration: _player.state.duration,
+    outro: next.outro,
+    dismissed: _dismissed,
+    forced: _forced,
+    autoplay: session.autoplayNext,
+    counted: _counted,
+    resolving: _resolving,
+  );
+
+  /// Re-evaluates Up Next after anything that can change it: resets on a seek
+  /// back, prefetches once the card shows, runs the countdown timer only while
+  /// the card could count, and plays the next episode after a genuine end.
+  void _upNext([Duration? position]) {
+    final next = _next;
+    if (next == null || !mounted) return;
+    final p = position ?? _player.state.position;
+    final at = upNextAt(_player.state.duration, outro: next.outro);
+    if (at != null && p < at) {
+      _counted = Duration.zero;
+      _dismissed = false;
+    }
+    final view = _upNextView(next, p);
+    if (view.visible) _prefetch(next);
+    if (view.visible && session.autoplayNext && !_committed) {
+      _countdown ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    } else {
+      _countdown?.cancel();
+      _countdown = null;
+    }
+    if (_completed &&
+        !_committed &&
+        onCompletion(
+              stoppedEarly: _endedEarly,
+              visible: view.visible,
+              autoplay: session.autoplayNext,
+              dismissed: _dismissed,
+              panel: _panel,
+            ) ==
+            CompletionStep.now) {
+      _commit();
+      return;
+    }
+    if (view != _shown) setState(() => _shown = view);
+  }
+
+  void _tick() {
+    final next = _next;
+    if (next == null || !mounted) return;
+    final eligible = countdownEligible(
+      visible: _upNextView(next, _player.state.position).visible,
+      autoplay: session.autoplayNext,
+      committed: _committed,
+      playing: _player.state.playing,
+      buffering: _player.state.buffering,
+      panel: _panel,
+    );
+    if (eligible && _counted < countdownLength) {
+      _counted += const Duration(seconds: 1);
+    }
+    if (eligible && _counted >= countdownLength) {
+      _commit();
+    } else {
+      _upNext();
+    }
+  }
+
+  /// Calls resolve() once and caches it; the error, if any, reaches _commit.
+  Future<Object?> _prefetch(NextUp next) =>
+      _resolved ??= Future.sync(next.resolve)..ignore();
+
+  /// The one way to the next episode: bar button, card button, countdown end
+  /// and completion. Pops with the resolved answer if this route is still on top.
+  Future<void> _commit({bool forced = false}) async {
+    final next = _next;
+    if (next == null || _committed || !mounted) return;
+    final token = ++_token;
+    _countdown?.cancel();
+    _countdown = null;
+    setState(() {
+      _committed = true;
+      _forced = forced;
+      _resolving = true;
+    });
+    _player.pause().catchError((Object e) => debugPrint('pause: $e'));
+    Object? result;
+    var ok = false;
+    try {
+      result = await _prefetch(next);
+      ok = true;
+    } catch (e) {
+      debugPrint('up next resolve: $e');
+    }
+    // media_kit's fullscreen is a route of its own above this one.
+    if (ok && mounted && _video.currentState?.isFullscreen() == true) {
+      await _video.currentState?.exitFullscreen();
+    }
+    if (!mounted || token != _token) return;
+    if (ok && ModalRoute.of(context)?.isCurrent == true) {
+      Navigator.pop(context, result);
+      return;
+    }
+    // Failed (or covered by another route): hide the card so nothing retries
+    // by itself; the bar button tries again.
+    setState(() {
+      if (!ok) _resolved = null;
+      _committed = _forced = _resolving = false;
+      _dismissed = true;
+      _counted = Duration.zero;
+    });
+  }
+
+  void _setAutoplay(bool on) {
+    setState(() {
+      session.autoplayNext = on;
+      _counted = Duration.zero;
+    });
+    _upNext();
   }
 
   bool get _stoppedEarly => stoppedEarly(
@@ -635,6 +778,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _search = '';
     });
     if (_panel) _fetchSubtitles();
+    // Closing the panel releases a held countdown or a completion waiting on it.
+    _upNext();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) (_panel ? _headingFocus : _entryFocus).requestFocus();
     });
@@ -774,6 +919,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _report((c) => c.reportStopped(widget.item.id, pos));
     _progress?.cancel();
     _endTimers();
+    _countdown?.cancel();
+    _token++;
     for (final s in _subs) {
       s.cancel();
     }
@@ -786,6 +933,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
+    final next = _next;
     final bar = <Widget>[
       _TopBar(
         title: widget.playback?.title ?? headline(item),
@@ -843,19 +991,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
       topButtonBar: bar,
       topButtonBarMargin: EdgeInsets.zero,
       buttonBarHeight: 64,
-      bottomButtonBar: !widget.addonPlayback
-          ? MaterialVideoControlsThemeData().bottomButtonBar
-          : [
-              const MaterialPositionIndicator(),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Subtitles',
-                onPressed: _togglePanel,
-                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                icon: const Icon(Icons.closed_caption_outlined),
-              ),
-              const MaterialFullscreenButton(),
-            ],
+      // Jellyfin: media_kit's default bar (position, spacer, fullscreen).
+      bottomButtonBar: [
+        const MaterialPositionIndicator(),
+        const Spacer(),
+        if (widget.addonPlayback)
+          IconButton(
+            tooltip: 'Subtitles',
+            onPressed: _togglePanel,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.closed_caption_outlined),
+          ),
+        if (next != null)
+          NextEpisodeButton(
+            onPressed: _resolving ? null : () => _commit(forced: true),
+          ),
+        const MaterialFullscreenButton(),
+      ],
       seekBarColor: Colors.white.withValues(alpha: 0.2),
       seekBarBufferColor: Colors.white.withValues(alpha: 0.45),
       seekBarPositionColor: FlickTokens.accent,
@@ -889,7 +1041,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 excluding: _panel,
                 child: ExcludeSemantics(
                   excluding: _panel,
-                  child: Video(controller: _controller),
+                  child: Video(key: _video, controller: _controller),
                 ),
               ),
               if (widget.addonPlayback && _error == null)
@@ -901,6 +1053,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: BufferingPanel(
                         view: _bufferView,
                         onSwitch: () => Navigator.pop(context),
+                      ),
+                    ),
+                  ),
+                ),
+              if (next != null)
+                Positioned.fill(
+                  child: SafeArea(
+                    child: Padding(
+                      // Clears the 64 dp bottom bar whether it shows or not:
+                      // media_kit keeps the controls' visibility private.
+                      padding: const EdgeInsets.only(
+                        right: FlickTokens.railGap,
+                        bottom: 64 + FlickTokens.railGap,
+                      ),
+                      child: Align(
+                        alignment: Alignment.bottomRight,
+                        child: ExcludeFocus(
+                          excluding: _panel,
+                          child: ExcludeSemantics(
+                            excluding: _panel,
+                            child: UpNextCard(
+                              view: _upNextView(next, _player.state.position),
+                              episode: next.episode,
+                              autoplay: session.autoplayNext,
+                              onNext: _commit,
+                              onDismiss: () {
+                                setState(() => _dismissed = true);
+                                _upNext();
+                              },
+                              onAutoplay: _setAutoplay,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1411,6 +1596,42 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                         },
                                       ),
                                   ],
+                                  if (_next != null)
+                                    SwitchListTile(
+                                      value: session.autoplayNext,
+                                      onChanged: _resolving
+                                          ? null
+                                          : _setAutoplay,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 20,
+                                          ),
+                                      title: const Text(
+                                        'Autoplay next episode',
+                                        style: FlickText.body,
+                                      ),
+                                      thumbColor:
+                                          WidgetStateProperty.resolveWith(
+                                            (s) =>
+                                                s.contains(WidgetState.selected)
+                                                ? FlickTokens.onAccent
+                                                : FlickTokens.textSecondary,
+                                          ),
+                                      trackColor:
+                                          WidgetStateProperty.resolveWith(
+                                            (s) =>
+                                                s.contains(WidgetState.selected)
+                                                ? FlickTokens.accent
+                                                : FlickTokens.surface2,
+                                          ),
+                                      trackOutlineColor:
+                                          WidgetStateProperty.resolveWith(
+                                            (s) =>
+                                                s.contains(WidgetState.selected)
+                                                ? FlickTokens.accent
+                                                : FlickTokens.outline,
+                                          ),
+                                    ),
                                 ],
                               ),
                             ),

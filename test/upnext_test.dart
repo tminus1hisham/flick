@@ -88,4 +88,31 @@ void main() {
       expect(_view(position: at, counted: const Duration(milliseconds: 3500)).secondsLeft, 7);
     });
   });
+  test('countdownEligible: every condition can hold the countdown', () {
+    bool e({bool visible = true, bool autoplay = true, bool committed = false, bool playing = true,
+            bool buffering = false, bool panel = false}) =>
+        countdownEligible(visible: visible, autoplay: autoplay, committed: committed, playing: playing,
+            buffering: buffering, panel: panel);
+    expect(e(), isTrue);
+    expect(e(visible: false), isFalse);
+    expect(e(autoplay: false), isFalse);
+    expect(e(committed: true), isFalse);
+    expect(e(playing: false), isFalse);
+    expect(e(buffering: true), isFalse);
+    expect(e(panel: true), isFalse);
+  });
+
+  test('onCompletion: failure, dismissed and Autoplay off never advance; an open panel defers', () {
+    CompletionStep c({bool stoppedEarly = false, bool visible = true, bool autoplay = true, bool dismissed = false,
+            bool panel = false}) =>
+        onCompletion(stoppedEarly: stoppedEarly, visible: visible, autoplay: autoplay, dismissed: dismissed,
+            panel: panel);
+    expect(c(), CompletionStep.now);
+    expect(c(panel: true), CompletionStep.defer);
+    expect(c(stoppedEarly: true), CompletionStep.no);
+    expect(c(stoppedEarly: true, panel: true), CompletionStep.no);
+    expect(c(visible: false), CompletionStep.no);
+    expect(c(dismissed: true), CompletionStep.no);
+    expect(c(autoplay: false), CompletionStep.no);
+  });
 }

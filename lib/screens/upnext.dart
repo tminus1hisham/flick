@@ -159,9 +159,12 @@ class _NextAction extends StatelessWidget {
                         children: [
                           const Icon(Icons.skip_next, size: FlickTokens.grid * 5),
                           const SizedBox(width: FlickTokens.grid * 2),
-                          const Text('Next episode'),
+                          // Tight while counting: fills to push the seconds to the trailing edge.
+                          Flexible(
+                            fit: counting ? FlexFit.tight : FlexFit.loose,
+                            child: const Text('Next episode', maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
                           if (counting) ...[
-                            const Spacer(),
                             const SizedBox(width: FlickTokens.grid * 2),
                             Stack(
                               alignment: Alignment.centerRight,
@@ -181,7 +184,8 @@ class _NextAction extends StatelessWidget {
                       ),
                     ),
                     if (view.resolving)
-                      Text('Finding next episode…', style: FlickText.button.copyWith(color: foreground)),
+                      Text('Finding next episode…', maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: FlickText.button.copyWith(color: foreground)),
                   ],
                 ),
               ),

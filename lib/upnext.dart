@@ -59,3 +59,19 @@ UpNextView upNextView({required Duration position, required Duration duration, D
     resolving: resolving,
   );
 }
+
+/// Whether this player tick advances the Up Next countdown: only while the card shows with Autoplay on, nothing is
+/// committed yet, and the video is actually playing with the tracks panel closed.
+bool countdownEligible({required bool visible, required bool autoplay, required bool committed, required bool playing,
+        required bool buffering, required bool panel}) =>
+    visible && autoplay && !committed && playing && !buffering && !panel;
+
+enum CompletionStep { now, defer, no }
+
+/// What a finished video does: a failed stop never advances; a visible, undismissed card with Autoplay on plays the
+/// next episode now, or once the tracks panel closes.
+CompletionStep onCompletion({required bool stoppedEarly, required bool visible, required bool autoplay,
+    required bool dismissed, required bool panel}) {
+  if (stoppedEarly || !visible || !autoplay || dismissed) return CompletionStep.no;
+  return panel ? CompletionStep.defer : CompletionStep.now;
+}
