@@ -124,5 +124,49 @@ class HttpTest {
         assertFalse(clientGone(s, input))
     }
 
+    @Test fun windowClampsBothEndsAndKeepsTwo() {
+        val mib = 1L shl 20
+        assertEquals(8, window(0, 1 shl 20)) // 8 MiB floor
+        assertEquals(64, window(100 * mib, 1 shl 20)) // 64 MiB ceiling
+        assertEquals(30, window(mib, 1 shl 20)) // 30 s at 1 MiB/s
+        assertEquals(8, window(mib, 4 shl 20)) // 30 MiB of 4 MiB pieces rounds up
+        assertEquals(2, window(0, 32 shl 20)) // one piece would cover 8 MiB; at least 2
+    }
+
+    private val mib = 1 shl 20
+
+    @Test fun scheduleSkipsHadPiecesAndSpacesDeadlinesByBitrate() {
+        // 1 MiB pieces at 2 MiB/s: the player reaches each piece 500 ms after the one before.
+        assertEquals(listOf(10 to 0, 12 to 1000, 13 to 1500),
+            schedule(10, 13, mib, 2L * mib, 0, { it == 11 }, emptyMap()))
+        // Bounded by the window (30 pieces at 1 MiB/s), not the file's end.
+        assertEquals(30, schedule(0, 1000, mib, 1L * mib, 0, { false }, emptyMap()).last().first)
+    }
+
+    @Test fun scheduleNeverPostponesAnExistingDeadline() {
+        val due = mapOf(10 to 0L, 11 to 500L, 12 to 1000L, 13 to 1500L) // set at 0 ms
+        assertEquals(emptyList<Pair<Int, Int>>(), schedule(10, 13, mib, 2L * mib, 500, { false }, due))
+    }
+
+    @Test fun scheduleMovesADeadlineEarlier() {
+        // The bitrate doubles: 11–13 come due sooner; 10 stays as it was.
+        val due = mapOf(10 to 0L, 11 to 500L, 12 to 1000L, 13 to 1500L)
+        assertEquals(listOf(11 to 250, 12 to 500, 13 to 750), schedule(10, 13, mib, 4L * mib, 0, { false }, due))
+    }
+
+    @Test fun isSeekOnlyOutsideTheWindow() {
+        assertFalse(isSeek(15, 10, 30, 1000)) // inside
+        assertFalse(isSeek(9, 10, 30, 1000)) // behind by one
+        assertFalse(isSeek(40, 10, 30, 1000)) // window's end
+        assertTrue(isSeek(500, 10, 30, 1000)) // far ahead
+        assertTrue(isSeek(8, 10, 30, 1000)) // back
+    }
+
+    @Test fun tailProbeIsNeverASeek() {
+        assertFalse(isSeek(1000, 10, 30, 1000)) // the last piece
+        assertFalse(isSeek(999, 10, 30, 1000))
+        assertTrue(isSeek(998, 10, 30, 1000))
+    }
+
     private fun createTempDirectory(): File = kotlin.io.path.createTempDirectory("httptest").toFile()
 }

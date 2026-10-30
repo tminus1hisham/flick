@@ -135,14 +135,39 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
             is ByteRange.Part -> range.start to range.end
             ByteRange.Unsatisfiable -> return
         }
-        val last = pieceRange(fileOffset, size, ti.pieceLength()).last
+        val pieceLen = ti.pieceLength()
+        val last = pieceRange(fileOffset, size, pieceLen).last
+        val start = ((fileOffset + from) / pieceLen).toInt()
+        val probe = start >= last - 1 // mpv reading the tail for MKV cues or an MP4 moov
+        synchronized(e) {
+            if (!e.alive || e.gen != gen) throw Cancelled()
+            if (isSeek(start, e.reader, window(e.rate, pieceLen), last)) {
+                // Deadlines for the old position would keep competing with the pieces the player now needs.
+                e.th.clearPieceDeadlines()
+                e.due.clear()
+                e.reader = start
+                e.reschedule()
+            }
+        }
         val buf = ByteArray(1 shl 20)
         var pos = from
         var opened: RandomAccessFile? = null // libtorrent creates the file on its first write
         try {
             while (pos <= to) {
-                val ch = chunk(fileOffset, pos, to, ti.pieceLength(), ti::pieceSize)
-                awaitVerified(c, input, e, gen, ti, ch.piece, last)
+                val ch = chunk(fileOffset, pos, to, pieceLen, ti::pieceSize)
+                // Forward only, within the window: a stale request elsewhere in the file must not drag the reader.
+                if (!probe) synchronized(e) {
+                    if (e.alive && e.gen == gen && ch.piece in e.reader + 1..e.reader + window(e.rate, pieceLen)) {
+                        // A jump leaves deadlines on the skipped pieces; they would sort first and download first.
+                        if (ch.piece > e.reader + 1) {
+                            e.th.clearPieceDeadlines()
+                            e.due.clear()
+                        }
+                        e.reader = ch.piece
+                        e.reschedule()
+                    }
+                }
+                awaitVerified(c, input, e, gen, ti, ch.piece)
                 val raf = opened ?: RandomAccessFile(fs.filePath(file, e.dir), "r").also { opened = it }
                 raf.seek(pos)
                 var left = ch.len
@@ -164,23 +189,21 @@ class StreamServer(private val lookup: (Int) -> Entry?) : Closeable {
      * Blocks until piece [p] is downloaded and its bytes on disk hash to the torrent's piece hash. libtorrent can
      * report a piece before its last blocks leave the store buffer, so a downloaded piece is not yet readable.
      * Ends when the client hangs up; while it stays connected the wait counts as progress for the watchdog.
+     * A piece without a deadline (outside the reader's window, or cleared by a seek) gets one for now.
      */
-    private fun awaitVerified(c: Conn, input: InputStream, e: Entry, gen: Int, ti: TorrentInfo, p: Int, last: Int) {
-        val window = maxOf(4, (16 shl 20) / ti.pieceLength())
-        var first = true
+    private fun awaitVerified(c: Conn, input: InputStream, e: Entry, gen: Int, ti: TorrentInfo, p: Int) {
         var mismatches = 0
         while (true) {
             if (c.cancelled) throw Cancelled()
             val have = synchronized(e) {
                 if (!e.alive || e.gen != gen) throw Cancelled()
                 if (e.verified[p]) return
-                if (first) {
-                    for ((k, q) in (p..minOf(p + window, last)).withIndex()) {
-                        if (!e.th.havePiece(q)) e.th.setPieceDeadline(q, k * 200)
-                    }
-                    first = false
+                val have = e.th.havePiece(p)
+                if (!have && p !in e.due) {
+                    e.th.setPieceDeadline(p, 0)
+                    e.due[p] = System.currentTimeMillis()
                 }
-                e.th.havePiece(p)
+                have
             }
             if (have) {
                 val slices = ti.mapBlock(p, 0, ti.pieceSize(p)).map {

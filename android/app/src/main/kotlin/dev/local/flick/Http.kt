@@ -60,6 +60,30 @@ fun pieceRange(fileOffset: Long, size: Long, pieceLength: Int): IntRange =
     if (size == 0L) IntRange.EMPTY
     else (fileOffset / pieceLength).toInt()..((fileOffset + size - 1) / pieceLength).toInt()
 
+/** Pieces to keep deadlines on ahead of the reader: 30 s of video at [rate] bytes/s, clamped to 8–64 MiB, at least 2. */
+fun window(rate: Long, pieceLen: Int): Int {
+    val bytes = (30 * rate).coerceIn(8L shl 20, 64L shl 20)
+    return maxOf(2, ((bytes + pieceLen - 1) / pieceLen).toInt())
+}
+
+/**
+ * Deadlines (piece, ms from [now]) for the pieces from [reader] to the window's end or [last] that are not had yet:
+ * each is due when the player at [rate] bytes/s will reach it. libtorrent deadlines are relative to the moment they
+ * are set, so a piece already in [due] (absolute ms) is returned only when its new deadline is earlier; re-setting
+ * the same relative deadline every tick would postpone it forever.
+ */
+fun schedule(reader: Int, last: Int, pieceLen: Int, rate: Long, now: Long, have: (Int) -> Boolean,
+             due: Map<Int, Long>): List<Pair<Int, Int>> =
+    (reader..minOf(reader + window(rate, pieceLen), last)).filterNot(have).mapNotNull { p ->
+        val ms = (1000L * (p - reader) * pieceLen / rate).toInt()
+        val old = due[p]
+        if (old == null || now + ms < old) p to ms else null
+    }
+
+/** A request starting at piece [start] jumps away from [reader]; requests into the last 2 pieces are tail probes. */
+fun isSeek(start: Int, reader: Int, window: Int, last: Int): Boolean =
+    start !in (reader - 1)..(reader + window) && start < last - 1
+
 /** A run of piece bytes inside one file; [path] null means a pad file, which is all zeros and not on disk. */
 class Slice(val path: String?, val offset: Long, val size: Long)
 
