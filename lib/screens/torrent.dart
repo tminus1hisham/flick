@@ -345,7 +345,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
                     const SizedBox(height: 20),
                     Row(children: [
                       Expanded(child: metric('Peers', i == null ? '—' : '${i.peers}')),
-                      Expanded(child: metric('Download speed', i == null ? '—' : _rate(i.rate))),
+                      Expanded(child: metric('Download speed', i == null ? '—' : formatRate(i.rate))),
                     ]),
                     if (i != null && files == null) ...[
                       const SizedBox(height: 16),
@@ -540,4 +540,3 @@ String _size(int bytes) => bytes >= 1 << 30
     ? '${(bytes / (1 << 30)).toStringAsFixed(2)} GB'
     : '${(bytes / (1 << 20)).toStringAsFixed(0)} MB';
 
-String _rate(int bps) => '${(bps / (1 << 20)).toStringAsFixed(1)} MB/s';

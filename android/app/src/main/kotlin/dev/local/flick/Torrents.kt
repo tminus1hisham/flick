@@ -2,6 +2,8 @@ package dev.local.flick
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -81,6 +83,12 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
                 require(uri.scheme?.lowercase() in listOf("http", "https")) { "only http/https URLs are allowed" }
                 context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }.fold({ result.success(null) }, { result.error("external", it.message ?: it.toString(), null) })
+            return
+        }
+        // Also on the main thread: the buffering panel polls it while a torrent call may be slow.
+        if (call.method == "online") {
+            val cm = context.getSystemService(ConnectivityManager::class.java)
+            result.success(cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true)
             return
         }
         ctl.execute {

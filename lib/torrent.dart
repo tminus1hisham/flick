@@ -73,6 +73,18 @@ class TorrentEngine {
   Future<void> release(int id) => _ch.invokeMethod('release', {'id': id});
 }
 
+/// A download rate for display, such as "1.8 MB/s".
+String formatRate(int bytesPerSec) => '${(bytesPerSec / (1 << 20)).toStringAsFixed(1)} MB/s';
+
+/// Whether the phone has a validated network. True when it can't tell.
+Future<bool> networkOnline() async {
+  try {
+    return await TorrentEngine._ch.invokeMethod<bool>('online') ?? true;
+  } catch (_) {
+    return true;
+  }
+}
+
 Future<Directory> _root() async =>
     Directory('${(await getTemporaryDirectory()).path}/flick-torrents');
 
