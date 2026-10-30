@@ -21,12 +21,6 @@ function Stop-Build($m) {
 
 if ((git branch --show-current) -ne 'anime') { Log 'STOP not on branch anime'; exit 1 }
 
-# Reference code from repo B (Shineii86/MiruroAPI, MIT).
-foreach ($f in 'src/helpers/pipe.js', 'src/routes/apiRoutes.js', 'api/proxy.js', 'src/helpers/anilist.js') {
-  $out = "$runs/ref/" + ($f -replace '/', '_')
-  if (-not (Test-Path $out)) { curl.exe -sL "https://raw.githubusercontent.com/Shineii86/MiruroAPI/main/$f" -o $out }
-}
-
 function GateHits {
   $h = @{}
   python "$skill/gates.py" . 2>&1 | ForEach-Object {
@@ -56,14 +50,13 @@ function Run-Gates([string]$check) {
 
 $common = @'
 You are Codex, building the Anime feature of Flick (Flutter 3.41 / Dart 3.11 Android app) on branch `anime`.
-The full plan is design/anime.md; the hard UI rules are design/RULES.md; the project handoff is CLAUDE.md. All are in <stdin>,
-with every file you need for THIS step, plus reference code from Shineii86/MiruroAPI (MIT) under ref/.
+The STEP below is the plan; the hard UI rules are design/RULES.md; the project handoff is CLAUDE.md. All are in <stdin>,
+with every file you need for THIS step.
 You cannot run commands. Implement ONLY the step below. Rules:
 - No new packages (deps: http, shared_preferences, flutter_secure_storage, media_kit, background_downloader, path_provider).
 - Match the surrounding code style and comment density. Do not reformat existing code; only lib/screens/player.dart is dart-formatted.
 - UI: Afterglow tokens only (FlickTokens, FlickText, context.flick, monoStyle, streamMonoStyle); no raw colours, showDialog, SnackBar or CircularProgressIndicator; sheets via showFlickSheet; skeletons not spinners; 48 dp targets; honour MediaQuery.disableAnimationsOf.
 - Every non-trivial pure function gets a test. Never weaken or delete an existing test.
-- A port of MiruroAPI code carries a one-line credit comment: // Ported from Shineii86/MiruroAPI (MIT).
 Reply with every created or changed file COMPLETE, as
 === FILE: <repo-relative path> ===
 <full content>
@@ -80,11 +73,10 @@ foreach ($s in $steps) {
   $files = if ($body -match '(?m)^files:\s*(.+)$') { $Matches[1].Trim() -split '\s+' } else { @() }
   $check = if ($body -match '(?m)^check:\s*(.+)$') { $Matches[1].Trim() } else { '' }
   Log "STEP $($s.BaseName) start"
-  $packed = python "$skill/codex_files.py" pack . design/anime.md design/RULES.md CLAUDE.md @($files | Where-Object { Test-Path $_ }) | Out-String
-  $refs = Get-ChildItem "$runs/ref" | ForEach-Object { "=== FILE: ref/$($_.Name) ===`n$(Get-Content $_.FullName -Raw)`n=== END FILE ===`n" } | Out-String
+  $packed = python "$skill/codex_files.py" pack . design/RULES.md CLAUDE.md @($files | Where-Object { Test-Path $_ }) | Out-String
   $prompt = "$common`n`n# STEP`n$body"
   $reply = "$runs/$($s.BaseName).md"
-  $out = ($prompt + "`n`n" + $packed + $refs) | codex exec -s read-only -o $reply - 2>&1 | Out-String
+  $out = ($prompt + "`n`n" + $packed) | codex exec -s read-only -o $reply - 2>&1 | Out-String
   $sid = if ($out -match 'session id:\s*([0-9a-f-]{36})') { $Matches[1] } else { '' }
   Log "  codex session $sid"
   $ok = $false
