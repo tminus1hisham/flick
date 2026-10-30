@@ -3,11 +3,13 @@ import 'dart:io';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 
+import '../downloads.dart';
 import '../jellyfin.dart';
 import '../state.dart';
 import '../theme.dart';
 import 'account.dart';
 import 'detail.dart';
+import 'player.dart';
 
 class DownloadsScreen extends StatelessWidget {
   const DownloadsScreen({super.key});
@@ -44,7 +46,9 @@ class DownloadsScreen extends StatelessWidget {
 
   Widget _row(TaskRecord r) {
     final item = downloads.itemOf(r);
-    return DownloadRow(record: r, item: item, poster: downloads.posterOf(item.id));
+    return DownloadRow(
+      record: r, item: item, poster: downloads.posterOf(item.id), stream: downloads.streamOf(r),
+    );
   }
 }
 
@@ -73,10 +77,22 @@ class _Empty extends StatelessWidget {
 
 /// One download row. Public only so previews can render it without the manager.
 class DownloadRow extends StatelessWidget {
-  const DownloadRow({super.key, required this.record, required this.item, required this.poster});
+  const DownloadRow({super.key, required this.record, required this.item, required this.poster, this.stream});
   final TaskRecord record;
   final Item item;
   final File poster;
+  final StreamDownload? stream;
+
+  Future<void> _playStream(BuildContext context) async {
+    final path = await downloads.localPath(record.taskId);
+    if (path == null || !context.mounted) return;
+    final p = stream!.playback;
+    final title = p.subtitle == null ? stream!.title : '${stream!.title} · ${p.subtitle}';
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+      item: Item({'Id': p.videoId, 'Name': title, 'Type': 'Video'}),
+      source: path, report: false, headers: const {}, playback: p,
+    )));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +120,7 @@ class DownloadRow extends StatelessWidget {
     final showBar = r.status == TaskStatus.running || ((running || paused) && known);
 
     return InkWell(
-      onTap: done ? () => play(context, item) : null,
+      onTap: done ? () => stream == null ? play(context, item) : _playStream(context) : null,
       child: Container(
         padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 16, 4, 16),
         decoration: BoxDecoration(border: Border(bottom: BorderSide(color: cs.outline))),
@@ -131,6 +147,11 @@ class DownloadRow extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.titleSmall),
+                  if (stream?.playback.subtitle case final String subtitle) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
+                  ],
                   const SizedBox(height: 6),
                   Row(children: [
                     Icon(icon, size: 16, color: color),
@@ -147,7 +168,7 @@ class DownloadRow extends StatelessWidget {
                   if (showBar) ...[
                     const SizedBox(height: 8),
                     LinearProgressIndicator(
-                      value: known ? r.progress : null,
+                      value: known ? r.progress : MediaQuery.disableAnimationsOf(context) ? 0 : null,
                       minHeight: 3,
                       color: paused ? fc.warning : cs.primary,
                       backgroundColor: cs.surfaceContainerHigh,
@@ -160,22 +181,28 @@ class DownloadRow extends StatelessWidget {
           if (running && r.task.allowPause)
             IconButton(
               tooltip: 'Pause download',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.pause),
               onPressed: () => downloads.pause(r),
             ),
-          // Resuming fetches from the server, which a guest has signed out of.
-          if (paused && session.loggedIn)
+          // Addon tasks retain their own request headers and do not need a Jellyfin session.
+          if (paused && (stream != null || session.loggedIn))
             IconButton(
               tooltip: 'Resume download',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.play_arrow),
               onPressed: () => downloads.resume(r),
             ),
-          PopupMenuButton<void>(
-            tooltip: 'More actions',
-            icon: const Icon(Icons.more_vert),
-            itemBuilder: (_) => [
-              PopupMenuItem(onTap: () => downloads.delete(r), child: const Text('Delete download')),
-            ],
+          SizedBox(
+            width: 48,
+            height: 48,
+            child: PopupMenuButton<void>(
+              tooltip: 'More actions',
+              icon: const Icon(Icons.more_vert),
+              itemBuilder: (_) => [
+                PopupMenuItem(onTap: () => downloads.delete(r), child: const Text('Delete download')),
+              ],
+            ),
           ),
         ]),
       ),

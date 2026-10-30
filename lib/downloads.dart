@@ -7,6 +7,64 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'jellyfin.dart';
+import 'playback.dart';
+
+/// Direct streams keep their playback identity, without online Up Next or request headers.
+class StreamDownload {
+  const StreamDownload({required this.title, this.poster, required this.playback});
+  final String title;
+  final String? poster;
+  final Playback playback;
+
+  String toMetaData() => jsonEncode({
+        'flickDownload': 'stream',
+        'title': title,
+        'poster': poster,
+        'playback': {
+          'title': playback.title,
+          'subtitle': playback.subtitle,
+          'type': playback.type,
+          'videoId': playback.videoId,
+          'season': playback.season,
+          'episode': playback.episode,
+        },
+      });
+
+  static StreamDownload? fromMetaData(String value) {
+    final m = jsonDecode(value) as Map<String, dynamic>;
+    if (m['flickDownload'] != 'stream') return null;
+    final p = m['playback'] as Map<String, dynamic>;
+    return StreamDownload(
+      title: m['title'] as String,
+      poster: m['poster'] as String?,
+      playback: (
+        title: p['title'] as String,
+        subtitle: p['subtitle'] as String?,
+        type: p['type'] as String,
+        videoId: p['videoId'] as String,
+        season: p['season'] as int?,
+        episode: p['episode'] as int?,
+        meta: null,
+      ),
+    );
+  }
+}
+
+/// Query strings never become part of the filename; URLs without an extension use MP4.
+String streamDownloadFilename(String title, String url, {int? season, int? episode}) {
+  var name = title.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1f\x7f]'), '_')
+      .replaceAll(RegExp(r'\s+'), ' ').trim();
+  name = String.fromCharCodes(name.runes.take(160)).replaceAll(RegExp(r'[. ]+$'), '');
+  if (name.isEmpty) name = 'Video';
+  if (RegExp(r'^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)', caseSensitive: false).hasMatch(name)) {
+    name = '_$name';
+  }
+  if (season != null && episode != null) {
+    name += ' S${season.toString().padLeft(2, '0')}E${episode.toString().padLeft(2, '0')}';
+  }
+  final extension = RegExp(r'\.([a-zA-Z0-9]{1,10})$').firstMatch(Uri.tryParse(url)?.path ?? '')?.group(1);
+  return '$name.${extension ?? 'mp4'}';
+}
 
 /// Offline downloads. Records live in background_downloader's own database;
 /// the item JSON rides along in each task's metaData.
@@ -43,7 +101,14 @@ class Downloads extends ChangeNotifier {
     notifyListeners();
   }
 
-  Item itemOf(TaskRecord r) => Item(jsonDecode(r.task.metaData) as Map<String, dynamic>);
+  StreamDownload? streamOf(TaskRecord r) => StreamDownload.fromMetaData(r.task.metaData);
+
+  Item itemOf(TaskRecord r) {
+    final stream = streamOf(r);
+    return stream == null
+        ? Item(jsonDecode(r.task.metaData) as Map<String, dynamic>)
+        : Item({'Id': r.taskId, 'Name': stream.title, 'Type': 'Video'});
+  }
 
   File posterOf(String itemId) => File('${_posters.path}/$itemId.jpg');
 
@@ -79,6 +144,52 @@ class Downloads extends ChangeNotifier {
       metaData: jsonEncode(item.json),
     ));
     await refresh();
+  }
+
+  Future<void> enqueueStream({
+    required String url,
+    Map<String, String> headers = const {},
+    required String title,
+    String? poster,
+    required Playback playback,
+  }) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
+      throw ArgumentError.value(url, 'url', 'Expected an HTTP stream URL');
+    }
+    await _fd.permissions.request(PermissionType.notifications);
+    final taskId = 'stream-${DateTime.now().microsecondsSinceEpoch}';
+    final task = DownloadTask(
+      taskId: taskId,
+      url: url,
+      headers: Map<String, String>.of(headers),
+      filename: streamDownloadFilename(title, url, season: playback.season, episode: playback.episode),
+      // Different sources can have the same title and filename.
+      directory: 'videos/$taskId',
+      baseDirectory: BaseDirectory.applicationDocuments,
+      updates: Updates.statusAndProgress,
+      allowPause: true,
+      retries: 5,
+      displayName: playback.subtitle == null ? title : '$title · ${playback.subtitle}',
+      metaData: StreamDownload(title: title, poster: poster, playback: playback).toMetaData(),
+    );
+    if (!await _fd.enqueue(task)) throw StateError('Download was not queued');
+    await refresh();
+    if (poster != null) {
+      try {
+        // Stream credentials belong to the video host, never the poster host.
+        final img = await http.get(Uri.parse(poster)).timeout(const Duration(seconds: 5));
+        if (img.statusCode == 200 && !_deleted.contains(taskId)) {
+          await posterOf(taskId).writeAsBytes(img.bodyBytes);
+          if (_deleted.contains(taskId)) {
+            final p = posterOf(taskId);
+            if (p.existsSync()) await p.delete();
+          } else {
+            notifyListeners();
+          }
+        }
+      } catch (_) {} // poster is cosmetic
+    }
   }
 
   Future<void> pause(TaskRecord r) async => _fd.pause(r.task as DownloadTask);
