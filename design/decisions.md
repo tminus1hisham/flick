@@ -59,3 +59,16 @@ User decisions: comments left out (no backend); favourites + likes on Jellyfin f
 - override of Codex (guest-visual.md): Detail toggles sit **below** Play/Download, not above. Play stays the primary action by the title (Netflix's Play, then My List order).
 - override of Codex: the Title row is a small `_Saving` widget, not an inline ListenableBuilder, to keep `_hero` readable.
 - ponytail: device favourites not keyed per account; Home's Favourites row refreshes on pull, not on return from Detail.
+
+## Buffering overlay (2026-10-30, design/buffering.md)
+
+Codex spec review: REVISE, REVISE, APPROVED (round 3).
+- cut: three-stage spine in the player (Finding peers / Preparing / Filling) → one Starting phase; the Torrent screen already shows peer discovery and the player can't tell the stages apart honestly.
+- cut: artwork under a scrim → player black; addon Items carry no artwork.
+- cut: percentage number → rail plus words.
+- cut (Codex): decorative 3 dp marker on the panel → none; red is reserved for measured progress.
+- kept: Offline phase, because endless "Buffering" on a dead network is the confusion being fixed; one native `online` method, no package.
+- kept: 600 ms delay before a mid-play stall shows, so Wi-Fi hiccups never flash a panel.
+- kept (Codex): reserved 48 dp action slot, so "Try another source" appearing never recentres the panel.
+- changed (Codex): opaque `surface1` panel instead of translucent; offline hides stats instead of showing a fake 0.0 rate; progress never forced to full on resume.
+- ponytail: Jellyfin playback keeps media_kit's spinner and its 1.5 Mbps prompt; the overlay is addon-only.

@@ -64,6 +64,8 @@ Back always returns one level. Player close → Torrent start pops itself → us
 
 D1, D2, D3, D4 (list). Torrent start must fit 360×640.
 
+Viewport exception: the player is landscape-only, so its overlays (buffering panel, tracks panel) are checked against **640×360 dp** at 1.3× text instead of 360×640 (design/buffering.md).
+
 ## Out of scope (say so, don't build)
 
 Library/watch history sync, YouTube and Local Files addons, trailers, addon catalogue browsing (`addon_catalog`), deep links (`stremio://` intents), offline Discover.
