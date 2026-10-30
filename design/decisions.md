@@ -76,3 +76,12 @@ Codex spec review: REVISE, REVISE, APPROVED (round 3).
 - critic round 2 FAIL (craft 7); user chose fix + a 3rd round. Codex (UI lead) chose `streamMonoStyle` for peers/speed numbers over Manrope tabular figures, for consistency with the Torrent screen's telemetry; RobotoMono's wide decimal ("1.8") is accepted as the mono voice, as on the Torrent screen.
 - button height is a 48 dp minimum, not fixed: a fixed height clipped the label's descenders at 1.3× text.
 - critic round 3 PASS (distinct 8, hierarchy 9, motion 8, craft 8, states 9, theme 9, a11y 8, space 8). Fixed after: rail dims to 40 % with a fade; the panel is out of focus/semantics while the tracks panel is open. Left open (follow-up): the rail switches from filled to the unknown rail without a fade if progress resets to null after offline; mono decimal spacing.
+
+## Up Next (2026-10-30, design/upnext.md)
+
+User: Jellyfin and addon/torrent series; Autoplay switch in the player (card + addon tracks panel), device setting, default on; Netflix timing (card at T-30 s or Jellyfin's Outro marker, 10 s countdown, skips the rest). Codex spec review: REVISE, REVISE, APPROVED (round 3).
+- cut: post-play takeover, synopsis/runtime on the card, "Are you still watching?", Previous episode, Next for Jellyfin offline, a settings screen.
+- kept: resolve prefetch when the card appears; fallback to the next episode's stream list when no stream shares the bingeGroup (a wrong release is worse than one tap).
+- override of Codex: the card always sits above the bottom bar's band (64 + 12 dp) and never moves; media_kit 2.0.1 keeps the controls' visibility private.
+- Codex review: stepped countdown (1 s ticks, no tween) instead of a pause-aware interpolation; no press scale or resolving cross-fade; one guarded commit (pause, resolve, pop only if still the current route); typed `AddonNext` results; Wrap footer for 1.3× text.
+- known: subtitles centred at the bottom can sit under the card's left edge during the last 30 s (usually credits).
