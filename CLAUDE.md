@@ -86,6 +86,16 @@ Phase 4, emulator pass (2026-10-30, Pixel_9a AVD, Android 16, 2 GB, The Kid 859 
 - **Bug, unconfirmed root cause:** once, after a throttled seek to 88 %, the player stopped at 47:03 paused with 0:00 buffered, no panel and no error; pressing play restarted the film from 0:00. `stoppedEarly` (player.dart) only treats a post-start stop as failure when mpv also reported an error, so a premature EOF ends playback silently. A rerun with mpv logs showed the demuxer briefly reporting `eof=1` / "EOF reached" after a seek but recovering. Fix direction: treat `completed` before ~90 % of duration as early even without an error (reopen at `_pos`, or show the recovery overlay). Needs a repro test in test/player_test.dart first.
 - Minor: during a stall after a seek the header showed "Buffered 42:47" at 10:42 (stale cached range). mpv logs `Failed to create file cache` on every open (falls back to RAM).
 
+Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 5 GHz Wi-Fi ≈1.3 MB/s, same film). Video renders with hardware decode (`mediacodec-copy`); 1 audio underrun, no frame drops logged; CPU median 67 %, peak 188 % (seeks).
+- Cold start: 29 s tap → first frame (8 s Torrent screen + 20.7 s player). Warm reopen within 60 s: 4.5 s. Release: 591 MB data dir gone at +70 s.
+- Seek → resume: 7.4 / 9.1 / 9.0 s; into an undownloaded early range 20.1 s. Two of four seeks stalled again within ~4 s of resuming (0.8 s, 6.2 s): `cache-pause-wait=3` restarts on a thin buffer after a seek. Tuning candidate: a longer wait for the first resume after a seek.
+- Pause 90 s with ~7.5 min buffered: watchdog cancelled the blocked write at +51 s; resume was seamless (no stall).
+- Wi-Fi off (mobile data off too) mid-seek: "Waiting for connection" over the last frame; resumed on its own 38 s after Wi-Fi returned (70.8 s total). Slow: candidate is re-announcing / reopening sockets on a network change.
+- Subtitles: OpenSubtitles v3 listed 4 English files, auto-picked File 1; switching to File 2 loaded it as external SubRip. Embedded track text rendered.
+- Memory: peak PSS 853 MB / RSS 960 MB. Native heap 306 MB dirty and flat over time (no leak; 60 MB on the emulator, so likely the mediacodec-copy frame path), demux cache ~146 MB, file mmap 266 MB mostly clean. Heavy for a 3 GB phone; measure there.
+- Every seek: mpv's demuxer logs `cached range … (eof=1)` and "EOF reached" yet continues; the silent early stop did not recur on the phone.
+- Not tested: Wi-Fi → LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
+
 ## Next
 - **Buffering Phase 4 (needs a device):** measure first-frame time, stall seconds and memory on the APK under throttled bandwidth, Wi-Fi off/on, network switches, repeated seeks, pause > 60 s, a low-RAM phone. Check the panel: The Kid torrent shows Starting then plays; Wi-Fi off shows "Waiting for connection" and resumes; a dead source offers "Try another source" within 15 s; Jellyfin unchanged. Only then trial `connections_limit=80`, an upload cap, a wider tail-probe zone, and the `readPiece` swap if profiling justifies it.
 0. **Guest mode:** device-check: first launch → Continue as guest → Discover; ♥ as guest → sheet → Sign in → back on the title with ♥ on; sign out → guest shell; guest Downloads prompt.
