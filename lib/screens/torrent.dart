@@ -8,6 +8,7 @@ import '../jellyfin.dart';
 import '../playback.dart';
 import '../theme.dart';
 import '../torrent.dart';
+import '../upnext.dart';
 import 'player.dart';
 
 bool _entryBusy = false;
@@ -104,13 +105,16 @@ class _MagnetDialogState extends State<_MagnetDialog> {
 class TorrentScreen extends StatefulWidget {
   const TorrentScreen(this.magnet,
       {this.fileIdx, this.season, this.episode, this.title, this.playback, this.subtitles = const [], this.hash,
-      super.key});
+      this.next, super.key});
   final String magnet;
   final int? fileIdx, season, episode;
   final String? title;
   final Playback? playback;
   final List<Subtitle> subtitles;
   final String? hash;
+
+  /// Handed to the player; its answer comes back out of this route, which pops with it.
+  final Future<NextUp?>? next;
 
   @override
   State<TorrentScreen> createState() => _TorrentScreenState();
@@ -235,8 +239,9 @@ class _TorrentScreenState extends State<TorrentScreen> {
     try {
       final url = await engine.stream(id, f.index);
       if (!mounted || id != _id) return;
+      Object? result;
       try {
-        await Navigator.push(
+        result = await Navigator.push<Object?>(
             context,
             MaterialPageRoute(
                 builder: (_) => PlayerScreen(
@@ -248,11 +253,18 @@ class _TorrentScreenState extends State<TorrentScreen> {
                     hash: widget.hash,
                     filename: f.name,
                     size: f.size,
-                    torrent: (engine: engine, id: id))));
+                    torrent: (engine: engine, id: id),
+                    next: widget.next)));
       } finally {
         if (id == _id) _forget(engine.stopStream(id));
       }
-      if (automatic && mounted && id == _id) Navigator.pop(context);
+      // Up Next: hand the player's answer on to play(), from the file list too. The isCurrent check keeps a late
+      // answer from popping a route pushed above this one.
+      if (result != null && mounted && id == _id && ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.pop(context, result);
+      } else if (automatic && mounted && id == _id) {
+        Navigator.pop(context);
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {

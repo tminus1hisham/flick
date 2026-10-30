@@ -92,6 +92,16 @@ void main() {
     expect(again.online, isFalse, reason: 'a guest playing a download must not reach for the server');
   });
 
+  test('autoplay next defaults on and persists', () async {
+    final s = Session();
+    await s.load();
+    expect(s.autoplayNext, isTrue);
+    s.autoplayNext = false;
+    final again = Session();
+    await again.load();
+    expect(again.autoplayNext, isFalse);
+  });
+
   test('installs signed in before guest mode count as onboarded', () async {
     SharedPreferences.setMockInitialValues({'server': 'https://srv', 'userId': 'u1'});
     FlutterSecureStorage.setMockInitialValues({'token': 't'});

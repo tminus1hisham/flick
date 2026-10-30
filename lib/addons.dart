@@ -37,6 +37,7 @@ typedef AddonStream = ({
   List<Subtitle> subtitles,
   int? videoSize,
   String? videoHash,
+  String? bingeGroup, // behaviorHints.bingeGroup: same group = same release, for the next episode
 });
 typedef StreamInfo = ({String quality, int? seeders, String? size, String? origin, List<String> lines});
 typedef Subtitle = ({String id, String url, String lang});
@@ -323,6 +324,7 @@ class Addons extends ChangeNotifier {
             subtitles: _subs(s['subtitles']),
             videoSize: _int(_hints(s)['videoSize']),
             videoHash: _str(_hints(s)['videoHash']),
+            bingeGroup: _hints(s)['bingeGroup'] is String ? _hints(s)['bingeGroup'] as String : null,
           ),
     ];
   }

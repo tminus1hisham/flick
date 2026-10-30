@@ -163,6 +163,33 @@ class JellyfinClient {
         'fields': 'Overview',
       }));
 
+  /// The episode after [ep] in series order, across seasons; null at the end, for non-episodes, or on any error.
+  Future<Item?> nextEpisode(Item ep) async {
+    if (ep.type != 'Episode' || ep.seriesId == null) return null;
+    try {
+      final list = _items(await _get('/Shows/${ep.seriesId}/Episodes', {
+        'userId': userId,
+        'startItemId': ep.id,
+        'limit': 2,
+        'fields': 'Overview',
+      }));
+      return list.length > 1 ? list[1] : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Where the Outro media segment starts (Jellyfin 10.10+); null when there is none or on any error.
+  Future<Duration?> outro(String id) async {
+    try {
+      final body = await _get('/MediaSegments/$id', {'includeSegmentTypes': 'Outro'});
+      for (final s in body['Items'] as List) {
+        if (s['Type'] == 'Outro' && s['StartTicks'] is int) return ticksToDuration(s['StartTicks'] as int);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   String imageUrl(String itemId, {int maxHeight = 450}) =>
       _uri('/Items/$itemId/Images/Primary', {'maxHeight': maxHeight}).toString();
 

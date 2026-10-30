@@ -15,6 +15,7 @@ import '../stall.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../torrent.dart';
+import '../upnext.dart';
 import '../widgets.dart';
 import 'buffering.dart';
 
@@ -143,6 +144,7 @@ class PlayerScreen extends StatefulWidget {
     this.size,
     this.hash,
     this.torrent,
+    this.next,
     super.key,
   });
   final Playback? playback;
@@ -154,6 +156,9 @@ class PlayerScreen extends StatefulWidget {
 
   /// The torrent behind [source] when it is the engine's loopback stream.
   final ({TorrentEngine engine, int id})? torrent;
+
+  /// The next episode, for Up Next; the route pops with its `resolve()` answer. Null for movies.
+  final Future<NextUp?>? next;
 
   /// Plays this file/URL instead of streaming from Jellyfin.
   final String? source;
