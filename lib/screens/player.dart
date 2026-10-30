@@ -319,6 +319,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _endEpisode() {
+    final since = _since;
+    if (since != null) {
+      // Device measurement (adb logcat -s flutter): time to first frame, stall length.
+      final kind = _error != null ? 'failed' : (_opening ? 'start' : 'stall');
+      final ms = DateTime.now().difference(since).inMilliseconds;
+      debugPrint('flick-metric $kind $ms ms');
+    }
     _endTimers();
     _opening = false;
     _since = null;
