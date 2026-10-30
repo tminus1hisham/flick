@@ -227,6 +227,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _dismissed = false, _forced = false, _resolving = false;
   bool _committed = false, _completed = false, _endedEarly = false;
   int _token = 0;
+  // media_kit 2.0.1 never rebuilds its button bars when the theme changes
+  // (its updateShouldNotify is inverted), so the Next button listens itself.
+  final _nextBar = ValueNotifier(0);
   // _open() reports position 0 until mpv seeks to its start: not a seek back.
   bool _reopening = false;
   final _video = GlobalKey<VideoState>();
@@ -313,6 +316,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     widget.next?.then((next) {
       if (!mounted) return;
       setState(() => _next = next);
+      _nextBar.value++;
       _upNext();
     }, onError: (Object e) => debugPrint('up next: $e'));
   }
@@ -412,6 +416,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _forced = forced;
       _resolving = true;
     });
+    _nextBar.value++;
     _player.pause().catchError((Object e) => debugPrint('pause: $e'));
     Object? result;
     var ok = false;
@@ -438,6 +443,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _dismissed = true;
       _counted = Duration.zero;
     });
+    _nextBar.value++;
   }
 
   void _setAutoplay(bool on) {
@@ -940,6 +946,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _endTimers();
     _countdown?.cancel();
     _token++;
+    _nextBar.dispose();
     for (final s in _subs) {
       s.cancel();
     }
@@ -1023,9 +1030,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
             constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             icon: const Icon(Icons.closed_caption_outlined),
           ),
-        if (next != null)
-          NextEpisodeButton(
-            onPressed: _resolving ? null : () => _commit(forced: true),
+        if (widget.next != null)
+          ListenableBuilder(
+            listenable: _nextBar,
+            builder: (_, _) => _next == null
+                ? const SizedBox.shrink()
+                : NextEpisodeButton(
+                    onPressed: _resolving ? null : () => _commit(forced: true),
+                  ),
           ),
         const MaterialFullscreenButton(),
       ],
