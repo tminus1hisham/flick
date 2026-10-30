@@ -27,6 +27,7 @@ AddonStream stream({
       subtitles: const [],
       videoSize: null,
       videoHash: null,
+      bingeGroup: null,
     );
 
 Map<String, dynamic> manifest(String id, {List<Object> resources = const ['stream']}) =>
@@ -238,6 +239,7 @@ void main() {
               'filename': 'x.mkv',
               'videoSize': 1073741824,
               'videoHash': 'abc123',
+              'bingeGroup': 'torrentio|1080p|WEB',
               'proxyHeaders': {
                 'request': {'User-Agent': 'Flick', 'Bad': 1},
               },
@@ -247,6 +249,7 @@ void main() {
             ],
           },
           {'name': 'yt', 'ytId': 'abc'},
+          {'name': 'odd', 'url': 'https://x/a.mkv', 'behaviorHints': {'bingeGroup': 7}},
           {'name': 'Netflix', 'externalUrl': 'https://netflix.com/title/1'},
         ]
       });
@@ -261,7 +264,7 @@ void main() {
     expect([for (final s in src) s.name], ['WatchHub', 'Torrentio']); // PDM is movie-only
     final ss = await a.streams(src.first, 'series', 'tt0096697:1:1');
     expect(seen.last, 'https://watchhub.strem.io/stream/series/tt0096697:1:1.json');
-    expect(ss.length, 2);
+    expect(ss.length, 3);
     expect(ss.first.trackers, [tracker]);
     expect(ss.first.title, 'x\n💾 1 GB');
     expect(ss.first.filename, 'x.mkv');
@@ -270,6 +273,9 @@ void main() {
     expect(ss.first.subtitles, [(id: 's1', url: 'https://s/1.srt', lang: 'eng')]);
     expect(ss.first.videoSize, 1073741824);
     expect(ss.first.videoHash, 'abc123');
+    expect(ss.first.bingeGroup, 'torrentio|1080p|WEB');
+    expect(ss[1].bingeGroup, isNull, reason: 'non-string bingeGroup ignored');
+    expect(ss.last.bingeGroup, isNull);
     expect(ss.last.headers, isEmpty);
     expect(ss.last.externalUrl, 'https://netflix.com/title/1');
   });

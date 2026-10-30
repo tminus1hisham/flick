@@ -62,6 +62,49 @@ void main() {
     expect(mp4.queryParameters['videoBitRate'], '4000000');
   });
 
+  group('next episode and outro', () {
+    final seen = <Uri>[];
+    JellyfinClient client(Object Function(Uri) reply) => JellyfinClient(
+          server: 'https://srv',
+          deviceId: 'd',
+          userId: 'u',
+          client: MockClient((r) async {
+            seen.add(r.url);
+            final body = reply(r.url);
+            return body is int ? http.Response('', body) : http.Response(jsonEncode(body), 200);
+          }),
+        );
+    setUp(seen.clear);
+
+    test('nextEpisode asks from this episode, two at a time, and takes the second', () async {
+      final c = client((_) => {'Items': [episodeJson, {...episodeJson, 'Id': 'ep2', 'Name': 'Two'}]});
+      expect((await c.nextEpisode(Item(episodeJson)))?.id, 'ep2');
+      expect(seen.single.path, '/Shows/s1/Episodes');
+      expect(seen.single.queryParameters, {'userId': 'u', 'startItemId': 'ep1', 'limit': '2', 'fields': 'Overview'});
+    });
+
+    test('nextEpisode: last episode, non-episode and errors give null', () async {
+      expect(await client((_) => {'Items': [episodeJson]}).nextEpisode(Item(episodeJson)), isNull);
+      expect(await client((_) => 500).nextEpisode(Item(episodeJson)), isNull);
+      seen.clear();
+      expect(await client((_) => {'Items': []}).nextEpisode(Item({...episodeJson, 'Type': 'Movie'})), isNull);
+      expect(seen, isEmpty, reason: 'no request for a non-episode');
+    });
+
+    test('outro reads the Outro segment start, else null', () async {
+      final c = client((_) => {
+            'Items': [
+              {'Type': 'Outro', 'StartTicks': 1290 * ticksPerSecond, 'EndTicks': 1320 * ticksPerSecond},
+            ]
+          });
+      expect(await c.outro('ep1'), const Duration(seconds: 1290));
+      expect(seen.single.path, '/MediaSegments/ep1');
+      expect(seen.single.queryParameters['includeSegmentTypes'], 'Outro');
+      expect(await client((_) => {'Items': []}).outro('ep1'), isNull);
+      expect(await client((_) => 404).outro('ep1'), isNull);
+    });
+  });
+
   test('items query drops null params and parses list', () async {
     late Uri seen;
     final c = JellyfinClient(

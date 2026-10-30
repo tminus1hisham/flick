@@ -21,6 +21,10 @@ class Session extends ChangeNotifier {
 
   bool get loggedIn => client?.token != null;
 
+  /// Up Next counts down and plays the next episode on its own; off, it waits for a tap.
+  bool get autoplayNext => _prefs.getBool('autoplayNext') ?? true;
+  set autoplayNext(bool on) => _prefs.setBool('autoplayNext', on);
+
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
     deviceId = _prefs.getString('deviceId') ?? _newDeviceId();
