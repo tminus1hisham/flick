@@ -21,11 +21,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.libtorrent4j.Priority
 import org.libtorrent4j.SessionHandle
 import org.libtorrent4j.SessionManager
+import org.libtorrent4j.SettingsPack
 import org.libtorrent4j.Sha1Hash
 import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
 import org.libtorrent4j.swig.error_code
 import org.libtorrent4j.swig.libtorrent
+import org.libtorrent4j.swig.settings_pack
 
 /**
  * One torrent. Every TorrentHandle call happens under `synchronized(this)` after checking [alive], and
@@ -153,6 +155,10 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
             // from a killed process. Swept here, not in Dart: a hot restart resets Dart but not this plugin.
             File(dir).parentFile?.listFiles()?.filter { f -> f.path != File(dir).path }?.forEach { f -> f.deleteRecursively() }
             it.start()
+            // stop() ignores every piece, which makes a torrent "finished", and libtorrent then drops its seeds as
+            // redundant and won't redial them for 60 s (min_reconnect_time). Keep them, so reusing the torrent (a
+            // reopen, or the next episode of a season pack) starts at once instead of a minute later.
+            it.applySettings(SettingsPack().setBoolean(settings_pack.bool_types.close_redundant_connections.swigValue(), false))
             session = it
         }
         val ec = error_code()

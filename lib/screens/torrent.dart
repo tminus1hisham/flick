@@ -134,6 +134,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
   int? _openingFile; // UI only: the row showing "Opening…", tracks _opening
   int? _suggested;
   bool _autoAttempted = false;
+  // Up Next: blank while the release before the next episode runs, so this screen doesn't cut back in.
+  bool _handingOff = false;
   DateTime? _startedAt;
 
   @override
@@ -264,8 +266,14 @@ class _TorrentScreenState extends State<TorrentScreen> {
       if (result != null && mounted && id == _id && ModalRoute.of(context)?.isCurrent == true) {
         // Release before popping: the next episode's add (same season pack) must come after it, or the release
         // from dispose would remove the torrent under it 60 s later.
+        setState(() => _handingOff = true);
         await _teardown();
-        if (mounted && ModalRoute.of(context)?.isCurrent == true) popForNext(context, result);
+        if (!mounted) return;
+        if (ModalRoute.of(context)?.isCurrent == true) {
+          popForNext(context, result);
+        } else {
+          setState(() => _handingOff = false);
+        }
       } else if (automatic && mounted && id == _id) {
         Navigator.pop(context);
       }
@@ -300,6 +308,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_handingOff) return const ColoredBox(color: FlickTokens.background);
     final i = _info, files = _files;
     final error = _error ?? i?.error;
     final t = Theme.of(context).textTheme;
