@@ -81,7 +81,7 @@ class Addon {
         for (final c in (_m['catalogs'] as List?) ?? const [])
           if (c is Map &&
               c['id'] is String &&
-              (c['type'] == 'movie' || c['type'] == 'series') &&
+              (c['type'] == 'movie' || c['type'] == 'series' || c['type'] == 'anime') &&
               !((c['extra'] as List?) ?? const []).any((e) => e is Map && e['isRequired'] == true) &&
               (_list(c['extraRequired']) ?? const []).isEmpty)
             (
@@ -120,6 +120,9 @@ bool _validManifest(Object? m) =>
 
 String? _str(Object? v) => v is String ? v : v is num ? '$v' : null;
 int? _int(Object? v) => v is num ? v.toInt() : null;
+
+// Anime catalogs contain movies and series; leftover 'anime' titles use the series flow.
+String _titleType(String type) => type == 'anime' ? 'series' : type;
 
 // Stremio keeps ':' raw in path segments (series ids are `tt123:1:2`).
 String _seg(String s) => Uri.encodeComponent(s).replaceAll('%3A', ':');
@@ -239,6 +242,7 @@ class Addons extends ChangeNotifier {
   }
 
   List<Catalog> get catalogs => [for (final a in active) ...a.catalogs];
+  List<Catalog> get animeCatalogs => catalogs.where((c) => c.type == 'anime').toList();
 
   Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) async {
     final extra = [
@@ -252,7 +256,7 @@ class Addons extends ChangeNotifier {
         if (m is Map && m['id'] is String)
           (
             id: m['id'] as String,
-            type: _str(m['type']) ?? c.type,
+            type: _titleType(_str(m['type']) ?? c.type),
             name: _str(m['name']) ?? '',
             poster: _str(m['poster']),
             releaseInfo: _str(m['releaseInfo']),
@@ -262,13 +266,14 @@ class Addons extends ChangeNotifier {
 
   /// From the first active addon serving meta for ([type], [id]); [AddonError.invalid] when none does.
   Future<Meta> meta(String type, String id) async {
+    type = _titleType(type);
     final a = active.where((a) => a.serves('meta', type, id)).firstOrNull;
     if (a == null) throw AddonException(AddonError.invalid);
     final m = (await _get('${a.base}/meta/${_seg(type)}/${_seg(id)}.json'))['meta'];
     if (m is! Map) throw AddonException(AddonError.invalid);
     return (
       id: _str(m['id']) ?? id,
-      type: _str(m['type']) ?? type,
+      type: _titleType(_str(m['type']) ?? type),
       name: _str(m['name']) ?? '',
       poster: _str(m['poster']),
       background: _str(m['background']),
@@ -405,7 +410,7 @@ String magnetFor(AddonStream s) {
 Future<void> openExternal(String url) =>
     const MethodChannel('flick/torrent').invokeMethod('openExternal', {'url': url});
 
-// Snapshots of the official addons' live manifests (2026-10-29), trimmed to the fields Flick reads.
+// Snapshots trimmed to the fields Flick reads; Kitsu and Torrentio verified 2026-10-30.
 const _bundledManifests = <({String base, bool locked, Map<String, dynamic> manifest})>[
   (
     base: 'https://v3-cinemeta.strem.io',
@@ -457,7 +462,7 @@ const _bundledManifests = <({String base, bool locked, Map<String, dynamic> mani
       'catalogs': [],
     },
   ),
-  // Torrent streams for Cinemeta titles (user request 2026-10-29). Third-party, not a Stremio
+  // Torrent streams for Cinemeta and Kitsu titles. Third-party, not a Stremio
   // official addon; it sends no trackers, so magnetFor adds fallbackTrackers.
   (
     base: 'https://torrentio.strem.fun',
@@ -466,9 +471,11 @@ const _bundledManifests = <({String base, bool locked, Map<String, dynamic> mani
       'id': 'com.stremio.torrentio.addon',
       'name': 'Torrentio',
       'version': '0.0.15',
-      'resources': ['stream'],
-      'types': ['movie', 'series'],
-      'idPrefixes': ['tt'],
+      'resources': [
+        {'name': 'stream', 'types': ['movie', 'series', 'anime'], 'idPrefixes': ['tt', 'kitsu']},
+      ],
+      'types': ['movie', 'series', 'anime'],
+      'idPrefixes': ['tt', 'kitsu'],
       'catalogs': [],
     },
   ),
@@ -483,6 +490,25 @@ const _bundledManifests = <({String base, bool locked, Map<String, dynamic> mani
       'types': ['movie', 'series'],
       'idPrefixes': ['tt'],
       'catalogs': [],
+    },
+  ),
+  (
+    base: 'https://anime-kitsu.strem.fun',
+    locked: false,
+    manifest: {
+      'id': 'com.stremio.kitsu',
+      'name': 'Anime Kitsu',
+      'resources': ['catalog', 'meta', 'subtitles'],
+      'types': ['anime', 'movie', 'series'],
+      'idPrefixes': ['kitsu', 'mal', 'anilist', 'anidb'],
+      'catalogs': [
+        {'type': 'anime', 'id': 'kitsu-anime-trending', 'name': 'Trending', 'extra': [{'name': 'skip'}]},
+        {'type': 'anime', 'id': 'kitsu-anime-airing', 'name': 'Airing', 'extra': [{'name': 'skip'}]},
+        {'type': 'anime', 'id': 'kitsu-anime-popular', 'name': 'Popular', 'extra': [{'name': 'skip'}]},
+        {'type': 'anime', 'id': 'kitsu-anime-rating', 'name': 'Top rated', 'extra': [{'name': 'skip'}]},
+        {'type': 'anime', 'id': 'kitsu-anime-list', 'name': 'Kitsu', 'extra': [{'name': 'search', 'isRequired': true}]},
+        {'type': 'series', 'id': 'kitsu-anime-last-videos', 'name': 'Latest episodes', 'extra': [{'name': 'skip'}]},
+      ],
     },
   ),
 ];

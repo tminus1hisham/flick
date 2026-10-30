@@ -101,8 +101,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         }),
                       ),
                     ),
-                  Expanded(child: _Segment('Anime', selected: false,
-                    onTap: () => Navigator.pushNamed(context, '/anime'))),
                 ]),
               ),
               const SizedBox(height: 8),
@@ -145,19 +143,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     enabled: heroes && !searching,
                     child: showFavourites
                         // Keyed by the list so unfavouriting on Title shows here on return.
-                        ? _Feed.saved(favourites, key: ValueKey(favourites.map((f) => f.id).join(',')))
+                        ? CatalogFeed.saved(favourites, key: ValueKey(favourites.map((f) => f.id).join(',')))
                         : selected == null
-                            ? const _Notice(Icons.video_library_outlined, 'No catalogs for this type yet.')
-                            : _Feed(selected, key: ValueKey(_key(selected))),
+                            ? const CatalogNotice(Icons.video_library_outlined, 'No catalogs for this type yet.')
+                            : CatalogFeed(selected, key: ValueKey(_key(selected))),
                   ),
                   HeroMode(
                     enabled: heroes && searching,
                     child: !searching
                         ? const SizedBox.shrink()
                         : searchable == null
-                            ? _Notice(Icons.search, "Your sources can't search these titles.",
+                            ? CatalogNotice(Icons.search, "Your sources can't search these titles.",
                                 action: 'Clear search', onAction: _clear)
-                            : _Feed(searchable,
+                            : CatalogFeed(searchable,
                                 query: _query, onClear: _clear, key: ValueKey((_key(searchable), _query))),
                   ),
                 ]),
@@ -203,11 +201,11 @@ class _Segment extends StatelessWidget {
 }
 
 /// One catalog (or one search) paged in as the viewer nears the end.
-class _Feed extends StatefulWidget {
-  const _Feed(Catalog this.catalog, {this.query, this.onClear, super.key}) : saved = null;
+class CatalogFeed extends StatefulWidget {
+  const CatalogFeed(Catalog this.catalog, {this.query, this.onClear, super.key}) : saved = null;
 
   /// The device favourites: one fixed page, no paging.
-  const _Feed.saved(List<MetaPreview> this.saved, {super.key})
+  const CatalogFeed.saved(List<MetaPreview> this.saved, {super.key})
       : catalog = null,
         query = null,
         onClear = null;
@@ -217,10 +215,10 @@ class _Feed extends StatefulWidget {
   final VoidCallback? onClear;
 
   @override
-  State<_Feed> createState() => _FeedState();
+  State<CatalogFeed> createState() => _CatalogFeedState();
 }
 
-class _FeedState extends State<_Feed> {
+class _CatalogFeedState extends State<CatalogFeed> {
   final _items = <MetaPreview>[];
   final _ids = <String>{};
   bool _loading = false, _done = false;
@@ -271,13 +269,13 @@ class _FeedState extends State<_Feed> {
         if (_items.isEmpty) {
           if (_error != null) {
             return _offline(_error)
-                ? _Notice(Icons.wifi_off, "Couldn't connect. Check your connection and try again.", action: 'Try again', onAction: _more)
-                : _Notice(Icons.report_outlined, "Couldn't load these titles", action: 'Try again', onAction: _more);
+                ? CatalogNotice(Icons.wifi_off, "Couldn't connect. Check your connection and try again.", action: 'Try again', onAction: _more)
+                : CatalogNotice(Icons.report_outlined, "Couldn't load these titles", action: 'Try again', onAction: _more);
           }
           if (!_done) return GridSkeleton(padding: gutters, delegate: grid);
           return widget.query == null
-              ? const _Notice(Icons.video_library_outlined, 'No titles in this catalog yet.')
-              : _Notice(Icons.search, 'Nothing found for “${widget.query}”',
+              ? const CatalogNotice(Icons.video_library_outlined, 'No titles in this catalog yet.')
+              : CatalogNotice(Icons.search, 'Nothing found for “${widget.query}”',
                   action: 'Clear search', onAction: widget.onClear);
         }
         return NotificationListener<ScrollNotification>(
@@ -345,12 +343,20 @@ class _PosterState extends State<_Poster> {
 
   void _open() {
     final d = MediaQuery.disableAnimationsOf(context) ? Duration.zero : FlickTokens.sheetDuration;
+    final m = widget.preview;
+    final preview = (
+      id: m.id,
+      type: m.type == 'anime' ? 'series' : m.type,
+      name: m.name,
+      poster: m.poster,
+      releaseInfo: m.releaseInfo,
+    );
     Navigator.push(
       context,
       PageRouteBuilder<void>(
         transitionDuration: d,
         reverseTransitionDuration: d,
-        pageBuilder: (_, _, _) => TitleScreen(widget.preview),
+        pageBuilder: (_, _, _) => TitleScreen(preview),
         transitionsBuilder: (_, a, _, child) =>
             FadeTransition(opacity: a.drive(CurveTween(curve: FlickTokens.curveIn)), child: child),
       ),
@@ -406,8 +412,8 @@ class _PosterState extends State<_Poster> {
 }
 
 /// A state that starts in the grid area: icon, sentence, optional action.
-class _Notice extends StatelessWidget {
-  const _Notice(this.icon, this.text, {this.action, this.onAction});
+class CatalogNotice extends StatelessWidget {
+  const CatalogNotice(this.icon, this.text, {this.action, this.onAction, super.key});
   final IconData icon;
   final String text;
   final String? action;

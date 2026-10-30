@@ -26,6 +26,7 @@ class _Addon implements Addon {
         (addon: this, type: 'movie', id: 'top', name: 'Popular', searchable: true),
         (addon: this, type: 'movie', id: 'year', name: 'New', searchable: false),
         (addon: this, type: 'series', id: 'top', name: 'Popular', searchable: true),
+        (addon: this, type: 'anime', id: 'anime', name: 'Anime catalog', searchable: true),
       ];
   @override
   String get capability => 'Catalogs';
@@ -145,5 +146,18 @@ void main() {
 
     expect(_fake.requests.last, ('movie', 'year', null, 0));
     expect(find.text('movie year 0'), findsOneWidget);
+  });
+
+  testWidgets('Discover has no Anime segment or anime catalog chips', (tester) async {
+    await _pump(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Anime'), findsNothing);
+    expect(find.text('Anime catalog'), findsNothing);
+    expect(find.byType(CatalogFeed), findsOneWidget);
+
+    await tester.tap(find.text('Series'));
+    await tester.pumpAndSettle();
+    expect(find.text('Anime catalog'), findsNothing);
+    expect(_fake.requests.every((r) => r.$1 != 'anime'), isTrue);
   });
 }
