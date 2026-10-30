@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../upnext.dart';
 import '../widgets.dart';
 import 'account.dart';
+import 'torrent.dart';
 
 /// Row text for a stream. Tests swap it, since describe() belongs to the addons contract.
 @visibleForTesting
@@ -447,14 +448,30 @@ class _StreamRowState extends State<_StreamRow> {
       _failed = false;
     });
     try {
-      await downloads.enqueueStream(
-        url: widget.stream.url!,
-        headers: widget.stream.headers,
-        title: widget.playback.title,
-        poster: widget.poster,
-        playback: widget.playback,
-      );
-      if (mounted) setState(() => _queued = true);
+      var queued = true;
+      final stream = widget.stream;
+      final playback = widget.playback;
+      if (stream.infoHash != null) {
+        queued = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TorrentScreen(
+          magnetFor(stream),
+          fileIdx: stream.fileIdx,
+          season: playback.season,
+          episode: playback.episode,
+          title: playback.title,
+          playback: playback,
+          download: true,
+          poster: widget.poster,
+        ))) == true;
+      } else {
+        await downloads.enqueueStream(
+          url: stream.url!,
+          headers: stream.headers,
+          title: playback.title,
+          poster: widget.poster,
+          playback: playback,
+        );
+      }
+      if (mounted) setState(() => _queued = queued);
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     } finally {
@@ -489,7 +506,8 @@ class _StreamRowState extends State<_StreamRow> {
       if (i.size != null) [TextSpan(text: i.size, style: streamMonoStyle)],
       if (i.origin != null) [TextSpan(text: i.origin)],
     ];
-    final downloadable = stream.url != null && stream.infoHash == null && stream.externalUrl == null;
+    final downloadable = (stream.url != null || stream.infoHash != null) && stream.externalUrl == null;
+    final downloadLabel = stream.infoHash != null ? 'Download torrent' : 'Download';
     final status = _queued ? 'Queued' : _queuing ? 'Queuing…' : _failed ? "Couldn't queue download. Try again." : null;
     return Container(
       constraints: const BoxConstraints(minHeight: 60),
@@ -558,13 +576,13 @@ class _StreamRowState extends State<_StreamRow> {
         if (downloadable)
           Semantics(
             container: true,
-            label: 'Download',
+            label: downloadLabel,
             button: true,
             enabled: !_queuing && !_queued,
             onTap: _queuing || _queued ? null : _download,
             excludeSemantics: true,
             child: IconButton(
-              tooltip: 'Download',
+              tooltip: downloadLabel,
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: Icon(_queued ? Icons.check : Icons.download_outlined),
               onPressed: _queuing || _queued ? null : _download,

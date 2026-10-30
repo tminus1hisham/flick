@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:background_downloader/background_downloader.dart';
+import 'package:flick/downloads.dart';
 import 'package:flick/torrent.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -98,5 +102,156 @@ void main() {
         (index: 9, name: 'unmatched.mkv', size: 20),
       ], season: 4, episode: 2), (index: 9, sure: false));
     }
+  });
+
+  test('torrent progress uses selected file bytes and remains active until native completion', () {
+    final p = TorrentProgress.fromStatus({
+      'downloaded': 250, 'total': 1000, 'done': false, 'path': null, 'error': null,
+    });
+    expect(p.downloaded, 250);
+    expect(p.total, 1000);
+    expect(p.progress, 0.25);
+    expect(p.done, isFalse);
+    expect(p.active, isTrue);
+    expect(p.path, isNull);
+
+    final waitingForMove = TorrentProgress.fromStatus({
+      'downloaded': 1000, 'total': 1000, 'done': false, 'path': null,
+    });
+    expect(waitingForMove.progress, 1);
+    expect(waitingForMove.done, isFalse);
+    expect(waitingForMove.active, isTrue);
+  });
+
+  test('native completion needs a complete selected file and a local path', () {
+    final p = TorrentProgress.fromStatus({
+      'downloaded': 1000, 'total': 1000, 'done': true, 'path': '/files/episode.mkv',
+    });
+    expect(p.progress, 1);
+    expect(p.done, isTrue);
+    expect(p.active, isFalse);
+    expect(p.path, '/files/episode.mkv');
+
+    for (final patch in <Map<String, Object?>>[
+      {'downloaded': 999},
+      {'path': null},
+      {'path': ''},
+      {'total': 0},
+      {'error': 'Downloaded file is missing'},
+    ]) {
+      final incomplete = TorrentProgress.fromStatus({
+        'downloaded': 1000, 'total': 1000, 'done': true, 'path': '/files/episode.mkv',
+        ...patch,
+      });
+      expect(incomplete.done, isFalse, reason: '$patch');
+      expect(incomplete.path, isNull, reason: '$patch');
+    }
+  });
+
+  test('torrent progress handles unknown totals and clamps byte counts', () {
+    final unknown = TorrentProgress.fromStatus({});
+    expect(unknown.downloaded, 0);
+    expect(unknown.total, 0);
+    expect(unknown.progress, 0);
+    expect(unknown.active, isTrue);
+
+    final negative = TorrentProgress.fromStatus({'downloaded': -5, 'total': -1});
+    expect(negative.downloaded, 0);
+    expect(negative.total, 0);
+    expect(negative.progress, 0);
+
+    final excess = TorrentProgress.fromStatus({'downloaded': 1500, 'total': 1000});
+    expect(excess.downloaded, 1000);
+    expect(excess.progress, 1);
+    expect(excess.done, isFalse);
+  });
+
+  test('torrent errors stop active polling and do not expose a playable path', () {
+    final p = TorrentProgress.fromStatus({
+      'downloaded': 1000, 'total': 1000, 'done': true,
+      'path': '/files/episode.mkv', 'error': 'Disk full',
+    });
+    expect(p.error, 'Disk full');
+    expect(p.done, isFalse);
+    expect(p.active, isFalse);
+    expect(p.path, isNull);
+  });
+
+  final metadata = StreamDownload(
+    title: '星の旅 "Season 1"',
+    poster: 'https://example.com/poster.jpg',
+    playback: (
+      title: '星の旅 "Season 1"',
+      subtitle: 'S01E02 · Departure',
+      type: 'series',
+      videoId: 'tt123:1:2',
+      season: 1,
+      episode: 2,
+      meta: null,
+    ),
+  );
+
+  KeptTorrent kept({bool done = false}) => KeptTorrent(
+    id: 7,
+    infoHash: hex,
+    magnet: 'magnet:?xt=urn:btih:$hex&tr=https%3A%2F%2Fexample.com%2Fannounce',
+    file: 4,
+    dir: '/files/downloads/torrents/$hex',
+    titleJson: metadata.toMetaData(),
+    name: 'Season 1/Show.S01E02.mkv',
+    size: 1000,
+    done: done,
+  );
+
+  test('kept torrent persistence JSON round trips identity and playback', () {
+    for (final done in [false, true]) {
+      final original = kept(done: done);
+      final encoded = jsonEncode([original.toJson()]);
+      final decoded = (jsonDecode(encoded) as List<dynamic>).single as Map<String, dynamic>;
+      final restored = KeptTorrent.fromJson(decoded);
+      expect(restored.toJson(), original.toJson());
+      expect(restored.taskId, 'torrent-$hex-4');
+      expect(isMagnet(restored.magnet), isTrue);
+
+      final title = StreamDownload.fromMetaData(restored.titleJson)!;
+      expect(title.title, metadata.title);
+      expect(title.poster, metadata.poster);
+      expect(title.playback, metadata.playback);
+    }
+  });
+
+  test('torrent adapter maps waiting, progress, completion and failure to download rows', () {
+    final r = TorrentDownload(kept());
+    expect(r.taskId, 'torrent-$hex-4');
+    expect(r.stream.playback.videoId, 'tt123:1:2');
+    expect(r.status, TaskStatus.enqueued);
+    expect(r.active, isTrue);
+    expect(r.progress, 0);
+    expect(r.expectedFileSize, 1000);
+
+    r.info = TorrentProgress.fromStatus({'downloaded': 400, 'total': 1000});
+    expect(r.status, TaskStatus.running);
+    expect(r.progress, 0.4);
+    expect(r.active, isTrue);
+
+    r.info = TorrentProgress.fromStatus({
+      'downloaded': 1000, 'total': 1000, 'done': true, 'path': '/files/episode.mkv',
+    });
+    expect(r.status, TaskStatus.complete);
+    expect(r.progress, 1);
+    expect(r.active, isFalse);
+
+    r.info = TorrentProgress.fromStatus({
+      'downloaded': 400, 'total': 1000, 'error': 'Disk full',
+    });
+    expect(r.status, TaskStatus.failed);
+    expect(r.active, isFalse);
+  });
+
+  test('persisted completion waits for native file validation before offering playback', () {
+    final r = TorrentDownload(kept(done: true));
+    expect(r.status, TaskStatus.enqueued);
+    expect(r.active, isTrue);
+    expect(r.info?.path, isNull);
   });
 }

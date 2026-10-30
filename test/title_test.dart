@@ -259,7 +259,7 @@ void main() {
     expect(find.text('No streams for this movie'), findsOneWidget);
   });
 
-  testWidgets('only plain URL streams show an accessible 48 dp download button', (tester) async {
+  testWidgets('URL and torrent streams show an accessible 48 dp download button, services none', (tester) async {
     final semantics = tester.ensureSemantics();
     await _open(
         tester,
@@ -277,7 +277,9 @@ void main() {
 
     expect(find.byTooltip('Download'), findsOneWidget);
     expect(find.bySemanticsLabel('Download'), findsOneWidget);
-    final size = tester.getSize(find.widgetWithIcon(IconButton, Icons.download_outlined));
+    // Step 04: torrent streams (incl. infoHash + url) download through the engine.
+    expect(find.byTooltip('Download torrent'), findsNWidgets(2));
+    final size = tester.getSize(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
     expect(size.width, greaterThanOrEqualTo(48));
     expect(size.height, greaterThanOrEqualTo(48));
     semantics.dispose();
