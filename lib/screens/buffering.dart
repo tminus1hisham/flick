@@ -282,8 +282,10 @@ class _BufferRail extends StatelessWidget {
     final value = progress?.clamp(0.0, 1.0).toDouble();
 
     return ExcludeSemantics(
-      child: Opacity(
+      child: AnimatedOpacity(
         opacity: offline ? 0.4 : 1,
+        duration: enter,
+        curve: FlickTokens.curveIn,
         child: SizedBox(
           height: FlickTokens.grid,
           child: TweenAnimationBuilder<double>(

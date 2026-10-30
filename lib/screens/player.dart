@@ -871,9 +871,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               if (widget.addonPlayback && _error == null)
                 Positioned.fill(
-                  child: BufferingPanel(
-                    view: _bufferView,
-                    onSwitch: () => Navigator.pop(context),
+                  child: ExcludeFocus(
+                    excluding: _panel,
+                    child: ExcludeSemantics(
+                      excluding: _panel,
+                      child: BufferingPanel(
+                        view: _bufferView,
+                        onSwitch: () => Navigator.pop(context),
+                      ),
+                    ),
                   ),
                 ),
               if (_error != null)
