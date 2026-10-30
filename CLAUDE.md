@@ -6,7 +6,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze`: must print `No issues found!`
-- `flutter test`: 80 tests pass on branch `guest`.
+- `flutter test`: 93 tests pass on branch `guest`. Kotlin: 18 HttpTest tests.
 - Kotlin unit tests: `cd android && ./gradlew :app:testDebugUnitTest` (results in `build/app/test-results/`). A fresh worktree first needs `flutter pub get` and the gitignored `android/gradlew*` + `android/gradle/wrapper/gradle-wrapper.jar` copied from the main checkout.
 - `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`).
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits. Older files (player.dart, widgets.dart, library.dart) have known hits; that is expected.
@@ -26,7 +26,9 @@ This file is the shared source for continuing the work in a new session. Read it
 | `lib/playback.dart` | `Playback` record (title, subtitle, type, canonical Stremio `videoId` such as `tt123:4:2`, season, episode) and `play(context, stream, playback)`, the only way screens start playback. Routing: externalUrl → Android ACTION_VIEW; url → `PlayerScreen` with headers; infoHash → `TorrentScreen`. |
 | `lib/torrent.dart` | `TorrentEngine` (MethodChannel `flick/torrent`: add / status / files / stream / stopStream / release / remove), `isMagnet`, `isVideo`, `guessFile` (Stremio enginefs guessFileIdx: unique SxxEyy match or sole video means sure; otherwise suggest the largest). |
 | `android/.../Torrents.kt` | libtorrent4j session. `add` reuses a live entry with the same info-hash. `release` stops streaming and removes the torrent after 60 s (enginefs ENGINE_TIMEOUT); only a re-`add` cancels that. `openExternal` (http/https only) answers on the main thread. All TorrentHandle calls run on the single `ctl` executor under `synchronized(e)` after checking `alive`. |
-| `android/.../StreamServer.kt` | Loopback HTTP server: Range requests, piece deadlines over a 16 MB window, and hash verification of each piece before serving it. |
+| `android/.../StreamServer.kt` | Loopback HTTP server: Range requests and hash verification of each piece before serving it. Classifies each request (seek vs tail probe, `isSeek` in Http.kt) and advances the entry's reader; a waiting request ends only when its own client hangs up. Piece deadlines come from `Entry.reschedule()` in Torrents.kt (bitrate-aware window, 1 s tick, `bitrate` channel method). |
+| `lib/stall.dart` | `StallDetector`, `PauseWait` (adaptive `cache-pause-wait`, genuine stalls, `repeated`), and `bufferView` (the buffering panel's state rules). |
+| `lib/screens/buffering.dart` | `BufferingPanel` over the player for addon playback: Starting / Buffering / Waiting for connection, segmented rail from mpv `bufferingPercentage`, torrent peers · speed, "Try another source". Spec: design/buffering.md. |
 | `lib/screens/discover.dart` | D1 Discover tab (2nd tab): 3-column poster grid, Movies/Series switch, catalog chips, search on submit, paging with skip=n, Hero to Title. Hidden feeds sit inside `HeroMode(enabled: visible)`. |
 | `lib/screens/title.dart` | D2 Title (movie: streams inline; series: season chips and episodes) and D3 Streams (one episode). Shared stream list: one group per source, each resolving on its own, per-source Retry, filter chips when there are 2 or more sources, WatchHub "Where to watch" rows. `describeStream` is a test seam. |
 | `lib/screens/sources.dart` | D4 Sources at route `/sources`: bundled switches, add by manifest URL with inline errors, remove with an inline Undo row. |
@@ -51,7 +53,7 @@ This file is the shared source for continuing the work in a new session. Read it
 - On Windows, a worktree whose `build/` paths are too long won't delete with `git worktree remove`. Use `git worktree prune`, then PowerShell `Remove-Item -LiteralPath '\\?\C:\...\stremio-<name>' -Recurse -Force`.
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
-## Status (2026-10-29)
+## Status (2026-10-30)
 Done on `discover`: Discover / Title / Streams / Sources screens, the addon client with bundled official addons, file guessing, warm torrent reuse, request headers, external links, playback recovery, and the subtitles and audio panel. One fresh review round has been run and all its findings are fixed: a header leak to subtitle hosts, Jellyfin downloads picking up the addon player, a stale call keeping a released torrent alive, false failure screens, subtitle duplicates, and offline copy.
 
 **Not verified:**
@@ -68,11 +70,15 @@ Sign-in is optional. First launch shows Login with "Continue as guest" (top righ
 Plan written with Codex: `~/.claude/plans/come-up-with-a-twinkling-peach.md` (4 phases; Claude overrode Codex on: keep SHA-1 piece check, no `cache-secs=30`, 128/16 MiB cache). Phase 1 done and merged (fresh review: both halves PASS-WITH-NITS, nits fixed):
 - StreamServer: a new request no longer cancels other waiting requests (mpv's tail probe used to kill the head request); a waiting request ends only when its own client hangs up (`clientGone` in Http.kt) and counts as progress for the 60 s watchdog.
 - Player, addon playback only: the 10 s pre-start fatal timer is gone (failure = mpv idle, re-checked 1 s and 3 s after an early error); `network-timeout` 120 s torrent / 30 s direct; demuxer 128 MiB ahead / 16 MiB back; `cache-pause-wait` 3 s, rising once to 8 s after 2 genuine stalls in 60 s (`PauseWait` in lib/stall.dart). `PlayerScreen.torrent` (engine, id) is passed but only used for the timeout so far.
-- **Known gap until Phase 3:** a source that hangs without mpv going idle shows loading forever (no "Try another source" yet). Don't merge to main before Phase 3.
 - Not verified on a device; the no-blanket-cancel and watchdog-refresh changes have no test that fails without them (native-only).
 
+Phase 2 done and merged (review PASS-WITH-NITS, nits fixed): bitrate-aware rolling window (`window`/`schedule`/`isSeek` in Http.kt, 6 tests), deadlines never postponed, seek → `clearPieceDeadlines`, a forward jump inside the window also clears, head + last-piece prefetch at `stream()`, 1 s tick on `ctl`, piece bitfield read once per reschedule (`status(QUERY_PIECES).pieces()`), player reports `size / duration` once via `bitrate`. The wiring (tick, seek, reader advance) has no test; native-only.
+
+Phase 3 done and merged (build-mobile: brief + spec in design/buffering.md, Codex spec review APPROVED round 3; Codex built the visual layer; QA critic FAIL, FAIL, PASS round 3 after the user chose a third round: distinct 8, hierarchy 9, motion 8, craft 8, states 9, theme 9, a11y 8, space 8; code review PASS-WITH-NITS, fixed). Native `online` (ConnectivityManager VALIDATED, ACCESS_NETWORK_STATE). Decisions in design/decisions.md "Buffering overlay".
+- Open follow-ups: the rail switches from filled to unknown without a fade if progress resets after offline; RobotoMono's wide decimal ("1 . 8 MB/s", same as the Torrent screen); "Try another source" lands on the torrent file list when the file was picked by hand (auto-opened → stream list); whether mpv's `cache-buffering-state` resets between episodes (device check); the tail-probe zone (last 2 pieces) may be too narrow for big MP4 moov / MKV cues, costing a seek at startup (measure in Phase 4).
+
 ## Next
-- **Buffering Phase 2** (native piece scheduling: head 4 MiB + last-piece prefetch, bitrate-aware rolling window with `deadline = 1000·k·P/R`, seek = request outside the window and not a tail probe → `clearPieceDeadlines`, new channel method `bitrate`) and **Phase 3** (buffering overlay via build-mobile, Codex design in the plan: stages, real progress from `player.stream.bufferingPercentage`, peers · speed, "Waiting for connection" via a native `online` method, "Try another source" after 15 s or 3 stalls in 2 min). Then Phase 4: device measurement and tuning.
+- **Buffering Phase 4 (needs a device):** measure first-frame time, stall seconds and memory on the APK under throttled bandwidth, Wi-Fi off/on, network switches, repeated seeks, pause > 60 s, a low-RAM phone. Check the panel: The Kid torrent shows Starting then plays; Wi-Fi off shows "Waiting for connection" and resumes; a dead source offers "Try another source" within 15 s; Jellyfin unchanged. Only then trial `connections_limit=80`, an upload cap, a wider tail-probe zone, and the `readPiece` swap if profiling justifies it.
 0. **Guest mode:** device-check: first launch → Continue as guest → Discover; ♥ as guest → sheet → Sign in → back on the title with ♥ on; sign out → guest shell; guest Downloads prompt.
 1. **Device acceptance** (APK: `build/app/outputs/flutter-apk/app-debug.apk`):
    - Jellyfin streamed and downloaded playback still works.
