@@ -44,6 +44,7 @@ flutter {
 }
 
 dependencies {
+    implementation("androidx.webkit:webkit:1.14.0")
     val libtorrent4j = "2.1.0-39"
     implementation("org.libtorrent4j:libtorrent4j:$libtorrent4j")
     implementation("org.libtorrent4j:libtorrent4j-android-arm64:$libtorrent4j")

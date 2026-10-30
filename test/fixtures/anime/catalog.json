@@ -1,0 +1,134 @@
+{
+  "data": [
+    {
+      "id": "hDvb0oUMQRQgz9cJmhJULNQxNGU8ALkI",
+      "external_ids": {
+        "mal": [
+          "20"
+        ],
+        "imdb": [
+          "tt0409591"
+        ],
+        "tvdb": [
+          "78857"
+        ],
+        "anidb": [
+          "239"
+        ],
+        "kitsu": [
+          "11"
+        ],
+        "simkl": [
+          "39508"
+        ],
+        "anilist": [
+          "20"
+        ],
+        "tmdb_tv": [
+          "46260"
+        ],
+        "wikidata": [
+          "Q25929253"
+        ],
+        "anisearch": [
+          "2788"
+        ],
+        "livechart": [
+          "3585"
+        ],
+        "animethemes": [
+          "naruto"
+        ],
+        "anime_planet": [
+          "naruto"
+        ],
+        "animeschedule": [
+          "naruto"
+        ],
+        "animecountdown": [
+          "39508"
+        ],
+        "animefillerlist": [
+          "naruto"
+        ],
+        "animefillerguide": [
+          "naruto"
+        ],
+        "animenewsnetwork": [
+          "1825"
+        ]
+      },
+      "title": {
+        "romaji": "NARUTO",
+        "english": "Naruto",
+        "native": "NARUTO -ナルト-"
+      },
+      "cover_url": "https://media.example/fixture-1"
+    },
+    {
+      "id": "DUGBASzhpiMhAKoYon5sQMtd8DkPdk3-",
+      "external_ids": {
+        "mal": [
+          "1735"
+        ],
+        "imdb": [
+          "tt0988824"
+        ],
+        "tvdb": [
+          "79824"
+        ],
+        "anidb": [
+          "4880"
+        ],
+        "kitsu": [
+          "1555"
+        ],
+        "simkl": [
+          "40053"
+        ],
+        "anilist": [
+          "1735"
+        ],
+        "tmdb_tv": [
+          "31910"
+        ],
+        "wikidata": [
+          "Q12500134"
+        ],
+        "anisearch": [
+          "3972"
+        ],
+        "livechart": [
+          "316"
+        ],
+        "animethemes": [
+          "naruto_shippuuden"
+        ],
+        "anime_planet": [
+          "naruto-shippuden"
+        ],
+        "animeschedule": [
+          "naruto-shippuuden"
+        ],
+        "animecountdown": [
+          "40053"
+        ],
+        "animefillerlist": [
+          "naruto-shippuden"
+        ],
+        "animefillerguide": [
+          "naruto-shippuden"
+        ],
+        "animenewsnetwork": [
+          "7293"
+        ]
+      },
+      "title": {
+        "romaji": "NARUTO: Shippuuden",
+        "english": "Naruto: Shippuden",
+        "native": "NARUTO -ナルト- 疾風伝"
+      },
+      "cover_url": "https://media.example/fixture-2"
+    }
+  ]
+}

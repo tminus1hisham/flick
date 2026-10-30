@@ -54,6 +54,14 @@ This file is the shared source for continuing the work in a new session. Read it
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
 ## Status (2026-10-30)
+
+### Miruro anime (current checkout, 2026-10-30)
+- Discover now has Anime: AniList search, exact identity mapping to Miruro, episode list, sub/soft-sub/dub and provider selection, existing-player playback, and fresh URL / URL+headers copying. Download pages remain clearly labelled pages; no offline HLS assembly.
+- The reference repositories' secure pipe returned 404 inside the phone browser. The current site uses a v1 catalog API with binary responses; the new client follows the verified live format. Visible Android WebView fallback keeps cookies in the browser and restricts response messaging to the selected HTTPS origin, main frame and pending request. Details and source references: `design/miruro.md`.
+- Physical Redmi Note 11 Pro: native bridge decoded 222 Naruto episode entries and eight provider/track combinations. Aniwaves HLS playlists and a segment loaded, and Naruto episode 1 rendered through the existing player (11.8 s first frame). Animepahe's CDN returned 403. These tests used the separate `lib/miruro_probe.dart` entry point before the full screens were added.
+- Validation: full Flutter suite 117 passed; 22 Kotlin tests passed (18 HTTP + 4 browser-policy/lifecycle). `flutter analyze` is clean. Mechanical design checks retain 44 existing violations, with none in the added files. Fixtures are curated phone-response subsets with all HTTP URLs replaced before capture.
+- Normal debug APK built successfully at `build/app/outputs/flutter-apk/app-debug.apk` and installed after the phone reconnected. Finished-app checks passed: Anime search, Naruto episodes, Sub/Dub provider switching, fresh URL+headers copying and Aniwaves playback (16.7 s first frame). No app data was cleared.
+- Popup reduction: retain the successful WebView session across requests and player navigation; resolve automatically and stop repeating direct HTTP once browser access works. Show verification only for an actual challenge, once per request. The rebuilt APK is installed. A cold launch loaded Naruto episodes/sources and played episode 1 without a popup or Continue tap; returning from playback, episode 2 sources, fresh URL+headers copying and playback also worked without a popup.
 Done on `discover`: Discover / Title / Streams / Sources screens, the addon client with bundled official addons, file guessing, warm torrent reuse, request headers, external links, playback recovery, and the subtitles and audio panel. One fresh review round has been run and all its findings are fixed: a header leak to subtitle hosts, Jellyfin downloads picking up the addon player, a stale call keeping a released torrent alive, false failure screens, subtitle duplicates, and offline copy.
 
 **Not verified:**
@@ -97,6 +105,7 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi → LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
+- **Miruro:** completed-app smoke test and popup-free episode changes passed on the physical phone. Broader episode/provider coverage, forced real session-expiry verification and external-downloader compatibility remain untested. Some CDN sources can still return 403; signed links may expire. Do not reinstate the stale secure-pipe endpoint as a working fallback.
 - **Buffering Phase 4 (needs a device):** measure first-frame time, stall seconds and memory on the APK under throttled bandwidth, Wi-Fi off/on, network switches, repeated seeks, pause > 60 s, a low-RAM phone. Check the panel: The Kid torrent shows Starting then plays; Wi-Fi off shows "Waiting for connection" and resumes; a dead source offers "Try another source" within 15 s; Jellyfin unchanged. Only then trial `connections_limit=80`, an upload cap, a wider tail-probe zone, and the `readPiece` swap if profiling justifies it.
 0. **Guest mode:** device-check: first launch → Continue as guest → Discover; ♥ as guest → sheet → Sign in → back on the title with ♥ on; sign out → guest shell; guest Downloads prompt.
 1. **Device acceptance** (APK: `build/app/outputs/flutter-apk/app-debug.apk`):

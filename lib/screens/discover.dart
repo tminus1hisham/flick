@@ -101,6 +101,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         }),
                       ),
                     ),
+                  Expanded(child: _Segment('Anime', selected: false,
+                    onTap: () => Navigator.pushNamed(context, '/anime'))),
                 ]),
               ),
               const SizedBox(height: 8),
