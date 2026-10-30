@@ -1,8 +1,8 @@
 # Drives Codex through design/anime/steps/*.md, one step at a time, on branch `anime`.
 # Per step: pack context -> codex (bridge mode) -> apply files -> gates -> commit, or resume
 # Codex with the failures (3 tries) and stop. Needs no Claude; the log is for the monitor.
-#   pwsh -File tool/anime_build.ps1 [-From 1]
-param([int]$From = 1)
+#   pwsh -File tool/anime_build.ps1 [-From 1] [-To 8]
+param([int]$From = 1, [int]$To = 99)
 $ErrorActionPreference = 'Continue'
 $OutputEncoding = [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
 $root = (Resolve-Path "$PSScriptRoot/..").Path
@@ -75,6 +75,7 @@ $steps = Get-ChildItem "$root/design/anime/steps/*.md" | Sort-Object Name
 foreach ($s in $steps) {
   $n = [int]($s.BaseName -split '-')[0]
   if ($n -lt $From) { continue }
+  if ($n -gt $To) { Log "STOP after -To $To"; exit 0 }
   $body = Get-Content $s.FullName -Raw
   $files = if ($body -match '(?m)^files:\s*(.+)$') { $Matches[1].Trim() -split '\s+' } else { @() }
   $check = if ($body -match '(?m)^check:\s*(.+)$') { $Matches[1].Trim() } else { '' }
