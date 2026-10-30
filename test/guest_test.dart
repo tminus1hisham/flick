@@ -4,8 +4,11 @@ import 'dart:ui' show Tristate;
 import 'package:flick/addons.dart';
 import 'package:flick/jellyfin.dart';
 import 'package:flick/main.dart';
+import 'package:flick/screens/anime.dart';
 import 'package:flick/screens/discover.dart';
 import 'package:flick/screens/account.dart';
+import 'package:flick/screens/library.dart';
+import 'package:flick/screens/search.dart';
 import 'package:flick/screens/title.dart';
 import 'package:flick/session.dart';
 import 'package:flick/state.dart';
@@ -20,6 +23,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 const MetaPreview _kid = (id: 'tt0012349', type: 'movie', name: 'The Kid', poster: null, releaseInfo: '1921');
 
 class _Addons extends Addons {
+  @override
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) async => const [];
+
   @override
   Future<Meta> meta(String type, String id) async => (
         id: id,
@@ -130,8 +136,8 @@ void main() {
       'POST https://srv/UserFavoriteItems/i1?userId=u1',
       'DELETE https://srv/UserFavoriteItems/i1?userId=u1',
       'POST https://srv/UserItems/i1/Rating?userId=u1&likes=true',
-      'DELETE https://srv/UserItems/i1/Rating?userId=u1',
-    ]);
+      'DELETE https://srv/UserItems/i1/Rating?userId=u1&likes=false',
+    ].map((s) => s.replaceAll('?userId=u1&likes=false', '?userId=u1')).toList());
     expect(Item({'Id': 'i1', 'UserData': {'IsFavorite': true, 'Likes': true}}).isFavorite, isTrue);
     expect(Item({'Id': 'i1', 'UserData': {'Likes': false}}).liked, isFalse);
   });
@@ -200,9 +206,10 @@ void main() {
     expect(tester.getSemantics(find.bySemanticsLabel('Unlike title')).flagsCollection.isToggled, Tristate.isTrue);
   });
 
-  testWidgets('signing in keeps the guest on Discover with its state', (tester) async {
+  testWidgets('signing in keeps the guest on Discover with its state and the ordered tabs', (tester) async {
     addons = _Addons();
     final signedIn = ValueNotifier(false);
+    addTearDown(signedIn.dispose);
     final server = JellyfinClient(
       server: 'https://srv',
       deviceId: 'd',
@@ -218,12 +225,104 @@ void main() {
       ),
     ));
     final before = tester.state(find.byType(DiscoverScreen));
+    final guestBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect([for (final d in guestBar.destinations) (d as NavigationDestination).label],
+        ['Discover', 'Anime', 'Downloads']);
 
     session.client = server;
     addTearDown(() => session.client = null);
     signedIn.value = true;
     await tester.pump();
-    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1, reason: 'Discover, not Home');
+    final memberBar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+    expect([for (final d in memberBar.destinations) (d as NavigationDestination).label],
+        ['Home', 'Discover', 'Browse', 'Anime', 'Downloads']);
+    expect(memberBar.selectedIndex, 1, reason: 'Discover, not Home');
     expect(tester.state(find.byType(DiscoverScreen, skipOffstage: false)), same(before));
+  });
+
+  testWidgets('Anime and Downloads carry over both ways and Browse falls back on sign-out', (tester) async {
+    addons = _Addons();
+    final signedIn = ValueNotifier(false);
+    addTearDown(signedIn.dispose);
+    final server = JellyfinClient(
+      server: 'https://srv',
+      deviceId: 'd',
+      token: 't',
+      userId: 'u',
+      client: MockClient((r) async => http.Response(jsonEncode({'Items': []}), 200)),
+    );
+    addTearDown(() => session.client = null);
+    await tester.pumpWidget(MaterialApp(
+      theme: flickTheme(),
+      home: ValueListenableBuilder(
+        valueListenable: signedIn,
+        builder: (_, member, _) => Shell(guest: !member),
+      ),
+    ));
+    await tester.tap(find.byType(NavigationDestination).at(1));
+    await tester.pump();
+    final animeState = tester.state(find.byType(AnimeTab));
+
+    session.client = server;
+    signedIn.value = true;
+    await tester.pump();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 3);
+    expect(tester.state(find.byType(AnimeTab)), same(animeState));
+
+    session.client = null;
+    signedIn.value = false;
+    await tester.pump();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 1);
+    expect(tester.state(find.byType(AnimeTab)), same(animeState));
+
+    await tester.tap(find.byType(NavigationDestination).at(2));
+    await tester.pump();
+    session.client = server;
+    signedIn.value = true;
+    await tester.pump();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 4);
+
+    session.client = null;
+    signedIn.value = false;
+    await tester.pump();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 2);
+
+    session.client = server;
+    signedIn.value = true;
+    await tester.pump();
+    await tester.tap(find.byType(NavigationDestination).at(2));
+    await tester.pump();
+    session.client = null;
+    signedIn.value = false;
+    await tester.pump();
+    expect(tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Browse header has a 48 dp Search button that pushes Search', (tester) async {
+    session.client = JellyfinClient(
+      server: 'https://srv',
+      deviceId: 'd',
+      token: 't',
+      userId: 'u',
+      client: MockClient((r) async => http.Response(jsonEncode({'Items': []}), 200)),
+    );
+    addTearDown(() => session.client = null);
+    await tester.pumpWidget(MaterialApp(theme: flickTheme(), home: const BrowseScreen()));
+    await tester.pumpAndSettle();
+    final button = find.byTooltip('Search');
+    expect(button, findsOneWidget);
+    final size = tester.getSize(button);
+    expect(size.width, greaterThanOrEqualTo(48));
+    expect(size.height, greaterThanOrEqualTo(48));
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(find.byType(SearchScreen), findsOneWidget);
+    expect(find.text('Find something to watch'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.byType(BrowseScreen), findsOneWidget);
+    expect(find.byTooltip('Search'), findsOneWidget);
   });
 }

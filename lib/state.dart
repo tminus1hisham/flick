@@ -3,8 +3,8 @@ import 'downloads.dart';
 import 'session.dart';
 
 final session = Session();
-final downloads = Downloads();
 final saved = Saved();
 
-/// Not final so widget tests can swap in a fake.
+/// Not final so widget tests can swap in fakes.
+Downloads downloads = Downloads();
 Addons addons = Addons();

@@ -1,0 +1,892 @@
+{
+  "data": [
+    {
+      "id": "451",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/451"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.069Z",
+        "updatedAt": "2021-09-17T03:17:41.668Z",
+        "synopsis": "Welcome to the Village Hidden in the Leaves, where deadly serious Ninja roam the landscape and the seriously mischievous Naruto Uzumaki causes trouble everywhere he goes. But when he steals the ancient scroll of sealing, he unleashes a rare power rarely seen in a 12-year-old boy!",
+        "description": "Welcome to the Village Hidden in the Leaves, where deadly serious Ninja roam the landscape and the seriously mischievous Naruto Uzumaki causes trouble everywhere he goes. But when he steals the ancient scroll of sealing, he unleashes a rare power rarely seen in a 12-year-old boy!",
+        "titles": {
+          "en_jp": "Sanjou! Uzumaki Naruto",
+          "en_us": "Enter: Naruto Uzumaki!",
+          "ja_jp": "参上! うずまきナルト"
+        },
+        "canonicalTitle": "Enter: Naruto Uzumaki!",
+        "seasonNumber": 1,
+        "number": 1,
+        "relativeNumber": 1,
+        "airdate": "2002-10-03",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/451/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/451/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/451/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/451/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/451/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "452",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/452"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.074Z",
+        "updatedAt": "2021-09-17T03:17:42.034Z",
+        "synopsis": "Naruto finally graduates from the Ninja Academy and claims to know it all. Well, at least that what he tells Konohamaru, the Village elder's pint-size grandson. Much to the dismay of Ebisu, Konohamaru's teacher and mentor, Naruto teaches him the hormonally lethal \"Sexy Jutsu!\"\n",
+        "description": "Naruto finally graduates from the Ninja Academy and claims to know it all. Well, at least that what he tells Konohamaru, the Village elder's pint-size grandson. Much to the dismay of Ebisu, Konohamaru's teacher and mentor, Naruto teaches him the hormonally lethal \"Sexy Jutsu!\"\n",
+        "titles": {
+          "en_jp": "Konohamaru da Kore!",
+          "en_us": "My Name is Konohamaru!",
+          "ja_jp": "木ノ葉丸だ コレ!"
+        },
+        "canonicalTitle": "My Name is Konohamaru!",
+        "seasonNumber": 1,
+        "number": 2,
+        "relativeNumber": 2,
+        "airdate": "2002-10-10",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/452/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/452/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/452/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/452/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/452/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "453",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/453"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.080Z",
+        "updatedAt": "2021-09-17T03:17:42.272Z",
+        "synopsis": "Naruto is preparing himself for the Genin orientation. It's all a happy story until Sensei picks a team for all the ninjas. Naruto was teamed up with his crush, Sakura, and his worst enemy, Sasuke. Can Naruto learn to work together with two people whom despise him?\n",
+        "description": "Naruto is preparing himself for the Genin orientation. It's all a happy story until Sensei picks a team for all the ninjas. Naruto was teamed up with his crush, Sakura, and his worst enemy, Sasuke. Can Naruto learn to work together with two people whom despise him?\n",
+        "titles": {
+          "en_jp": "Shukuteki!? Sasuke to Sakura",
+          "en_us": "Sasuke and Sakura: Friends or Foes?",
+          "ja_jp": "宿敵!?サスケとサクラ"
+        },
+        "canonicalTitle": "Sasuke and Sakura: Friends or Foes?",
+        "seasonNumber": 1,
+        "number": 3,
+        "relativeNumber": 3,
+        "airdate": "2002-10-17",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/453/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/453/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/453/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/453/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/453/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "454",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/454"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.085Z",
+        "updatedAt": "2021-09-17T03:17:42.468Z",
+        "synopsis": "Naruto finally meets his new sensei. His name is Kakashi Hatake. He tells the group that before they could become Genin, they will have to pass his survival test. The problem is, the test has a 66% chance of failure, and if they fail they'll be sent back to the academy. To make matters even worse, one of them will fail no matter what. Can the three pass Kakashi's test?\n",
+        "description": "Naruto finally meets his new sensei. His name is Kakashi Hatake. He tells the group that before they could become Genin, they will have to pass his survival test. The problem is, the test has a 66% chance of failure, and if they fail they'll be sent back to the academy. To make matters even worse, one of them will fail no matter what. Can the three pass Kakashi's test?\n",
+        "titles": {
+          "en_jp": "Shiren! Survival Enshuu",
+          "en_us": "Pass or Fail: Survival Test",
+          "ja_jp": "試練!サバイバル演習"
+        },
+        "canonicalTitle": "Pass or Fail: Survival Test",
+        "seasonNumber": 1,
+        "number": 4,
+        "relativeNumber": 4,
+        "airdate": "2002-10-24",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/454/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/454/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/454/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/454/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/454/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "455",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/455"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.089Z",
+        "updatedAt": "2021-09-17T03:17:42.700Z",
+        "synopsis": "Time is running out for Naruto and his group. With Sasuke the only one left, he tries to succeed where the others failed. Will they be able to get the bells before time runs out?\n",
+        "description": "Time is running out for Naruto and his group. With Sasuke the only one left, he tries to succeed where the others failed. Will they be able to get the bells before time runs out?\n",
+        "titles": {
+          "en_jp": "Shikkaku? Kakashi no Ketsuron",
+          "en_us": "You Failed! Kakashi's Final Decision",
+          "ja_jp": "失格?カカシの結論"
+        },
+        "canonicalTitle": "You Failed! Kakashi's Final Decision",
+        "seasonNumber": 1,
+        "number": 5,
+        "relativeNumber": 5,
+        "airdate": "2002-10-31",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/455/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/455/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/455/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/455/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/455/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "456",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/456"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.093Z",
+        "updatedAt": "2021-09-17T03:17:42.903Z",
+        "synopsis": "Tired of doing lame missions, Naruto asks the Hokage to give them something challenging. The Hokage caves and gives them a C-rank mission. They will be bodyguards for a bridge builder. It appears to be a simple mission, until the group is attacked by something more than common thugs...other ninja!\n",
+        "description": "Tired of doing lame missions, Naruto asks the Hokage to give them something challenging. The Hokage caves and gives them a C-rank mission. They will be bodyguards for a bridge builder. It appears to be a simple mission, until the group is attacked by something more than common thugs...other ninja!\n",
+        "titles": {
+          "en_jp": "Juuyou Ninmu! Nami no Kuni e Chou-shuppatsu!",
+          "en_us": "A Dangerous Mission! Journey to the Land of Waves!",
+          "ja_jp": "重要任務!波の国へ超出発!"
+        },
+        "canonicalTitle": "A Dangerous Mission! Journey to the Land of Waves!",
+        "seasonNumber": 1,
+        "number": 6,
+        "relativeNumber": 6,
+        "airdate": "2002-11-07",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/456/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/456/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/456/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/456/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/456/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "457",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/457"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.098Z",
+        "updatedAt": "2021-09-17T03:17:43.096Z",
+        "synopsis": "Team Kakashi and Tazuna are on their way to his home. On the way there they run across a ninja named, Zabuza Momochi. Is the Sharingan enough to defeat this new enemy, or is team Kakashi's first mission over before its even begun?",
+        "description": "Team Kakashi and Tazuna are on their way to his home. On the way there they run across a ninja named, Zabuza Momochi. Is the Sharingan enough to defeat this new enemy, or is team Kakashi's first mission over before its even begun?",
+        "titles": {
+          "en_jp": "Kiri no Ansatsusha!",
+          "en_us": "The Assassin of the Mist!",
+          "ja_jp": "霧の暗殺者!"
+        },
+        "canonicalTitle": "The Assassin of the Mist!",
+        "seasonNumber": 1,
+        "number": 7,
+        "relativeNumber": 7,
+        "airdate": "2002-11-14",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/457/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/457/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/457/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/457/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/457/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "458",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/458"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.102Z",
+        "updatedAt": "2021-09-17T03:17:43.309Z",
+        "synopsis": "With Kakashi captured, Naruto, Sasuke and Sakura must defend against Zabuza's attacks. Naruto realizes that working together with Sasuke may be the only way to save Kakashi. Will the combined effort of the two be enough to free Kakashi and defeat Zabuza?",
+        "description": "With Kakashi captured, Naruto, Sasuke and Sakura must defend against Zabuza's attacks. Naruto realizes that working together with Sasuke may be the only way to save Kakashi. Will the combined effort of the two be enough to free Kakashi and defeat Zabuza?",
+        "titles": {
+          "en_jp": "Itami ni Chikau Ketsui",
+          "en_us": "The Oath of Pain",
+          "ja_jp": "痛みに誓う決意"
+        },
+        "canonicalTitle": "The Oath of Pain",
+        "seasonNumber": 1,
+        "number": 8,
+        "relativeNumber": 8,
+        "airdate": "2002-11-21",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/458/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/458/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/458/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/458/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/458/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "459",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/459"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.107Z",
+        "updatedAt": "2021-09-17T03:17:43.566Z",
+        "synopsis": "With Kakashi free, the fight between him and Zabuza resumes. Kakashi decides to show Zabuza what the Sharingan is really capable of. Can Kakashi's Sharingan defeat Zabuza? And who is the mysterious person watching the fight?\n",
+        "description": "With Kakashi free, the fight between him and Zabuza resumes. Kakashi decides to show Zabuza what the Sharingan is really capable of. Can Kakashi's Sharingan defeat Zabuza? And who is the mysterious person watching the fight?\n",
+        "titles": {
+          "en_jp": "Sharingan no Kakashi",
+          "en_us": "Kakashi: Sharingan Warrior",
+          "ja_jp": "写輪眼のカカシ"
+        },
+        "canonicalTitle": "Kakashi: Sharingan Warrior",
+        "seasonNumber": 1,
+        "number": 9,
+        "relativeNumber": 9,
+        "airdate": "2002-11-28",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/459/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/459/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/459/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/459/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/459/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "460",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/460"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.111Z",
+        "updatedAt": "2021-09-17T03:17:43.773Z",
+        "synopsis": "With Zabuza gone things are now settling and Tazuna can go and build the bridge without fear. Or so everyone thinks. Kakashi believes something is wrong with Zabuza's death and teaches Naruto, Sakura, and Sasuke a way to train so they could better use their chakra. Is Zabuza really dead?\n",
+        "description": "With Zabuza gone things are now settling and Tazuna can go and build the bridge without fear. Or so everyone thinks. Kakashi believes something is wrong with Zabuza's death and teaches Naruto, Sakura, and Sasuke a way to train so they could better use their chakra. Is Zabuza really dead?\n",
+        "titles": {
+          "en_jp": "Chakra no Mori",
+          "en_us": "The Forest of Chakra",
+          "ja_jp": "チャクラの森"
+        },
+        "canonicalTitle": "The Forest of Chakra",
+        "seasonNumber": 1,
+        "number": 10,
+        "relativeNumber": 10,
+        "airdate": "2002-12-05",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/460/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/460/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/460/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/460/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/460/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "461",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/461"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.115Z",
+        "updatedAt": "2021-09-17T03:17:43.972Z",
+        "synopsis": "While Naruto and Sasuke train, Sakura watches over Tazuna. During a nice dinner, Sakura notices a man's face torn from a picture. The man's name was Kaiza, and he was what the country called...a \"hero\". What happened to cause Inari so much pain?\n",
+        "description": "While Naruto and Sasuke train, Sakura watches over Tazuna. During a nice dinner, Sakura notices a man's face torn from a picture. The man's name was Kaiza, and he was what the country called...a \"hero\". What happened to cause Inari so much pain?\n",
+        "titles": {
+          "en_jp": "Eiyuu no ita Kuni",
+          "en_us": "The Land Where a Hero Once Lived",
+          "ja_jp": "英雄のいた国"
+        },
+        "canonicalTitle": "The Land Where a Hero Once Lived",
+        "seasonNumber": 1,
+        "number": 11,
+        "relativeNumber": 11,
+        "airdate": "2002-12-12",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/461/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/461/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/461/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/461/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/461/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "462",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/462"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.119Z",
+        "updatedAt": "2021-09-17T03:17:44.211Z",
+        "synopsis": "Naruto has a dangerous encounter with Haku in the forest, but is Haku there to cause trouble? Naruto and Sasuke better complete their training, as Zabuza is alive and has returned for round 2. Will Kakashi, Sasuke, and Sakura be able to defeat the Demon of the Mist? And, can Naruto arrive in time to help out?\n",
+        "description": "Naruto has a dangerous encounter with Haku in the forest, but is Haku there to cause trouble? Naruto and Sasuke better complete their training, as Zabuza is alive and has returned for round 2. Will Kakashi, Sasuke, and Sakura be able to defeat the Demon of the Mist? And, can Naruto arrive in time to help out?\n",
+        "titles": {
+          "en_jp": "Kyoijou Kessen! Zabuza Futatabi!!",
+          "en_us": "Battle on the Bridge! Zabuza Returns!!",
+          "ja_jp": "橋上決戦!ザブザ再び!!"
+        },
+        "canonicalTitle": "Battle on the Bridge! Zabuza Returns!!",
+        "seasonNumber": 1,
+        "number": 12,
+        "relativeNumber": 12,
+        "airdate": "2002-12-19",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/462/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/462/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/462/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/462/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/462/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "463",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/463"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.123Z",
+        "updatedAt": "2021-09-17T03:17:44.461Z",
+        "synopsis": "Round two with Zabuza has started, but this time...Zabuza has Haku fighting along side him. Haku and Sasuke go at it with Sasuke falling behind until he manages to get a kick in. Meanwhile Naruto deals with some of Gato's henchmen. Back at the bridge Haku uses his secret jutsu, Demonic Ice Mirrors. What does this jutsu hold in store for Sasuke? Will Naruto make it to the bridge in time and save Tsunami and Inari as well?\n",
+        "description": "Round two with Zabuza has started, but this time...Zabuza has Haku fighting along side him. Haku and Sasuke go at it with Sasuke falling behind until he manages to get a kick in. Meanwhile Naruto deals with some of Gato's henchmen. Back at the bridge Haku uses his secret jutsu, Demonic Ice Mirrors. What does this jutsu hold in store for Sasuke? Will Naruto make it to the bridge in time and save Tsunami and Inari as well?\n",
+        "titles": {
+          "en_jp": "Haku no Hijutsu: Makyou Hyoushou",
+          "en_us": "Haku's Secret Jutsu: Crystal Ice Mirrors",
+          "ja_jp": "白の秘術·魔鏡氷晶"
+        },
+        "canonicalTitle": "Haku's Secret Jutsu: Crystal Ice Mirrors",
+        "seasonNumber": 1,
+        "number": 13,
+        "relativeNumber": 13,
+        "airdate": "2002-12-26",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/463/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/463/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/463/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/463/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/463/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "464",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/464"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.128Z",
+        "updatedAt": "2021-09-17T03:17:44.743Z",
+        "synopsis": "Naruto finally joins the battle on the bridge. But when Naruto stupidly gets caught in the middle of Haku's jutsu as well, he and Sasuke must work together to escape. Kakashi is unable to help them, as he must deal with Zabuza to protect Sakura and Tazuna. How will the two escape from the ice mirrors without any help?\n",
+        "description": "Naruto finally joins the battle on the bridge. But when Naruto stupidly gets caught in the middle of Haku's jutsu as well, he and Sasuke must work together to escape. Kakashi is unable to help them, as he must deal with Zabuza to protect Sakura and Tazuna. How will the two escape from the ice mirrors without any help?\n",
+        "titles": {
+          "en_jp": "Igaisei No. 1, Naruto Sansen!",
+          "en_us": "The Number One Hyperactive, Knucklehead Ninja Joins the Fight!!",
+          "ja_jp": "意外性No. 1, ナルト参戦!"
+        },
+        "canonicalTitle": "The Number One Hyperactive, Knucklehead Ninja Joins the Fight!!",
+        "seasonNumber": 1,
+        "number": 14,
+        "relativeNumber": 14,
+        "airdate": "2003-01-09",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/464/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/464/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/464/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/464/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/464/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "465",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/465"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.132Z",
+        "updatedAt": "2021-09-17T03:17:44.958Z",
+        "synopsis": "Naruto and Sasuke continue to fight Haku and are getting beaten bad. After having Naruto try and escape a few times, Sasuke begins to see a pattern. Meanwhile, outside Kakashi and Zabuza begin their fight. Can Naruto and Sasuke escape from Haku's jutsu? What plan does Zabuza have to defeat the Sharingan?",
+        "description": "Naruto and Sasuke continue to fight Haku and are getting beaten bad. After having Naruto try and escape a few times, Sasuke begins to see a pattern. Meanwhile, outside Kakashi and Zabuza begin their fight. Can Naruto and Sasuke escape from Haku's jutsu? What plan does Zabuza have to defeat the Sharingan?",
+        "titles": {
+          "en_jp": "Shikai Zero no Tatakai: Sharingan Kuzushi",
+          "en_us": "Zero Visibility: The Sharingan Shatters",
+          "ja_jp": "視界ゼロの戦い·写輪眼崩し"
+        },
+        "canonicalTitle": "Zero Visibility: The Sharingan Shatters",
+        "seasonNumber": 1,
+        "number": 15,
+        "relativeNumber": 15,
+        "airdate": "2003-01-16",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/465/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/465/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/465/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/465/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/465/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "466",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/466"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.137Z",
+        "updatedAt": "2021-09-17T03:17:45.201Z",
+        "synopsis": "Naruto and Sasuke continue their rigorous battle against Haku. When Haku targets a vulnerable Naruto, Sasuke risks everything to save him. Seeing his friend lie before him, a powerful force awakens inside Naruto. Has Kyubi been set free. If so, can anyone stop him?",
+        "description": "Naruto and Sasuke continue their rigorous battle against Haku. When Haku targets a vulnerable Naruto, Sasuke risks everything to save him. Seeing his friend lie before him, a powerful force awakens inside Naruto. Has Kyubi been set free. If so, can anyone stop him?",
+        "titles": {
+          "en_jp": "Kaihousareta Fuuin",
+          "en_us": "The Broken Seal",
+          "ja_jp": "解放された封印"
+        },
+        "canonicalTitle": "The Broken Seal",
+        "seasonNumber": 1,
+        "number": 16,
+        "relativeNumber": 16,
+        "airdate": "2003-01-23",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/466/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/466/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/466/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/466/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/466/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "467",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/467"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.141Z",
+        "updatedAt": "2021-09-17T03:17:45.523Z",
+        "synopsis": "Naruto takes out his rage on Haku, who doesn't stand a chance. However, Naruto realises that Haku is the boy he met back at the forest. Haku tells Naruto the story of his past and asks for Naruto to do him one favour..... Will Naruto do the one thing he could never do just as Haku wishes?",
+        "description": "Naruto takes out his rage on Haku, who doesn't stand a chance. However, Naruto realises that Haku is the boy he met back at the forest. Haku tells Naruto the story of his past and asks for Naruto to do him one favour..... Will Naruto do the one thing he could never do just as Haku wishes?",
+        "titles": {
+          "en_jp": "Shiroi Kako: Himeta Omoi",
+          "en_us": "White Past: Hidden Ambition",
+          "ja_jp": "白い過去·秘めた想い"
+        },
+        "canonicalTitle": "White Past: Hidden Ambition",
+        "seasonNumber": 1,
+        "number": 17,
+        "relativeNumber": 17,
+        "airdate": "2003-01-30",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/467/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/467/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/467/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/467/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/467/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "468",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/468"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.145Z",
+        "updatedAt": "2021-09-17T03:17:45.791Z",
+        "synopsis": "Kakashi prepares to stop Zabuza once and for all, but Haku has other plans. Zabuza's employer shows up and he's decided to take matters into his own hands...",
+        "description": "Kakashi prepares to stop Zabuza once and for all, but Haku has other plans. Zabuza's employer shows up and he's decided to take matters into his own hands...",
+        "titles": {
+          "en_jp": "Shinobi to iu na no Dougu",
+          "en_us": "The Weapons Known as Shinobi",
+          "ja_jp": "忍という名の道具"
+        },
+        "canonicalTitle": "The Weapons Known as Shinobi",
+        "seasonNumber": 1,
+        "number": 18,
+        "relativeNumber": 18,
+        "airdate": "2003-02-06",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/468/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/468/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/468/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/468/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/468/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "469",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/469"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.149Z",
+        "updatedAt": "2021-09-17T03:17:46.053Z",
+        "synopsis": "Zabuza is no longer Kakashi's enemy, and thanks to a little speech by Naruto about how ninja are, Zabuza takes on Gato's men single handedly. The Demon of the Hidden Mist takes his vengeance on Gato and all of those dumb enough to follow him, and apologizes to Haku for what he did to the kind little boy. After the group takes care of the rest of Gato's men, Zabuza asks Kakashi one final request, to see Haku one final time. This is Zabuza's requiem.\n",
+        "description": "Zabuza is no longer Kakashi's enemy, and thanks to a little speech by Naruto about how ninja are, Zabuza takes on Gato's men single handedly. The Demon of the Hidden Mist takes his vengeance on Gato and all of those dumb enough to follow him, and apologizes to Haku for what he did to the kind little boy. After the group takes care of the rest of Gato's men, Zabuza asks Kakashi one final request, to see Haku one final time. This is Zabuza's requiem.\n",
+        "titles": {
+          "en_jp": "Zabuza Yuki ni Chiru...",
+          "en_us": "The Demon in the Snow",
+          "ja_jp": "ザブザ雪に散る..."
+        },
+        "canonicalTitle": "The Demon in the Snow",
+        "seasonNumber": 1,
+        "number": 19,
+        "relativeNumber": 19,
+        "airdate": "2003-02-13",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/469/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/469/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/469/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/469/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/469/videos"
+          }
+        }
+      }
+    },
+    {
+      "id": "470",
+      "type": "episodes",
+      "links": {
+        "self": "https://kitsu.io/api/edge/episodes/470"
+      },
+      "attributes": {
+        "createdAt": "2013-02-20T18:20:41.154Z",
+        "updatedAt": "2021-09-17T03:17:46.273Z",
+        "synopsis": "With their latest mission complete, it's time once again for the group to go back to mediocre missions. After all are done, Konohamaru and his friends pay a visit to Naruto. All which result in being chased by Sakura. Everyone is soon over though, as two mysterious ninja block their way, and one of them isn't too happy with Konohamaru. Sasuke arrives to save the day, but the leader of the group shows up, with stealth skills that surprise even Sasuke. Meanwhile, the Third Hokage announces that it's time once again for the Chuunin selection exams.\n",
+        "description": "With their latest mission complete, it's time once again for the group to go back to mediocre missions. After all are done, Konohamaru and his friends pay a visit to Naruto. All which result in being chased by Sakura. Everyone is soon over though, as two mysterious ninja block their way, and one of them isn't too happy with Konohamaru. Sasuke arrives to save the day, but the leader of the group shows up, with stealth skills that surprise even Sasuke. Meanwhile, the Third Hokage announces that it's time once again for the Chuunin selection exams.\n",
+        "titles": {
+          "en_jp": "Shinshou Totsunyuu! Chuunin Shiken Dattebayo",
+          "en_us": "A New Chapter Begins: The Chunin Exam!",
+          "ja_jp": "新章突入!中忍試験だってばよ"
+        },
+        "canonicalTitle": "A New Chapter Begins: The Chunin Exam!",
+        "seasonNumber": 1,
+        "number": 20,
+        "relativeNumber": 20,
+        "airdate": "2003-02-20",
+        "length": 23,
+        "thumbnail": {
+          "original": "https://media.kitsu.app/episodes/thumbnails/470/original.jpg",
+          "meta": {
+            "dimensions": {}
+          }
+        }
+      },
+      "relationships": {
+        "media": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/470/relationships/media",
+            "related": "https://kitsu.io/api/edge/episodes/470/media"
+          }
+        },
+        "videos": {
+          "links": {
+            "self": "https://kitsu.io/api/edge/episodes/470/relationships/videos",
+            "related": "https://kitsu.io/api/edge/episodes/470/videos"
+          }
+        }
+      }
+    }
+  ],
+  "meta": {
+    "count": 220
+  },
+  "links": {
+    "first": "https://kitsu.io/api/edge/anime/11/episodes?page%5Blimit%5D=20&page%5Boffset%5D=0",
+    "next": "https://kitsu.io/api/edge/anime/11/episodes?page%5Blimit%5D=20&page%5Boffset%5D=20",
+    "last": "https://kitsu.io/api/edge/anime/11/episodes?page%5Blimit%5D=20&page%5Boffset%5D=200"
+  }
+}

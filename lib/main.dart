@@ -7,7 +7,6 @@ import 'screens/downloads.dart';
 import 'screens/home.dart';
 import 'screens/library.dart';
 import 'screens/login.dart';
-import 'screens/search.dart';
 import 'screens/sources.dart';
 import 'screens/torrent.dart';
 import 'state.dart';
@@ -30,7 +29,7 @@ class FlickApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Flick',
-        routes: {'/sources': (_) => const SourcesScreen(), '/anime': (_) => const AnimeScreen()},
+        routes: {'/sources': (_) => const SourcesScreen()},
         debugShowCheckedModeBanner: false,
         theme: flickTheme(),
         builder: (_, child) => SplashHandoff(child: child!),
@@ -48,7 +47,7 @@ class FlickApp extends StatelessWidget {
 class Shell extends StatefulWidget {
   const Shell({this.guest = false, super.key});
 
-  /// No server: only Discover and Downloads.
+  /// No server: Discover, Anime and Downloads.
   final bool guest;
 
   @override
@@ -64,8 +63,9 @@ class _ShellState extends State<Shell> {
   static const _browse = (BrowseScreen(), 'Browse',
       NavigationDestination(
           icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'));
-  // Search has no outlined/filled pair in Material Icons.
-  static const _search = (SearchScreen(), 'Search', NavigationDestination(icon: Icon(Icons.search), label: 'Search'));
+  static const _anime = (AnimeTab(), 'Anime',
+      NavigationDestination(
+          icon: Icon(Icons.animation_outlined), selectedIcon: Icon(Icons.animation), label: 'Anime'));
   static const _downloads = (DownloadsScreen(), 'Downloads',
       NavigationDestination(
           icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'));
@@ -75,7 +75,7 @@ class _ShellState extends State<Shell> {
   final _keys = <String, GlobalKey>{};
 
   static List<(Widget, String, NavigationDestination)> _tabsFor(bool guest) =>
-      guest ? const [_discover, _downloads] : const [_home, _discover, _browse, _search, _downloads];
+      guest ? const [_discover, _anime, _downloads] : const [_home, _discover, _browse, _anime, _downloads];
 
   /// Signing in or out keeps the current tab where both shells have it, so a guest who signs in
   /// from a Discover title comes back to Discover, not Home.
@@ -84,7 +84,8 @@ class _ShellState extends State<Shell> {
     super.didUpdateWidget(old);
     if (old.guest == widget.guest) return;
     final (_, name, _) = _tabsFor(old.guest)[_tab];
-    _tab = _tabsFor(widget.guest).indexWhere((t) => t.$2 == name).clamp(0, 4);
+    final tabs = _tabsFor(widget.guest);
+    _tab = tabs.indexWhere((t) => t.$2 == name).clamp(0, tabs.length - 1);
   }
 
   @override
@@ -92,14 +93,14 @@ class _ShellState extends State<Shell> {
     final tabs = _tabsFor(widget.guest);
     final (_, name, _) = tabs[_tab];
     return Scaffold(
-      // Home draws its own bar over the hero; Discover's search field is its header.
-      appBar: name == 'Home' || name == 'Discover'
+      // Home, Discover, Browse and Anime draw their own headers.
+      appBar: name == 'Home' || name == 'Discover' || name == 'Browse' || name == 'Anime'
           ? null
           : AppBar(
               title: Text(name),
               actions: const [MagnetButton(), ProfileButton()],
             ),
-      // Discover and Downloads keep their state across sign-in and sign-out.
+      // Shared tabs keep their state across sign-in and sign-out.
       body: IndexedStack(index: _tab, children: [
         for (final (screen, name, _) in tabs) KeyedSubtree(key: _keys.putIfAbsent(name, GlobalKey.new), child: screen),
       ]),

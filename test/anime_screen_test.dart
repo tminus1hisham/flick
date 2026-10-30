@@ -1,9 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flick/addons.dart';
 import 'package:flick/anime.dart';
 import 'package:flick/screens/anime.dart';
+import 'package:flick/screens/discover.dart';
+import 'package:flick/screens/title.dart';
+import 'package:flick/state.dart';
 import 'package:flick/theme.dart';
+import 'package:flick/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,17 +73,84 @@ class _Anime extends Anime {
   }
 }
 
-Future<void> pump(WidgetTester tester, Widget home, {double scale = 1}) async {
+class _Catalogs extends Addons {
+  final _addon = Addon({
+    'id': 'kitsu-test',
+    'name': 'Anime Kitsu',
+    'resources': ['catalog', 'meta'],
+    'types': ['anime', 'movie', 'series'],
+    'catalogs': [
+      {'type': 'anime', 'id': 'trending', 'name': 'Trending'},
+      {'type': 'anime', 'id': 'airing', 'name': 'Airing'},
+      {'type': 'series', 'id': 'latest', 'name': 'Latest episodes'},
+    ],
+  }, 'https://anime-kitsu.strem.fun');
+  final requests = <(String, String, String?, int)>[];
+  final metaRequests = <(String, String)>[];
+  bool enabled = true;
+  String itemType = 'series';
+  Future<List<MetaPreview>>? page;
+
+  void setCatalogsEnabled(bool value) {
+    enabled = value;
+    notifyListeners();
+  }
+
+  @override
+  List<Catalog> get catalogs => enabled ? _addon.catalogs : [];
+
+  @override
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) {
+    requests.add((c.type, c.id, search, skip));
+    return page ?? Future.value([
+      if (skip == 0)
+        (id: 'kitsu:11', type: itemType, name: 'Kitsu ${c.id}', poster: null, releaseInfo: '2002'),
+    ]);
+  }
+
+  @override
+  Future<Meta> meta(String type, String id) async {
+    metaRequests.add((type, id));
+    return (
+      id: id,
+      type: type,
+      name: 'Kitsu title',
+      poster: null,
+      background: null,
+      logo: null,
+      description: null,
+      releaseInfo: '2002',
+      runtime: null,
+      imdbRating: null,
+      genres: const <String>[],
+      videos: const <Video>[],
+    );
+  }
+
+  @override
+  List<Addon> streamSources(String type, String videoId) => const [];
+}
+
+late _Catalogs _catalogs;
+
+Future<void> pump(WidgetTester tester, Widget home, {double scale = 1, bool still = false}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(360, 640);
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
       theme: flickTheme(),
+      routes: {
+        '/sources': (_) => Scaffold(
+          appBar: AppBar(title: const Text('Sources')),
+          body: const Text('Sources destination'),
+        ),
+      },
       builder: (_, child) => MediaQuery(
         data: MediaQueryData(
           size: const Size(360, 640),
           textScaler: TextScaler.linear(scale),
+          disableAnimations: still,
         ),
         child: child!,
       ),
@@ -89,6 +161,97 @@ Future<void> pump(WidgetTester tester, Widget home, {double scale = 1}) async {
 }
 
 void main() {
+  setUp(() => addons = _catalogs = _Catalogs());
+
+  testWidgets('empty query shows the first anime catalog and chips switch the shared feed', (tester) async {
+    await pump(tester, const AnimeTab());
+    await tester.pumpAndSettle();
+    expect(find.byType(CatalogFeed), findsOneWidget);
+    expect(_catalogs.requests.single, ('anime', 'trending', null, 0));
+    expect(find.text('Kitsu trending'), findsOneWidget);
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Trending')).selected, isTrue);
+    expect(find.text('Latest episodes'), findsNothing);
+
+    await tester.tap(find.text('Airing'));
+    await tester.pumpAndSettle();
+    expect(_catalogs.requests.last, ('anime', 'airing', null, 0));
+    expect(find.text('Kitsu airing'), findsOneWidget);
+    expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Airing')).selected, isTrue);
+  });
+
+  testWidgets('catalog loading uses the shared skeleton and clearing Miruro search restores the feed', (tester) async {
+    final page = Completer<List<MetaPreview>>();
+    _catalogs.page = page.future;
+    final anime = _Anime()..find = (_) async => [card];
+    await pump(tester, AnimeTab(client: anime));
+    expect(find.byType(GridSkeleton), findsOneWidget);
+    page.complete([
+      (id: 'kitsu:11', type: 'series', name: 'Kitsu title', poster: null, releaseInfo: null),
+    ]);
+    await tester.pumpAndSettle();
+    final feed = tester.state(find.byType(CatalogFeed));
+
+    await tester.enterText(find.byType(TextField), 'Naruto');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Naruto'), findsOneWidget);
+    expect(find.text('Kitsu title'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(find.text('Kitsu title'), findsOneWidget);
+    expect(find.widgetWithText(ListTile, 'Naruto'), findsNothing);
+    expect(tester.state(find.byType(CatalogFeed)), same(feed));
+    expect(_catalogs.requests, hasLength(1));
+  });
+
+  testWidgets('catalog posters open Title with the item type, mapping leftover anime to series', (tester) async {
+    for (final type in ['series', 'movie', 'anime']) {
+      _catalogs.itemType = type;
+      await pump(tester, AnimeTab(key: ValueKey(type)), still: true);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Kitsu trending'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TitleScreen), findsOneWidget);
+      expect(_catalogs.metaRequests.last, (type == 'anime' ? 'series' : type, 'kitsu:11'));
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('no enabled anime catalog offers one inline Sources link and still permits Miruro search', (tester) async {
+    final anime = _Anime()..find = (_) async => [card];
+    await pump(tester, AnimeTab(client: anime));
+    await tester.pumpAndSettle();
+    _catalogs.setCatalogsEnabled(false);
+    await tester.pumpAndSettle();
+    expect(find.text('No anime catalogs are switched on.'), findsOneWidget);
+    expect(find.byType(CatalogNotice), findsOneWidget);
+    expect(find.byType(CatalogFeed), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Sources'));
+    await tester.pumpAndSettle();
+    expect(find.text('Sources destination'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Naruto');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Naruto'), findsOneWidget);
+    expect(find.text('No anime catalogs are switched on.'), findsNothing);
+  });
+
+  testWidgets('catalog chips and posters fit at larger text sizes with reduced motion', (tester) async {
+    await pump(tester, const AnimeTab(), scale: 1.3, still: true);
+    await tester.pumpAndSettle();
+    expect(find.text('Kitsu trending'), findsOneWidget);
+    final heroMode = tester.widget<HeroMode>(
+      find.ancestor(of: find.byType(CatalogFeed), matching: find.byType(HeroMode)).first,
+    );
+    expect(heroMode.enabled, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('newer searches win when older responses arrive later', (
     tester,
   ) async {
@@ -96,7 +259,7 @@ void main() {
         second = Completer<List<AnimeCard>>();
     final anime = _Anime()
       ..find = (q) => q == 'first' ? first.future : second.future;
-    await pump(tester, AnimeScreen(client: anime));
+    await pump(tester, AnimeTab(client: anime));
     await tester.enterText(find.byType(TextField), 'first');
     await tester.testTextInput.receiveAction(TextInputAction.search);
     await tester.enterText(find.byType(TextField), 'second');
@@ -117,7 +280,7 @@ void main() {
     final anime = _Anime();
     anime.find = (_) async => [card];
     anime.list = (_) => episodes.future;
-      await pump(tester, AnimeScreen(client: anime));
+      await pump(tester, AnimeTab(client: anime));
       await tester.enterText(find.byType(TextField), 'Naruto');
       await tester.testTextInput.receiveAction(TextInputAction.search);
       await tester.pumpAndSettle();

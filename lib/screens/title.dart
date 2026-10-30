@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../upnext.dart';
 import '../widgets.dart';
 import 'account.dart';
+import 'torrent.dart';
 
 /// Row text for a stream. Tests swap it, since describe() belongs to the addons contract.
 @visibleForTesting
@@ -164,7 +165,8 @@ class _TitleScreenState extends State<TitleScreen> {
       return [
         const SliverToBoxAdapter(child: _Heading('Streams', style: FlickText.railHeading)),
         _StreamList(
-            (title: m.name, subtitle: null, type: m.type, videoId: m.id, season: null, episode: null, meta: null)),
+            (title: m.name, subtitle: null, type: m.type, videoId: m.id, season: null, episode: null, meta: null),
+            poster: m.poster ?? widget.preview.poster),
       ];
     }
     if (m.videos.isEmpty) {
@@ -265,7 +267,7 @@ class StreamsScreen extends StatelessWidget {
             ]),
           ),
         ),
-        _StreamList(episodePlayback(meta, video)),
+        _StreamList(episodePlayback(meta, video), poster: meta.poster),
         SliverPadding(padding: EdgeInsets.only(bottom: 28 + MediaQuery.paddingOf(context).bottom)),
       ]),
     );
@@ -274,8 +276,9 @@ class StreamsScreen extends StatelessWidget {
 
 /// Every stream source asked in parallel, one group each; external services gather under "Where to watch".
 class _StreamList extends StatefulWidget {
-  const _StreamList(this.playback);
+  const _StreamList(this.playback, {this.poster});
   final Playback playback;
+  final String? poster;
 
   @override
   State<_StreamList> createState() => _StreamListState();
@@ -390,7 +393,11 @@ class _StreamListState extends State<_StreamList> {
   List<Widget> _group(Addon a) {
     final r = _results[a.id];
     if (r is List<AddonStream>) {
-      final rows = [for (final s in r) if (s.externalUrl == null) _StreamRow(s, widget.playback, a)];
+      final rows = [
+        for (final s in r)
+          if (s.externalUrl == null)
+            _StreamRow(s, widget.playback, a, poster: widget.poster, key: ValueKey((a.id, s))),
+      ];
       // A services-only answer lives under "Where to watch" and must not read as streams found.
       if (rows.isEmpty && r.isNotEmpty) return const [];
       return [
@@ -418,14 +425,65 @@ class _StreamListState extends State<_StreamList> {
   }
 }
 
-class _StreamRow extends StatelessWidget {
-  const _StreamRow(this.stream, this.playback, this.addon);
+class _StreamRow extends StatefulWidget {
+  const _StreamRow(this.stream, this.playback, this.addon, {this.poster, super.key});
   final AddonStream stream;
   final Playback playback;
   final Addon addon;
+  final String? poster;
+
+  @override
+  State<_StreamRow> createState() => _StreamRowState();
+}
+
+class _StreamRowState extends State<_StreamRow> {
+  var _queuing = false;
+  var _queued = false;
+  var _failed = false;
+
+  Future<void> _download() async {
+    if (_queuing || _queued) return;
+    setState(() {
+      _queuing = true;
+      _failed = false;
+    });
+    try {
+      var queued = true;
+      final stream = widget.stream;
+      final playback = widget.playback;
+      if (stream.infoHash != null) {
+        queued = await Navigator.push<bool>(context, MaterialPageRoute(builder: (_) => TorrentScreen(
+          magnetFor(stream),
+          fileIdx: stream.fileIdx,
+          season: playback.season,
+          episode: playback.episode,
+          title: playback.title,
+          playback: playback,
+          download: true,
+          poster: widget.poster,
+        ))) == true;
+      } else {
+        await downloads.enqueueStream(
+          url: stream.url!,
+          headers: stream.headers,
+          title: playback.title,
+          poster: widget.poster,
+          playback: playback,
+        );
+      }
+      if (mounted) setState(() => _queued = queued);
+    } catch (_) {
+      if (mounted) setState(() => _failed = true);
+    } finally {
+      if (mounted) setState(() => _queuing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final stream = widget.stream;
+    final playback = widget.playback;
+    final addon = widget.addon;
     final i = describeStream(stream);
     final release = i.lines.firstOrNull ?? stream.filename ?? stream.name ?? '';
     final seeders = i.seeders;
@@ -448,52 +506,89 @@ class _StreamRow extends StatelessWidget {
       if (i.size != null) [TextSpan(text: i.size, style: streamMonoStyle)],
       if (i.origin != null) [TextSpan(text: i.origin)],
     ];
-    return _Press(
-      label: [
-        i.quality,
-        release,
-        if (seeders != null) '$seeders seeders',
-        ?i.size,
-        if (i.origin != null) 'from ${i.origin}',
-      ].join(', '),
-      onTap: () async {
-        HapticFeedback.lightImpact();
-        await play(context, stream, playback, addon: addon);
-      },
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 60),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: FlickTokens.outline))),
-        child: Row(children: [
-          SizedBox(
-            width: FlickTokens.streamQualityWidth,
-            child: Container(
-              height: 24,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              decoration: BoxDecoration(
-                color: FlickTokens.surface2,
-                borderRadius: BorderRadius.circular(FlickTokens.controlRadius),
-              ),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(i.quality, style: FlickText.metadata.copyWith(fontWeight: FontWeight.w700)),
+    final downloadable = (stream.url != null || stream.infoHash != null) && stream.externalUrl == null;
+    final downloadLabel = stream.infoHash != null ? 'Download torrent' : 'Download';
+    final status = _queued ? 'Queued' : _queuing ? 'Queuing…' : _failed ? "Couldn't queue download. Try again." : null;
+    return Container(
+      constraints: const BoxConstraints(minHeight: 60),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: FlickTokens.outline))),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _Press(
+              label: [
+                i.quality,
+                release,
+                if (seeders != null) '$seeders seeders',
+                ?i.size,
+                if (i.origin != null) 'from ${i.origin}',
+              ].join(', '),
+              onTap: () async {
+                HapticFeedback.lightImpact();
+                await play(context, stream, playback, addon: addon);
+              },
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Row(children: [
+                  SizedBox(
+                    width: FlickTokens.streamQualityWidth,
+                    child: Container(
+                      height: 24,
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: FlickTokens.surface2,
+                        borderRadius: BorderRadius.circular(FlickTokens.controlRadius),
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(i.quality, style: FlickText.metadata.copyWith(fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(release, maxLines: 2, overflow: TextOverflow.ellipsis, style: FlickText.body),
+                      for (final l in i.lines.skip(1)) Text(l, style: FlickText.metadata.merge(_muted)),
+                      if (telemetry.isNotEmpty)
+                        Text.rich(TextSpan(style: FlickText.metadata.merge(_muted), children: [
+                          for (final (n, part) in telemetry.indexed) ...[if (n > 0) const TextSpan(text: ' · '), ...part],
+                        ])),
+                    ]),
+                  ),
+                ]),
               ),
             ),
+            if (status != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Semantics(
+                  liveRegion: true,
+                  child: Text(status, style: FlickText.metadata.copyWith(
+                    color: _failed ? context.flick.danger : FlickTokens.textSecondary,
+                  )),
+                ),
+              ),
+          ]),
+        ),
+        if (downloadable)
+          Semantics(
+            container: true,
+            label: downloadLabel,
+            button: true,
+            enabled: !_queuing && !_queued,
+            onTap: _queuing || _queued ? null : _download,
+            excludeSemantics: true,
+            child: IconButton(
+              tooltip: downloadLabel,
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: Icon(_queued ? Icons.check : Icons.download_outlined),
+              onPressed: _queuing || _queued ? null : _download,
+            ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(release, maxLines: 2, overflow: TextOverflow.ellipsis, style: FlickText.body),
-              for (final l in i.lines.skip(1)) Text(l, style: FlickText.metadata.merge(_muted)),
-              if (telemetry.isNotEmpty)
-                Text.rich(TextSpan(style: FlickText.metadata.merge(_muted), children: [
-                  for (final (n, part) in telemetry.indexed) ...[if (n > 0) const TextSpan(text: ' · '), ...part],
-                ])),
-            ]),
-          ),
-        ]),
-      ),
+      ]),
     );
   }
 }

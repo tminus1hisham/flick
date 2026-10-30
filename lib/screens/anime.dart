@@ -7,25 +7,28 @@ import 'package:flutter/services.dart';
 import '../anime.dart';
 import '../miruro_browser.dart';
 import '../playback.dart';
+import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'discover.dart';
 
 String _message(Object error) => error is AnimeException
     ? error.toString()
     : 'Could not load anime. Try again.';
 
-class AnimeScreen extends StatefulWidget {
-  const AnimeScreen({this.client, super.key});
+class AnimeTab extends StatefulWidget {
+  const AnimeTab({this.client, super.key});
   final Anime? client;
   @override
-  State<AnimeScreen> createState() => _AnimeScreenState();
+  State<AnimeTab> createState() => _AnimeTabState();
 }
 
-class _AnimeScreenState extends State<AnimeScreen> {
+class _AnimeTabState extends State<AnimeTab> {
   final _browser = MiruroBrowser();
   late final _anime = widget.client ?? Anime(browser: _browser.request);
   final _search = TextEditingController();
   List<AnimeCard> _results = [];
+  (String, String, String)? _selected;
   String? _error;
   bool _busy = false, _searched = false;
   int _generation = 0;
@@ -61,73 +64,157 @@ class _AnimeScreenState extends State<AnimeScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Anime')),
-    body: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
-      child: Column(
-        children: [
-          TextField(
-            controller: _search,
-            textInputAction: TextInputAction.search,
-            onSubmitted: _find,
-            onChanged: (q) {
-              if (q.trim().isEmpty) _find(q);
-            },
-            decoration: InputDecoration(
-              labelText: 'Search anime',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(
-                tooltip: 'Search anime',
-                onPressed: () => _find(_search.text),
-                icon: const Icon(Icons.arrow_forward),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          if (_error != null) Semantics(liveRegion: true, child: Text(_error!)),
-          if (_error != null)
-            TextButton(
-              onPressed: () => _find(_search.text),
-              child: const Text('Retry'),
-            ),
-          Expanded(
-            child: _busy
-                ? const GridSkeleton(padding: EdgeInsets.zero)
-                : !_searched
-                ? const Center(
-                    child: Text('Search for an anime to see its episodes.'),
-                  )
-                : _error == null && _results.isEmpty
-                ? const Center(child: Text('No anime found.'))
-                : ListView.builder(
-                    itemCount: _results.length,
-                    itemBuilder: (context, index) {
-                      final card = _results[index];
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                        leading: SizedBox(
-                          width: 48,
-                          height: 72,
-                          child: card.poster == null
-                              ? const Icon(Icons.movie_outlined)
-                              : NetImage(card.poster!),
-                        ),
-                        title: Text(card.title),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                _AnimeEpisodes(card, _anime, _cancelBrowser),
+  Widget build(BuildContext context) => Material(
+    color: FlickTokens.background,
+    child: ListenableBuilder(
+      listenable: addons,
+      builder: (context, _) {
+        final catalogs = addons.animeCatalogs;
+        final selected = catalogs.where(
+          (c) => (c.addon.base, c.type, c.id) == _selected,
+        ).firstOrNull ?? catalogs.firstOrNull;
+        final heroes = !MediaQuery.disableAnimationsOf(context);
+        return SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _search,
+                        style: FlickText.body,
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: _find,
+                        onChanged: (q) {
+                          if (q.trim().isEmpty) _find(q);
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Search anime',
+                          constraints: const BoxConstraints(minHeight: 56),
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: IconButton(
+                            tooltip: 'Search anime',
+                            constraints: const BoxConstraints(
+                              minWidth: FlickTokens.minTouchTarget,
+                              minHeight: FlickTokens.minTouchTarget,
+                            ),
+                            onPressed: () => _find(_search.text),
+                            icon: const Icon(Icons.arrow_forward),
                           ),
                         ),
-                      );
-                    },
-                  ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const ProfileButton(),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: IndexedStack(
+                  index: _searched ? 1 : 0,
+                  children: [
+                    HeroMode(
+                      enabled: heroes && !_searched,
+                      child: Column(
+                        children: [
+                          if (catalogs.isNotEmpty) ...[
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
+                              child: Row(
+                                children: [
+                                  for (final c in catalogs) ...[
+                                    if (c != catalogs.first) const SizedBox(width: 8),
+                                    ChoiceChip(
+                                      label: Text(c.name),
+                                      selected: c == selected,
+                                      showCheckmark: false,
+                                      materialTapTargetSize: MaterialTapTargetSize.padded,
+                                      onSelected: (_) {
+                                        if (c == selected) return;
+                                        HapticFeedback.selectionClick();
+                                        setState(() => _selected = (c.addon.base, c.type, c.id));
+                                      },
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
+                          Expanded(
+                            child: selected == null
+                                ? CatalogNotice(
+                                    Icons.video_library_outlined,
+                                    'No anime catalogs are switched on.',
+                                    action: 'Sources',
+                                    onAction: () => Navigator.pushNamed(context, '/sources'),
+                                  )
+                                : CatalogFeed(
+                                    selected,
+                                    key: ValueKey((selected.addon.base, selected.type, selected.id)),
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      children: [
+                        if (_error != null) Semantics(liveRegion: true, child: Text(_error!)),
+                        if (_error != null)
+                          TextButton(
+                            onPressed: () => _find(_search.text),
+                            child: const Text('Retry'),
+                          ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
+                            child: _busy
+                                ? const GridSkeleton(padding: EdgeInsets.zero)
+                                : !_searched
+                                ? const SizedBox.shrink()
+                                : _error == null && _results.isEmpty
+                                ? const Center(child: Text('No anime found.'))
+                                : ListView.builder(
+                                    itemCount: _results.length,
+                                    itemBuilder: (context, index) {
+                                      final card = _results[index];
+                                      return ListTile(
+                                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                        leading: SizedBox(
+                                          width: 48,
+                                          height: 72,
+                                          child: card.poster == null
+                                              ? const Icon(Icons.movie_outlined)
+                                              : NetImage(card.poster!),
+                                        ),
+                                        title: Text(card.title),
+                                        trailing: const Icon(Icons.chevron_right),
+                                        onTap: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                _AnimeEpisodes(card, _anime, _cancelBrowser),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     ),
   );
 }

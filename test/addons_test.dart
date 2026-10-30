@@ -106,7 +106,7 @@ void main() {
         'https://three.example/manifest.json',
       ]);
       expect([x.base, y.base, z.base], ['https://one.example/cfg', 'https://two.example/cfg', 'https://three.example']);
-      expect(a.all.skip(5), [x, y, z]);
+      expect(a.all.skip(6), [x, y, z]);
     });
 
     Future<AddonError?> kind(Future<http.Response> Function(http.Request) h, String input) async {
@@ -162,17 +162,19 @@ void main() {
       'id': 'x',
       'name': 'X',
       'resources': ['catalog'],
-      'types': ['movie', 'series'],
+      'types': ['movie', 'series', 'anime'],
       'catalogs': [
         {'type': 'movie', 'id': 'top', 'name': 'Top', 'extra': [{'name': 'search'}, {'name': 'skip'}]},
         {'type': 'series', 'id': 'new', 'extra': [{'name': 'genre', 'isRequired': true}]},
         {'type': 'series', 'id': 'old', 'extraRequired': ['genre']},
         {'type': 'channel', 'id': 'yt'},
         {'type': 'series', 'id': 'plain'},
+        {'type': 'anime', 'id': 'anime', 'name': 'Anime'},
+        {'type': 'anime', 'id': 'search-only', 'extra': [{'name': 'search', 'isRequired': true}]},
       ],
     }, 'https://x');
     expect([for (final c in a.catalogs) '${c.type}/${c.id}/${c.name}/${c.searchable}'],
-        ['movie/top/Top/true', 'series/plain/X/false']);
+        ['movie/top/Top/true', 'series/plain/X/false', 'anime/anime/Anime/false']);
   });
 
   test('catalog builds search and skip URLs and parses metas', () async {
@@ -198,7 +200,7 @@ void main() {
     expect(metas.single, (id: 'tt1', type: 'movie', name: 'One', poster: 'p', releaseInfo: '1999'));
   });
 
-  test('bundled catalogs exclude Cinemeta required-extra rows', () async {
+  test('bundled catalogs exclude Cinemeta and Kitsu required-extra rows', () async {
     final a = await loaded((_) async => json({}));
     expect([for (final c in a.catalogs) '${c.addon.name}:${c.type}/${c.id}'], [
       'Cinemeta:movie/top',
@@ -206,7 +208,96 @@ void main() {
       'Cinemeta:movie/imdbRating',
       'Cinemeta:series/imdbRating',
       'Public Domain Movies:movie/publicdomainmovies',
+      'Anime Kitsu:anime/kitsu-anime-trending',
+      'Anime Kitsu:anime/kitsu-anime-airing',
+      'Anime Kitsu:anime/kitsu-anime-popular',
+      'Anime Kitsu:anime/kitsu-anime-rating',
+      'Anime Kitsu:series/kitsu-anime-last-videos',
     ]);
+    expect([for (final c in a.animeCatalogs) c.name], ['Trending', 'Airing', 'Popular', 'Top rated']);
+    expect(a.animeCatalogs.every((c) => c.type == 'anime'), isTrue);
+    expect(a.catalogs.where((c) => c.type == 'movie' || c.type == 'series'),
+        isNot(contains(anyOf(a.animeCatalogs))));
+  });
+
+  test('Anime Kitsu is bundled, on by default and switchable with persistence', () async {
+    final a = await loaded((_) async => json({}));
+    final kitsu = a.all.singleWhere((b) => b.name == 'Anime Kitsu');
+    expect(kitsu.base, 'https://anime-kitsu.strem.fun');
+    expect(kitsu.bundled, isTrue);
+    expect(kitsu.locked, isFalse);
+    expect(a.isEnabled(kitsu), isTrue);
+    for (final prefix in ['kitsu', 'mal', 'anilist', 'anidb']) {
+      expect(kitsu.serves('meta', 'series', '$prefix:11'), isTrue);
+      expect(kitsu.serves('subtitles', 'movie', '$prefix:11'), isTrue);
+    }
+    expect(kitsu.serves('stream', 'series', 'kitsu:11:1'), isFalse);
+
+    await a.setEnabled(kitsu, false);
+    expect(a.animeCatalogs, isEmpty);
+    expect(a.active, isNot(contains(kitsu)));
+    expect(a.catalogs.any((c) => c.addon == kitsu), isFalse);
+    final again = Addons(client: MockClient((_) async => throw StateError('no network on load')));
+    await again.load();
+    final restored = again.all.singleWhere((b) => b.id == kitsu.id);
+    expect(again.isEnabled(restored), isFalse);
+    expect(again.animeCatalogs, isEmpty);
+    await again.setEnabled(restored, true);
+    expect(again.animeCatalogs, hasLength(4));
+  });
+
+  test('anime catalog keeps each item type and maps leftover anime to series', () async {
+    final seen = <String>[];
+    final a = await loaded((r) async {
+      seen.add('${r.url}');
+      return json({
+        'metas': [
+          {'id': 'kitsu:11', 'type': 'series', 'name': 'Series'},
+          {'id': 'kitsu:12', 'type': 'movie', 'name': 'Movie'},
+          {'id': 'kitsu:13', 'type': 'anime', 'name': 'Anime'},
+          {'id': 'kitsu:14', 'name': 'Fallback'},
+        ],
+      });
+    });
+    final c = a.animeCatalogs.first;
+    final items = await a.catalog(c);
+    expect(c.type, 'anime');
+    expect([for (final item in items) item.type], ['series', 'movie', 'series', 'series']);
+    expect(seen.single, 'https://anime-kitsu.strem.fun/catalog/anime/kitsu-anime-trending.json');
+  });
+
+  test('Kitsu meta and Torrentio streams use series and canonical episode ids', () async {
+    final seen = <String>[];
+    final a = await loaded((r) async {
+      seen.add('${r.url}');
+      if (r.url.path.contains('/meta/')) {
+        return json({
+          'meta': {
+            'id': 'kitsu:11',
+            'type': 'anime',
+            'name': 'Anime',
+            'videos': [
+              {'id': 'kitsu:11:1', 'title': 'Episode 1', 'season': 1, 'episode': 1},
+            ],
+          },
+        });
+      }
+      return json({'streams': [{'name': 'Torrentio', 'infoHash': hash}]});
+    });
+    final m = await a.meta('anime', 'kitsu:11');
+    expect(m.type, 'series');
+    expect(m.videos.single.id, 'kitsu:11:1');
+    expect(seen.single, 'https://anime-kitsu.strem.fun/meta/series/kitsu:11.json');
+
+    final sources = a.streamSources(m.type, m.videos.single.id);
+    expect([for (final source in sources) source.name], ['Torrentio']);
+    final torrentio = sources.single;
+    expect(torrentio.serves('stream', 'movie', 'tt1'), isTrue);
+    expect(torrentio.serves('stream', 'anime', 'kitsu:11:1'), isTrue);
+    expect(torrentio.serves('stream', 'series', 'mal:11:1'), isFalse);
+    final streams = await a.streams(torrentio, m.type, m.videos.single.id);
+    expect(streams.single.infoHash, hash);
+    expect(seen.last, 'https://torrentio.strem.fun/stream/series/kitsu:11:1.json');
   });
 
   test('meta and streams parse real-shaped responses', () async {
@@ -322,15 +413,15 @@ void main() {
 
     final again = Addons(client: MockClient((_) async => throw StateError('no network on load')));
     await again.load();
-    expect([for (final b in again.all) b.id].skip(5), ['x.example', 'y.example']);
-    expect(again.all.skip(5).first.base, 'https://x.example');
+    expect([for (final b in again.all) b.id].skip(6), ['x.example', 'y.example']);
+    expect(again.all.skip(6).first.base, 'https://x.example');
     expect(again.isEnabled(again.all[1]), isFalse);
     expect(again.isEnabled(again.all.first), isTrue);
 
     await a.remove(x);
-    expect([for (final b in a.all.skip(5)) b.id], ['y.example']);
+    expect([for (final b in a.all.skip(6)) b.id], ['y.example']);
     await a.restore(x);
-    expect([for (final b in a.all.skip(5)) b.id], ['x.example', 'y.example']);
+    expect([for (final b in a.all.skip(6)) b.id], ['x.example', 'y.example']);
     expect(notified, 5);
   });
 
@@ -342,7 +433,7 @@ void main() {
       {'addons': jsonEncode([{'url': 'https://a', 'manifest': {'id': 'a'}}, 'junk'])},
     ]) {
       final a = await loaded((_) async => json({}), prefs);
-      expect(a.all.length, 5);
+      expect(a.all.length, 6);
       expect(a.all.every((b) => b.bundled), isTrue);
     }
   });

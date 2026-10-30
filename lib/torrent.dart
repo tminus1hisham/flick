@@ -31,6 +31,66 @@ bool isVideo(String name) {
 typedef TorrentStatus = ({String name, int peers, int rate, bool hasMetadata, String? error});
 typedef TorrentFile = ({int index, String name, int size});
 
+/// Native persistence owns the data directory; ids are refreshed by resumeKept after a restart.
+class KeptTorrent {
+  const KeptTorrent({
+    required this.id, required this.infoHash, required this.magnet, required this.file,
+    required this.dir, required this.titleJson, required this.name, required this.size, required this.done,
+  });
+  final int id;
+  final String infoHash, magnet, dir, titleJson, name;
+  final int file, size;
+  final bool done;
+
+  String get taskId => 'torrent-$infoHash-$file';
+
+  factory KeptTorrent.fromJson(Map<String, Object?> m) => KeptTorrent(
+    id: m['id'] as int,
+    infoHash: m['infoHash'] as String,
+    magnet: m['magnet'] as String,
+    file: m['file'] as int,
+    dir: m['dir'] as String,
+    titleJson: m['titleJson'] as String,
+    name: m['name'] as String,
+    size: m['size'] as int,
+    done: m['done'] as bool,
+  );
+
+  Map<String, Object?> toJson() => {
+    'id': id, 'infoHash': infoHash, 'magnet': magnet, 'file': file,
+    'dir': dir, 'titleJson': titleJson, 'name': name, 'size': size, 'done': done,
+  };
+}
+
+/// Progress counts bytes in the selected file, never bytes in the whole season pack.
+class TorrentProgress {
+  const TorrentProgress({
+    required this.downloaded, required this.total, required this.done, this.path, this.error,
+  });
+  final int downloaded, total;
+  final bool done;
+  final String? path, error;
+
+  double get progress => total > 0 ? (downloaded / total).clamp(0.0, 1.0).toDouble() : 0;
+  bool get active => !done && error == null;
+
+  factory TorrentProgress.fromStatus(Map<String, Object?> m) {
+    final total = ((m['total'] as num?)?.toInt() ?? 0).clamp(0, 0x7fffffffffffffff).toInt();
+    final bytes = ((m['downloaded'] as num?)?.toInt() ?? 0).clamp(0, 0x7fffffffffffffff).toInt();
+    final path = m['path'] as String?;
+    final error = m['error'] as String?;
+    final done = m['done'] == true && total > 0 && bytes >= total &&
+        path != null && path.isNotEmpty && error == null;
+    return TorrentProgress(
+      downloaded: total > 0 ? bytes.clamp(0, total).toInt() : bytes,
+      total: total,
+      done: done,
+      path: done ? path : null,
+      error: error,
+    );
+  }
+}
+
 /// The libtorrent4j engine in android/app/src/main/kotlin/dev/local/flick/Torrents.kt.
 class TorrentEngine {
   const TorrentEngine._();
@@ -53,6 +113,24 @@ class TorrentEngine {
           );
   }
 
+  Future<TorrentProgress?> downloadStatus(int id) async {
+    final m = await _ch.invokeMapMethod<String, Object?>('status', {'id': id});
+    return m == null ? null : TorrentProgress.fromStatus(m);
+  }
+
+  /// Promotes this entry out of the streaming cache and persists its selected file and title.
+  Future<KeptTorrent> keep(int id, int file, {required String titleJson}) async {
+    final m = await _ch.invokeMapMethod<String, Object?>(
+        'keep', {'id': id, 'file': file, 'titleJson': titleJson});
+    return KeptTorrent.fromJson(m!);
+  }
+
+  /// Idempotent within the native engine; returned ids belong to the current process.
+  Future<List<KeptTorrent>> resumeKept() async => [
+    for (final m in (await _ch.invokeListMethod<Map<Object?, Object?>>('resumeKept'))!)
+      KeptTorrent.fromJson(Map<String, Object?>.from(m)),
+  ];
+
   /// Empty until metadata has arrived.
   Future<List<TorrentFile>> files(int id) async => [
         for (final m in (await _ch.invokeListMethod<Map<Object?, Object?>>('files', {'id': id}))!)
@@ -63,13 +141,14 @@ class TorrentEngine {
   Future<String> stream(int id, int file) async =>
       (await _ch.invokeMethod<String>('stream', {'id': id, 'file': file}))!;
 
-  /// Stops serving and downloading; the torrent stays for another pick.
+  /// Stops streaming. A kept download continues until its selected file is complete.
   Future<void> stopStream(int id) => _ch.invokeMethod('stopStream', {'id': id});
 
-  /// Removes the torrent and deletes its data. Unknown ids are ignored.
-  Future<void> remove(int id) => _ch.invokeMethod('remove', {'id': id});
+  /// Removes the torrent and deletes its data. Retries can protect a pre-existing download.
+  Future<void> remove(int id, {bool unlessKept = false}) =>
+      _ch.invokeMethod('remove', {'id': id, 'unlessKept': unlessKept});
 
-  /// Stops playback and keeps the torrent available for 60 seconds.
+  /// Stops playback; kept downloads survive, other torrents stay available for 60 seconds.
   Future<void> release(int id) => _ch.invokeMethod('release', {'id': id});
 
   /// The playing file's average bytes per second, which spaces the piece deadlines ahead of the player.

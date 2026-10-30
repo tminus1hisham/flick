@@ -7,6 +7,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.AtomicFile
 import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
@@ -18,6 +19,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import org.json.JSONArray
+import org.json.JSONObject
 import org.libtorrent4j.Priority
 import org.libtorrent4j.SessionHandle
 import org.libtorrent4j.SessionManager
@@ -33,10 +36,16 @@ import org.libtorrent4j.swig.settings_pack
  * One torrent. Every TorrentHandle call happens under `synchronized(this)` after checking [alive], and
  * [gen] changes whenever playback starts, stops or the torrent is removed, so stale HTTP readers stop.
  */
-class Entry(val th: TorrentHandle, val dir: String) {
+class Entry(val th: TorrentHandle, var dir: String, val hash: String, val magnet: String) {
     var alive = true
     var gen = 0
     var activeFile: Int? = null
+    var keptFile: Int? = null
+    var titleJson = ""
+    var keptName = ""
+    var keptSize = 0L
+    var keptConfigured = false
+    var done = false
     val verified = BitSet()
     val conns = mutableSetOf<Conn>()
     /** Piece of the latest non-probe read, the player's bytes/s, and the absolute ms each deadline was set for. */
@@ -70,7 +79,7 @@ class Entry(val th: TorrentHandle, val dir: String) {
 }
 
 /** MethodChannel "flick/torrent". ctl serializes calls and delayed removals; replies answer once.
- * Live hashes share an entry; release stops playback and keeps it warm for 60 seconds.
+ * Live hashes share an entry; release stops playback and keeps unkept torrents warm for 60 seconds.
  */
 class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     private lateinit var channel: MethodChannel
@@ -83,6 +92,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     private val nextId = AtomicInteger(1)
     private var session: SessionManager? = null
     private var server: StreamServer? = null
+    private var restored = false
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
@@ -95,7 +105,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
         timer.shutdownNow()
         ctl.execute {
             server?.close()
-            entries.keys.toList().forEach(::remove)
+            entries.keys.toList().forEach { remove(it, preserveKept = true) }
             session?.stop()
         }
         ctl.shutdown()
@@ -129,6 +139,8 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
         val id = call.argument<Int>("id")
         return when (call.method) {
             "add" -> add(call.argument<String>("magnet")!!, call.argument<String>("dir")!!)
+            "keep" -> keep(id!!, call.argument<Int>("file")!!, call.argument<String>("titleJson")!!)
+            "resumeKept" -> resumeKept()
             "status" -> entries[id]?.let { e -> synchronized(e) { if (e.alive) status(e) else null } }
             "files" -> entries[id]?.let { e -> synchronized(e) { if (e.alive) files(e) else null } } ?: emptyList<Any>()
             "stream" -> stream(entries[id] ?: error("torrent was removed"), id!!, call.argument<Int>("file")!!)
@@ -138,36 +150,46 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
             "bitrate" -> {
                 entries[id]?.let { e ->
                     synchronized(e) {
-                        e.rate = maxOf(call.argument<Number>("bytesPerSec")!!.toLong(), 256L shl 10)
-                        if (e.alive && e.activeFile != null) e.reschedule()
+                        if (e.alive) {
+                            e.rate = maxOf(call.argument<Number>("bytesPerSec")!!.toLong(), 256L shl 10)
+                            if (e.activeFile != null) e.reschedule()
+                        }
                     }
                 }
                 null
             }
-            "remove" -> { remove(id!!); null }
+            "remove" -> {
+                val e = entries[id]
+                val protected = e != null && synchronized(e) {
+                    e.alive && e.keptFile != null && call.argument<Boolean>("unlessKept") == true
+                }
+                if (!protected) remove(id!!)
+                null
+            }
             else -> throw IllegalArgumentException("unknown method ${call.method}")
         }
     }
 
+    private fun engine(): SessionManager = session ?: SessionManager().also {
+        // Only streaming sessions are disposable. Kept data is always under filesDir.
+        File(context.cacheDir, "flick-torrents").listFiles()?.forEach { f -> f.deleteRecursively() }
+        it.start()
+        // stop() ignores every piece, which makes a torrent "finished", and libtorrent then drops its seeds as
+        // redundant and won't redial them for 60 s (min_reconnect_time). Keep them, so reusing the torrent (a
+        // reopen, or the next episode of a season pack) starts at once instead of a minute later.
+        it.applySettings(SettingsPack().setBoolean(settings_pack.bool_types.close_redundant_connections.swigValue(), false))
+        session = it
+        timer.scheduleWithFixedDelay({ ctl.execute(::tick) }, 1, 1, TimeUnit.SECONDS)
+    }
+
     private fun add(magnet: String, dir: String): Int {
-        val sm = session ?: SessionManager().also {
-            // No native torrent exists before this session, so sibling session directories are leftovers
-            // from a killed process. Swept here, not in Dart: a hot restart resets Dart but not this plugin.
-            File(dir).parentFile?.listFiles()?.filter { f -> f.path != File(dir).path }?.forEach { f -> f.deleteRecursively() }
-            it.start()
-            // stop() ignores every piece, which makes a torrent "finished", and libtorrent then drops its seeds as
-            // redundant and won't redial them for 60 s (min_reconnect_time). Keep them, so reusing the torrent (a
-            // reopen, or the next episode of a season pack) starts at once instead of a minute later.
-            it.applySettings(SettingsPack().setBoolean(settings_pack.bool_types.close_redundant_connections.swigValue(), false))
-            session = it
-        }
         val ec = error_code()
         val p = libtorrent.parse_magnet_uri(magnet, ec)
         if (ec.value() != 0) throw IllegalArgumentException(ec.message())
         val hash = Sha1Hash(p.getInfo_hashes().getV1()).toHex().lowercase()
         for ((id, e) in entries) {
             val same = synchronized(e) {
-                e.alive && hash != "0".repeat(40) && e.th.infoHash().toHex().lowercase() == hash
+                e.alive && hash != "0".repeat(40) && e.hash == hash
             }
             if (same) {
                 releases.remove(id)?.cancel(false)
@@ -176,25 +198,192 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
                 return id
             }
         }
+        val sm = engine()
+        File(dir).mkdirs()
         p.setSave_path(dir)
         // Nothing downloads until a file is picked.
         p.setFlags(p.getFlags().or_(TorrentFlags.DEFAULT_DONT_DOWNLOAD).or_(TorrentFlags.DUPLICATE_IS_ERROR))
         val th = TorrentHandle(sm.swig().add_torrent(p, ec))
         if (ec.value() != 0) throw IllegalStateException(ec.message())
-        th.unsetFlags(TorrentFlags.AUTO_MANAGED)
-        th.resume()
+        val e = Entry(th, dir, hash, magnet)
+        synchronized(e) {
+            check(e.alive) { "torrent was removed" }
+            e.th.unsetFlags(TorrentFlags.AUTO_MANAGED)
+            e.th.resume()
+        }
         val id = nextId.getAndIncrement()
-        entries[id] = Entry(th, dir)
+        entries[id] = e
         return id
     }
 
+    private fun keptDir(hash: String): File {
+        require(Regex("[0-9a-f]{40}").matches(hash) && hash != "0".repeat(40)) { "a v1 info-hash is required" }
+        return File(context.filesDir, "downloads/torrents/$hash")
+    }
+
+    private fun dataFile(e: Entry): File? {
+        if (e.keptName.isEmpty()) return null
+        val root = File(e.dir).canonicalFile
+        val file = File(root, e.keptName).canonicalFile
+        require(file.path.startsWith(root.path + File.separator)) { "invalid torrent file path" }
+        return file
+    }
+
+    private fun keptRecord(id: Int, e: Entry): Map<String, Any> = mapOf(
+        "id" to id, "infoHash" to e.hash, "magnet" to e.magnet,
+        "file" to e.keptFile!!, "dir" to e.dir, "titleJson" to e.titleJson,
+        "name" to e.keptName, "size" to e.keptSize, "done" to e.done)
+
+    private fun persistKept() {
+        val records = JSONArray()
+        for ((id, e) in entries) {
+            synchronized(e) {
+                if (e.alive && e.keptFile != null) records.put(JSONObject(keptRecord(id, e)))
+            }
+        }
+        val file = AtomicFile(File(context.filesDir, "torrent-downloads.json"))
+        val out = file.startWrite()
+        try {
+            out.write(records.toString().toByteArray(Charsets.UTF_8))
+            file.finishWrite(out)
+        } catch (t: Throwable) {
+            file.failWrite(out)
+            throw t
+        }
+    }
+
+    private fun keep(id: Int, file: Int, titleJson: String): Map<String, Any> {
+        val e = entries[id] ?: error("torrent was removed")
+        return synchronized(e) {
+            check(e.alive) { "torrent was removed" }
+            JSONObject(titleJson)
+            val ti = e.th.torrentFile() ?: error("metadata not ready")
+            val fs = ti.files()
+            require(file in 0 until fs.numFiles() && !fs.padFileAt(file)) { "no file $file" }
+            require(e.keptFile == null || e.keptFile == file) {
+                "Another file from this torrent is already saved. Delete it in Downloads before choosing another."
+            }
+            require(e.activeFile == null) { "Stop playback before downloading this torrent" }
+            val dir = keptDir(e.hash)
+            dir.mkdirs()
+            e.keptName = fs.filePath(file)
+            e.keptSize = fs.fileSize(file)
+            val previousDir = e.dir
+            e.dir = dir.path
+            try {
+                dataFile(e)
+            } catch (t: Throwable) {
+                e.dir = previousDir
+                throw t
+            }
+            if (File(previousDir).canonicalPath != dir.canonicalPath) e.th.moveStorage(dir.path)
+            releases.remove(id)?.cancel(false)
+            e.keptFile = file
+            e.titleJson = titleJson
+            e.keptConfigured = false
+            configureKept(e)
+            persistKept()
+            keptRecord(id, e)
+        }
+    }
+
+    private fun resumeKept(): List<Map<String, Any>> {
+        if (!restored) {
+            val file = AtomicFile(File(context.filesDir, "torrent-downloads.json"))
+            val text = try {
+                file.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } catch (_: java.io.FileNotFoundException) {
+                "[]"
+            }
+            val records = JSONArray(text)
+            for (n in 0 until records.length()) {
+                val r = records.getJSONObject(n)
+                val hash = r.getString("infoHash")
+                val dir = keptDir(hash)
+                require(File(r.getString("dir")).canonicalPath == dir.canonicalPath) { "invalid download directory" }
+                val title = r.getString("titleJson")
+                JSONObject(title)
+                val id = add(r.getString("magnet"), dir.path)
+                val e = entries[id]!!
+                synchronized(e) {
+                    check(e.alive) { "torrent was removed" }
+                    require(e.hash == hash) { "download info-hash mismatch" }
+                    val selected = r.getInt("file")
+                    require(selected >= 0 && (e.keptFile == null || e.keptFile == selected)) { "conflicting download file" }
+                    if (File(e.dir).canonicalPath != dir.canonicalPath) {
+                        e.th.moveStorage(dir.path)
+                        e.dir = dir.path
+                    }
+                    e.keptFile = selected
+                    e.titleJson = title
+                    e.keptName = r.getString("name")
+                    e.keptSize = r.getLong("size")
+                    e.done = r.getBoolean("done")
+                    dataFile(e)
+                    e.keptConfigured = false
+                    configureKept(e)
+                }
+            }
+            restored = true
+        }
+        return entries.mapNotNull { (id, e) ->
+            synchronized(e) { if (e.alive && e.keptFile != null) keptRecord(id, e) else null }
+        }
+    }
+
+    /** Under the entry lock on ctl. Metadata can arrive after resumeKept has returned. */
+    private fun configureKept(e: Entry) {
+        val file = e.keptFile ?: return
+        if (e.done) {
+            e.th.pause()
+            return
+        }
+        if (e.keptConfigured) return
+        val ti = e.th.torrentFile() ?: return
+        val fs = ti.files()
+        require(file in 0 until fs.numFiles() && !fs.padFileAt(file)) { "no file $file" }
+        require(fs.filePath(file) == e.keptName && fs.fileSize(file) == e.keptSize) { "download file changed" }
+        e.th.clearPieceDeadlines()
+        e.due.clear()
+        // Reset streaming piece priorities before applying the single selected file.
+        e.th.prioritizePieces(Array(ti.numPieces()) { Priority.DEFAULT })
+        e.th.prioritizeFiles(Array(fs.numFiles()) { if (it == file) Priority.DEFAULT else Priority.IGNORE })
+        e.th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+        e.th.resume()
+        e.keptConfigured = true
+    }
+
+    private fun keptBytes(e: Entry): Long {
+        val file = e.keptFile ?: return 0
+        configureKept(e)
+        val local = dataFile(e)
+        if (e.done) return if (local?.isFile == true && local.length() == e.keptSize) e.keptSize else 0
+        if (!e.keptConfigured) return 0
+        val bytes = e.th.fileProgress().getOrNull(file) ?: 0
+        if (e.keptSize > 0 && bytes >= e.keptSize && local?.isFile == true && local.length() == e.keptSize) {
+            e.th.pause()
+            e.done = true
+            persistKept()
+        }
+        return bytes
+    }
+
     private fun status(e: Entry): Map<String, Any?> {
+        val downloaded = if (e.keptFile != null) keptBytes(e) else 0L
         val s = e.th.status()
         val err = s.errorCode()
+        val complete = e.done && e.keptSize > 0 && downloaded >= e.keptSize
         return mapOf(
             // status().name() is empty unless libtorrent is asked to query it; the metadata has it.
-            "name" to (e.th.torrentFile()?.name() ?: ""), "peers" to s.numPeers(), "rate" to s.downloadRate(),
-            "hasMetadata" to s.hasMetadata(), "error" to if (err.isError) err.message else null)
+            "name" to (e.th.torrentFile()?.name() ?: e.keptName), "peers" to s.numPeers(), "rate" to s.downloadRate(),
+            "hasMetadata" to s.hasMetadata(),
+            "error" to when {
+                e.done && !complete -> "Downloaded file is missing"
+                err.isError -> err.message
+                else -> null
+            },
+            "downloaded" to downloaded, "total" to e.keptSize, "done" to complete,
+            "path" to if (complete) dataFile(e)?.path else null)
     }
 
     private fun files(e: Entry): List<Map<String, Any>> {
@@ -205,12 +394,17 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private fun stream(e: Entry, id: Int, file: Int): String {
-        // Server first: if it cannot start, nothing has been activated yet.
-        val s = server ?: StreamServer { entries[it] }.also {
-            server = it
-            // Keeps deadlines ahead of each reader between requests. Shut down with timer on detach.
-            timer.scheduleWithFixedDelay({ ctl.execute(::tick) }, 1, 1, TimeUnit.SECONDS)
+        synchronized(e) {
+            check(e.alive) { "torrent was removed" }
+            if (e.keptFile != null) {
+                require(e.keptFile == file) { "Another file from this torrent is saved in Downloads" }
+                keptBytes(e)
+                check(e.done && dataFile(e)?.isFile == true) { "This torrent is downloading. Play it from Downloads when it is ready." }
+                return dataFile(e)!!.path
+            }
         }
+        // Server first: if it cannot start, nothing has been activated yet.
+        val s = server ?: StreamServer { entries[it] }.also { server = it }
         try {
             synchronized(e) {
                 check(e.alive) { "torrent was removed" }
@@ -252,18 +446,27 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
         e.activeFile = null
         e.closeConns()
         if (e.alive) {
-            e.th.clearPieceDeadlines()
-            e.due.clear()
-            e.th.torrentFile()?.let { ti -> e.th.prioritizePieces(Array(ti.numPieces()) { Priority.IGNORE }) }
+            if (e.keptFile != null) {
+                configureKept(e)
+            } else {
+                e.th.clearPieceDeadlines()
+                e.due.clear()
+                e.th.torrentFile()?.let { ti -> e.th.prioritizePieces(Array(ti.numPieces()) { Priority.IGNORE }) }
+            }
         }
     }
 
     private fun tick() {
         for (e in entries.values) {
             try {
-                synchronized(e) { if (e.alive && e.activeFile != null) e.reschedule() }
+                synchronized(e) {
+                    if (e.alive) {
+                        if (e.keptFile != null) keptBytes(e)
+                        if (e.activeFile != null) e.reschedule()
+                    }
+                }
             } catch (t: Exception) {
-                Log.w("torrent", "deadline tick failed", t) // an uncaught throw on ctl would kill the app
+                Log.w("torrent", "torrent tick failed", t) // an uncaught throw on ctl would kill the app
             }
         }
     }
@@ -272,23 +475,50 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
         val e = entries[id] ?: return
         stop(e)
         releases.remove(id)?.cancel(false)
+        if (synchronized(e) { !e.alive || e.keptFile != null }) return
         lateinit var pending: ScheduledFuture<*>
         pending = timer.schedule({
             ctl.execute {
-                if (releases[id] === pending) remove(id)
+                if (releases[id] === pending && synchronized(e) { e.alive && e.keptFile == null }) remove(id)
             }
         }, 60, TimeUnit.SECONDS)
         releases[id] = pending
     }
 
-    private fun remove(id: Int) {
+    private fun remove(id: Int, preserveKept: Boolean = false) {
         releases.remove(id)?.cancel(false)
-        val e = entries.remove(id) ?: return
+        val e = entries[id] ?: return
+        var kept = false
         synchronized(e) {
+            if (!e.alive) return
+            kept = e.keptFile != null
+            if (kept && !preserveKept) {
+                e.keptFile = null
+                try {
+                    persistKept()
+                } catch (t: Throwable) {
+                    e.keptFile = keptFileFromDisk(id)
+                    throw t
+                }
+            }
+            e.th.pause()
+            if (kept && preserveKept) session?.remove(e.th)
+            else session?.remove(e.th, SessionHandle.DELETE_FILES)
             e.alive = false
             e.gen++
             e.closeConns()
         }
-        session?.remove(e.th, SessionHandle.DELETE_FILES)
+        entries.remove(id)
+        if (kept && !preserveKept) File(e.dir).deleteRecursively()
+    }
+
+    private fun keptFileFromDisk(id: Int): Int? {
+        val file = AtomicFile(File(context.filesDir, "torrent-downloads.json"))
+        val records = JSONArray(file.openRead().bufferedReader(Charsets.UTF_8).use { it.readText() })
+        for (n in 0 until records.length()) {
+            val r = records.getJSONObject(n)
+            if (r.getInt("id") == id) return r.getInt("file")
+        }
+        return null
     }
 }

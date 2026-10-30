@@ -4,6 +4,8 @@ import '../jellyfin.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import 'search.dart';
+import 'torrent.dart';
 
 const _gridPadding = EdgeInsets.fromLTRB(FlickTokens.pageGutter, 16, FlickTokens.pageGutter, 24);
 
@@ -19,31 +21,50 @@ class _BrowseScreenState extends State<BrowseScreen> {
   late Future<List<Item>> _views = session.client!.views();
 
   @override
-  Widget build(BuildContext context) => Loader(
-        _views,
-        onRetry: () => setState(() => _views = session.client!.views()),
-        placeholder: const _BrowseSkeleton(),
-        (views) => views.isEmpty
-            ? Center(
-                child: Text('No libraries on this server yet.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              )
-            : DefaultTabController(
-                length: views.length,
-                child: Column(children: [
-                  TabBar(
-                    isScrollable: true,
-                    tabAlignment: TabAlignment.start,
-                    // 4 + the tab's own 16 puts the first label on the 20dp gutter.
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    tabs: [for (final v in views) Tab(height: 48, text: v.name)],
-                  ),
-                  Expanded(
-                    child: TabBarView(children: [for (final v in views) _Grid(v, key: ValueKey(v.id))]),
-                  ),
-                ]),
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          title: const Text('Browse'),
+          actions: [
+            IconButton(
+              tooltip: 'Search',
+              constraints: const BoxConstraints(
+                  minWidth: FlickTokens.minTouchTarget, minHeight: FlickTokens.minTouchTarget),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SearchScreen()),
               ),
+              icon: const Icon(Icons.search),
+            ),
+            const MagnetButton(),
+            const ProfileButton(),
+          ],
+        ),
+        body: Loader(
+          _views,
+          onRetry: () => setState(() => _views = session.client!.views()),
+          placeholder: const _BrowseSkeleton(),
+          (views) => views.isEmpty
+              ? Center(
+                  child: Text('No libraries on this server yet.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                )
+              : DefaultTabController(
+                  length: views.length,
+                  child: Column(children: [
+                    TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      // 4 + the tab's own 16 puts the first label on the 20dp gutter.
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      tabs: [for (final v in views) Tab(height: 48, text: v.name)],
+                    ),
+                    Expanded(
+                      child: TabBarView(children: [for (final v in views) _Grid(v, key: ValueKey(v.id))]),
+                    ),
+                  ]),
+                ),
+        ),
       );
 }
 

@@ -6,16 +6,19 @@ import 'package:flutter/services.dart';
 import '../addons.dart' show Subtitle;
 import '../jellyfin.dart';
 import '../kit/route.dart';
+import '../kit/sheet.dart';
 import '../playback.dart';
+import '../state.dart';
 import '../theme.dart';
 import '../torrent.dart';
 import '../upnext.dart';
+import '../widgets.dart';
 import 'player.dart';
 
 bool _entryBusy = false;
 
 /// Asks for a magnet link and streams it. Held from the tap until the torrent
-/// screen closes, so only one torrent session exists at a time.
+/// screen closes, so only one link entry flow exists at a time.
 Future<void> openMagnet(BuildContext context) async {
   if (_entryBusy) return;
   _entryBusy = true;
@@ -25,8 +28,8 @@ Future<void> openMagnet(BuildContext context) async {
       clip = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim() ?? '';
     } catch (_) {} // prefill is a convenience
     if (!context.mounted) return;
-    final magnet = await showDialog<String>(
-        context: context, builder: (_) => _MagnetDialog(isMagnet(clip) ? clip : ''));
+    final magnet = await showFlickSheet<String>(
+        context, (_) => _MagnetDialog(isMagnet(clip) ? clip : ''));
     if (magnet == null || !context.mounted) return;
     await Navigator.push(context, MaterialPageRoute(builder: (_) => TorrentScreen(magnet)));
   } finally {
@@ -41,6 +44,7 @@ class MagnetButton extends StatelessWidget {
   Widget build(BuildContext context) => IconButton(
       icon: const Icon(Icons.add_link),
       tooltip: 'Stream a link',
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
       onPressed: () => openMagnet(context));
 }
 
@@ -78,14 +82,17 @@ class _MagnetDialogState extends State<_MagnetDialog> {
   }
 
   @override
-  Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Stream a link'),
-        content: Column(
+  Widget build(BuildContext context) => SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+            FlickTokens.pageGutter, 20, FlickTokens.pageGutter, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Text('Stream a link', style: FlickText.railHeading),
+            const SizedBox(height: 12),
             Text('Paste a magnet link to choose a video.',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                style: FlickText.body.copyWith(color: FlickTokens.textSecondary)),
             const SizedBox(height: 16),
             TextField(
               controller: _text,
@@ -94,25 +101,35 @@ class _MagnetDialogState extends State<_MagnetDialog> {
               decoration: InputDecoration(hintText: 'magnet:?xt=urn:btih:…', errorText: _error),
               onSubmitted: (_) => _submit(),
             ),
+            const SizedBox(height: 16),
+            Wrap(spacing: 12, children: [
+              TextButton(
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: _close,
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+                onPressed: _submit,
+                child: const Text('Continue'),
+              ),
+            ]),
           ],
         ),
-        actions: [
-          TextButton(onPressed: _close, child: const Text('Cancel')),
-          FilledButton(onPressed: _submit, child: const Text('Continue')),
-        ],
       );
 }
 
 class TorrentScreen extends StatefulWidget {
   const TorrentScreen(this.magnet,
       {this.fileIdx, this.season, this.episode, this.title, this.playback, this.subtitles = const [], this.hash,
-      this.next, super.key});
+      this.next, this.download = false, this.poster, super.key});
   final String magnet;
   final int? fileIdx, season, episode;
-  final String? title;
+  final String? title, poster;
   final Playback? playback;
   final List<Subtitle> subtitles;
   final String? hash;
+  final bool download;
 
   /// Handed to the player; its answer comes back out of this route, which pops with it.
   final Future<NextUp?>? next;
@@ -219,7 +236,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
   }
 
   Future<void> _retry() async {
-    if (_busy) return;
+    if (_busy || _opening) return;
     _busy = true;
     _attempt++;
     await _teardown(remove: true);
@@ -240,6 +257,20 @@ class _TorrentScreenState extends State<TorrentScreen> {
     _opening = true;
     setState(() => _openingFile = f.index);
     try {
+      if (widget.download) {
+        final playback = widget.playback;
+        if (playback == null) throw StateError('Download playback details are missing');
+        await downloads.keepTorrent(
+          engine, id, f.index,
+          title: widget.title ?? playback.title,
+          poster: widget.poster,
+          playback: playback,
+        );
+        if (mounted && id == _id && ModalRoute.of(context)?.isCurrent == true) {
+          Navigator.pop(context, true);
+        }
+        return;
+      }
       final url = await engine.stream(id, f.index);
       if (!mounted || id != _id) return;
       Object? result;
@@ -285,14 +316,14 @@ class _TorrentScreenState extends State<TorrentScreen> {
     }
   }
 
-  /// Keep a released torrent warm; retries explicitly start over.
+  /// Keep a released torrent warm; retries never delete a pre-existing kept download.
   Future<void> _teardown({bool remove = false}) async {
     _poll?.cancel();
     _poll = null;
     final engine = _engine, id = _id;
     _id = null;
     if (engine != null && id != null) {
-      await _forget(remove ? engine.remove(id) : engine.release(id));
+      await _forget(remove ? engine.remove(id, unlessKept: true) : engine.release(id));
     }
   }
 
@@ -322,11 +353,11 @@ class _TorrentScreenState extends State<TorrentScreen> {
           ],
         );
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title ?? 'Stream a link')),
+      appBar: AppBar(title: Text(widget.download ? 'Download' : widget.title ?? 'Stream a link')),
       body: error != null
           ? _Notice(
               icon: Icons.report_outlined,
-              title: "Couldn't play this torrent",
+              title: widget.download ? "Couldn't download this torrent" : "Couldn't play this torrent",
               detail: error is PlatformException ? error.message ?? error.code : '$error',
               danger: true,
               action: Wrap(spacing: 12, children: [
@@ -360,8 +391,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
                     ),
                     _Stage(
                         _autoAttempted && _openingFile != null
-                            ? 'Opening ${files!.firstWhere((f) => f.index == _openingFile).name}'
-                            : 'Choose a video',
+                            ? '${widget.download ? 'Queuing' : 'Opening'} ${files!.firstWhere((f) => f.index == _openingFile).name}'
+                            : widget.download ? 'Choose a video to download' : 'Choose a video',
                         files == null ? _Step.pending : _Step.now),
                     if (i != null && i.name.isNotEmpty) ...[
                       const SizedBox(height: 20),
@@ -384,7 +415,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
                         _FileRow(f,
                             suggested: f.index == _suggested,
                             opening: _openingFile == f.index,
-                            onTap: () => _play(f)),
+                            download: widget.download,
+                            onTap: _opening ? null : () => _play(f)),
                       ],
                     ],
                   ],
@@ -402,7 +434,7 @@ class _Stage extends StatelessWidget {
   final _Step step;
   final String? detail;
 
-  /// Whether "now" means waiting on the engine (spinner) rather than on the user.
+  /// Whether "now" means waiting on the engine rather than on the user.
   final bool busy;
 
   @override
@@ -446,9 +478,7 @@ class _Stage extends StatelessWidget {
               ],
             _Step.now => [
                 if (busy) ...const [
-                  Center(
-                      child: SizedBox.square(
-                          dimension: 14, child: CircularProgressIndicator(strokeWidth: 2))),
+                  Center(child: Skeleton(width: 32, height: 12, radius: FlickTokens.controlRadius)),
                   SizedBox(width: 8),
                 ],
                 Center(child: Text('Now', style: t.labelMedium)),
@@ -463,62 +493,70 @@ class _Stage extends StatelessWidget {
 
 /// A flat, tappable video row: marker, wrapping name, size.
 class _FileRow extends StatelessWidget {
-  const _FileRow(this.file, {required this.suggested, required this.opening, required this.onTap});
+  const _FileRow(this.file, {
+    required this.suggested, required this.opening, required this.onTap, this.download = false,
+  });
   final TorrentFile file;
-  final bool suggested, opening;
-  final VoidCallback onTap;
+  final bool suggested, opening, download;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 56),
-        child: IntrinsicHeight(
-          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Container(width: 3, color: opening ? scheme.primary : null),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (suggested)
-                      // A filled tag: small red text on black would fall below 4.5:1.
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                              color: scheme.primary, borderRadius: BorderRadius.circular(4)),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            child: Row(mainAxisSize: MainAxisSize.min, children: [
-                              Icon(Icons.recommend_outlined, size: 16, color: scheme.onPrimary),
-                              const SizedBox(width: 4),
-                              Text('Suggested', style: t.labelSmall?.copyWith(
-                                  color: scheme.onPrimary, fontWeight: FontWeight.w700)),
-                            ]),
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      label: '${download ? 'Download' : 'Play'} ${file.name}, ${_size(file.size)}${suggested ? ', suggested' : ''}',
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Container(width: 3, color: opening ? scheme.primary : null),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (suggested)
+                        // A filled tag: small red text on black would fall below 4.5:1.
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                                color: scheme.primary,
+                                borderRadius: BorderRadius.circular(FlickTokens.controlRadius)),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.recommend_outlined, size: 16, color: scheme.onPrimary),
+                                const SizedBox(width: 4),
+                                Text('Suggested', style: t.labelSmall?.copyWith(
+                                    color: scheme.onPrimary, fontWeight: FontWeight.w700)),
+                              ]),
+                            ),
                           ),
                         ),
-                      ),
-                    Text(file.name, style: t.bodyMedium),
-                    if (opening)
-                      Text('Opening…',
-                          style: t.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                  ],
+                      Text(file.name, style: t.bodyMedium),
+                      if (opening)
+                        Text(download ? 'Queuing…' : 'Opening…',
+                            style: t.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 16),
-            Center(
-              child: Text(_size(file.size),
-                  style: monoStyle.copyWith(color: scheme.onSurfaceVariant)),
-            ),
-          ]),
+              const SizedBox(width: 16),
+              Center(
+                child: Text(_size(file.size),
+                    style: monoStyle.copyWith(color: scheme.onSurfaceVariant)),
+              ),
+            ]),
+          ),
         ),
       ),
     );
@@ -564,4 +602,3 @@ class _Notice extends StatelessWidget {
 String _size(int bytes) => bytes >= 1 << 30
     ? '${(bytes / (1 << 30)).toStringAsFixed(2)} GB'
     : '${(bytes / (1 << 20)).toStringAsFixed(0)} MB';
-

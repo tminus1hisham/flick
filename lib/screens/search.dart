@@ -38,66 +38,69 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final secondary = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 12, FlickTokens.pageGutter, 16),
-        child: SizedBox(
-          height: 52,
-          child: TextField(
-            controller: _controller,
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.search),
-              hintText: 'Search',
-              suffixIcon: _controller.text.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear',
-                      icon: const Icon(Icons.close),
-                      onPressed: _controller.clear,
-                    ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Search')),
+      body: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 12, FlickTokens.pageGutter, 16),
+          child: SizedBox(
+            height: 52,
+            child: TextField(
+              controller: _controller,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: 'Search',
+                suffixIcon: _controller.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear',
+                        icon: const Icon(Icons.close),
+                        onPressed: _controller.clear,
+                      ),
+              ),
+              onSubmitted: (q) {
+                if (q.trim().isEmpty) return;
+                _run(q.trim());
+              },
             ),
-            onSubmitted: (q) {
-              if (q.trim().isEmpty) return;
-              _run(q.trim());
-            },
           ),
         ),
-      ),
-      Expanded(
-        child: _results == null
-            ? const _Message(icon: Icons.search, title: 'Find something to watch', body: 'Search your connected libraries.')
-            : Loader(
-                _results!,
-                onRetry: () => _run(_query),
-                placeholder: const GridSkeleton(padding: EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter)),
-                (items) => items.isEmpty
-                    ? _Message(
-                        title: 'No matches for “$_query”',
-                        body: 'Check the spelling or try another title.',
-                      )
-                    : CustomScrollView(slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 0, FlickTokens.pageGutter, 12),
-                          sliver: SliverToBoxAdapter(
-                            child: Text(
-                              items.length == 1 ? '1 result' : '${items.length} results',
-                              style: text.labelMedium?.copyWith(color: secondary),
+        Expanded(
+          child: _results == null
+              ? const _Message(icon: Icons.search, title: 'Find something to watch', body: 'Search your connected libraries.')
+              : Loader(
+                  _results!,
+                  onRetry: () => _run(_query),
+                  placeholder: const GridSkeleton(padding: EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter)),
+                  (items) => items.isEmpty
+                      ? _Message(
+                          title: 'No matches for “$_query”',
+                          body: 'Check the spelling or try another title.',
+                        )
+                      : CustomScrollView(slivers: [
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 0, FlickTokens.pageGutter, 12),
+                            sliver: SliverToBoxAdapter(
+                              child: Text(
+                                items.length == 1 ? '1 result' : '${items.length} results',
+                                style: text.labelMedium?.copyWith(color: secondary),
+                              ),
                             ),
                           ),
-                        ),
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 0, FlickTokens.pageGutter, 24),
-                          sliver: SliverGrid.builder(
-                            gridDelegate: posterGrid,
-                            itemCount: items.length,
-                            itemBuilder: (_, i) => Poster(items[i], width: double.infinity),
+                          SliverPadding(
+                            padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 0, FlickTokens.pageGutter, 24),
+                            sliver: SliverGrid.builder(
+                              gridDelegate: posterGrid,
+                              itemCount: items.length,
+                              itemBuilder: (_, i) => Poster(items[i], width: double.infinity),
+                            ),
                           ),
-                        ),
-                      ]),
-              ),
-      ),
-    ]);
+                        ]),
+                ),
+        ),
+      ]),
+    );
   }
 }
 
