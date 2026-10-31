@@ -67,3 +67,55 @@ Discover/Anime grid, stream list, episode list, Downloads, Sources. Headers scro
 - **ui-ux-pro-max:** Focus States (visible ring on every control, incl. sheets), Keyboard Navigation (order = visual order, no traps), Focus Not Obscured (min) WCAG 2.2 AA, Focus Appearance (≥ 2 px perimeter, 3:1, so 3 dp `textPrimary` on #080808), Predictable back. No Flutter/TV entry in its stack DB: Flutter details come from the SDK (default Select/arrow shortcuts in `widgets/app.dart`).
 - **apple-design:** Response (feedback with no latency, so the ring is instant), interruptibility (lift via implicit animations that retarget), spatial consistency (the rail expands from and collapses to its own edge), reduced motion (drop scale/scroll, keep the ring), Wayfinding (the selected marker stays visible apart from focus), Familiarity (Google TV rail + Back conventions).
 - **emil-design-eng:** "Never animate keyboard-initiated actions" (ring 0 ms, held-key scroll unanimated), < 300 ms UI motion, exit faster than enter (rail 160/120), animate transform/opacity only (scale, not size), subtle scale (≤ 1.03, not 1.1).
+
+---
+
+# Spec (phase 3, approved direction 2026-10-31)
+Mockups (untracked, ~1.5 MB each): design/tv/{discover,title,player,banner}.png. The critic's round-2 build notes override the renders' pixel geometry; the numbers below win.
+
+## Device signal
+`tv` (bool) from native `UiModeManager.currentModeType == UI_MODE_TYPE_TELEVISION`, method `tv` on the existing `flick/torrent` channel, read once in `main()` into `state.dart` (`device.tv`, overridable in tests). Width never turns a phone into TV.
+
+## Tokens (`lib/theme.dart`, new `FlickTv`; colours unchanged)
+| Token | Value |
+|---|---|
+| canvas | 960×540 dp; safe insets 48 h / 27 v (all chrome and focusable items inside) |
+| type | hero 32/800, title 28/800, page 26/800, railHeading 22/700, card 18/700, body 16/500, meta 14/500 (nothing under 14) |
+| rail | 72 collapsed (icons 24 in 48 targets, centred at x = 48+...: rail starts at the left safe inset), expanded 200 overlay |
+| content | starts after rail + 24 gap; posters 144×216, gap 18, 5 per row (792 dp) |
+| title panes | art + facts 264 · gap 24 · streams/episodes 480 |
+| player | sides 48, bar labels 16, time in `streamMonoStyle` tabular; tracks panel 320 |
+| focus | ring 3 dp `textPrimary`, outside the element, 3 dp gap (background shows through); radius = element radius + 3 |
+| lift | posters/cards only: scale 1.03, 100 ms easeOutCubic, retargets; none on chips, rows, buttons |
+| selected | Flick slash: angled red (`activeMarker`) 3×16 dp bar left of the label/icon; same on rail, segmented switch, chips, source filter, tracks rows, Subtitles button when a track is on |
+| motion | ring 0 ms; rail expand 160 ms easeOutCubic / collapse 120 ms easeInCubic; row/grid scroll on focus 150 ms easeOutCubic, 0 ms while a key repeats; reduced motion: no lift, no scroll/rail animation, ring unchanged |
+
+`context.flick` stays the colour extension; add `context.tv` (bool) and `FlickTv` constants. Phone keeps `FlickTokens`/`FlickText` untouched.
+
+## Kit (`lib/kit/focus.dart`)
+- `FocusFrame({required Widget child, double radius, bool lift = false, VoidCallback? onActivate, FocusNode? node, bool autofocus})`: a `Focus`/`FocusableActionDetector` that paints the ring outside `child` when focused AND `FocusManager.instance.highlightMode == traditional`; `lift` scales child 1.03; Select/Enter → `onActivate` (via the default `ActivateIntent`). Used by posters, cards, chips, stream/episode rows, buttons that aren't already Material buttons (Material buttons get the same ring through the theme's focus overlay + `side` in `ButtonStyle` when `states.contains(focused)`).
+- `FocusMemory`: remembers the last focused child per key (row/grid/tab) so returning restores it (`PageStorage`-style, keyed by a string).
+- `FlickRail({destinations, selected, onSelect, bottom: Sources})`: a `FocusTraversalGroup`; collapsed 72; while any rail item has focus it expands to 200 over the content (Stack overlay, opaque surface1, no scrim); labels fade in. Selected = slash marker; focused = ring.
+- `SlashMarker`: the 3×16 angled red bar.
+- Sheets keep using `showFlickSheet` (focus trapped, initial focus on the safe action).
+
+## Shell (TV)
+`Row[FlickRail, Expanded(IndexedStack)]` in a Stack so the expanded rail overlays. Phone: unchanged `NavigationBar`. Back: (1) open panel/search/sheet closes, (2) route pops, (3) at a tab root with focus in content → focus the rail's selected item, (4) rail focused → `SystemNavigator.pop()`. Left from the leftmost content item reaches the rail (directional traversal); Right from the rail returns to the remembered item.
+
+## Screen notes
+- Discover (pilot): header (page 26) + Search action at right inside the inset; Movies/Series switch and chips use the slash; grid 5×(144×216) with title 18 and year 14 below; initial focus first poster after load, Movies switch while loading; filter changes keep focus on the control.
+- Title: one display heading (title 28), "Streams" as a 22 label; chips sized to content; rows = play glyph + quality/source in `streamMonoStyle` 16 + facts 14, no chevron; cast line directly under the synopsis.
+- Player: dark `surface2` Pause disc, white glyph, ring only when focused; played progress red; Up Next "Next" uses the phone card's stepped fill (accent, 1 s whole steps); never auto-focused.
+- Anime on TV: Kitsu catalogs only (no Miruro search field).
+- Rail icons: line glyphs, same stroke (Discover = explore_outlined, Anime = a line glyph not a filled face, Downloads = download_outlined, Sources = settings_outlined).
+
+## Transitions
+Unchanged from design/spec.md for routes. TV adds: rail expand/collapse (above), focus ring instant, poster lift. No new route animation.
+
+## Ponytail cuts (not built)
+Home hero / dwell backdrop on Discover, Quick Connect + LAN discovery (no Jellyfin), Miruro on TV, fixed-column row anchoring, low-RAM cache tuning (Phase C experiment only), goldens (the repo has none; widget tests at 960×540 instead), a separate TV APK.
+
+## Tests
+- 960×540 widget tests with `device.tv = true` and `tester.sendKeyEvent`: Discover initial focus; Right moves along the grid; Left from column 1 reaches the rail and the rail expands; Back at root focuses the rail; Select opens Title; Back restores the poster's focus; chip change keeps focus on the chip.
+- Phone guard: 360×640, `tv = false`: NavigationBar present, no rail, Discover poster width 98.7 (existing test).
+- Pure player key-map helper tests (when the player step lands).
