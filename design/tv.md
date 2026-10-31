@@ -81,8 +81,8 @@ Mockups (untracked, ~1.5 MB each): design/tv/{discover,title,player,banner}.png.
 |---|---|
 | canvas | 960×540 dp; safe insets 48 h / 27 v (all chrome and focusable items inside) |
 | type | hero 32/800, title 28/800, page 26/800, railHeading 22/700, card 18/700, body 16/500, meta 14/500 (nothing under 14) |
-| rail | 72 collapsed (icons 24 in 48 targets, centred at x = 48+...: rail starts at the left safe inset), expanded 200 overlay |
-| content | starts after rail + 24 gap; posters 144×216, gap 18, 5 per row (792 dp) |
+| rail | panel from the screen edge to x 120 (48 inset + 72 column; 24 dp icons in 48 dp targets centred at x 84), expanded to x 248 as an overlay |
+| content | x 144 → 912 (768 dp): rail 120 + gap 24, right inset 48; posters 144×216, gap 12, 5 per row = 768 |
 | title panes | art + facts 264 · gap 24 · streams/episodes 480 |
 | player | sides 48, bar labels 16, time in `streamMonoStyle` tabular; tracks panel 320 |
 | focus | ring 3 dp `textPrimary`, outside the element, 3 dp gap (background shows through); radius = element radius + 3 |
