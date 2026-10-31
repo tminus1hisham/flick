@@ -32,12 +32,21 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final _search = TextEditingController();
   final _typeSwitchFocus = FocusNode(debugLabel: 'Discover Movies');
   final _searchActionFocus = FocusNode(debugLabel: 'Discover Search');
-  // A one-line field keeps Down for its caret; on TV, Down leaves it towards the results.
-  final _searchFieldFocus = FocusNode(
+  // A one-line field keeps Down and Right for its caret; on TV, Down leaves it towards the results, and Right
+  // at the end of the text reaches Close.
+  late final _searchFieldFocus = FocusNode(
     debugLabel: 'Discover search field',
     onKeyEvent: (node, event) {
-      if (event is KeyUpEvent || event.logicalKey != LogicalKeyboardKey.arrowDown) return KeyEventResult.ignored;
-      node.focusInDirection(TraversalDirection.down);
+      if (event is KeyUpEvent) return KeyEventResult.ignored;
+      final at = _search.selection;
+      final atEnd = !at.isValid || at.isCollapsed && at.baseOffset == _search.text.length;
+      final direction = switch (event.logicalKey) {
+        LogicalKeyboardKey.arrowDown => TraversalDirection.down,
+        LogicalKeyboardKey.arrowRight when atEnd => TraversalDirection.right,
+        _ => null,
+      };
+      if (direction == null) return KeyEventResult.ignored;
+      node.focusInDirection(direction);
       return KeyEventResult.handled;
     },
   );
@@ -514,6 +523,8 @@ class _TvChoice extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 40),
             decoration: BoxDecoration(
               color: segment && selected ? FlickTokens.surface2 : null,
+              // Catalog chips are outlined (the mockup); segments sit on their track instead.
+              border: segment ? null : Border.all(color: FlickTokens.outline),
               borderRadius: BorderRadius.circular(FlickTv.segmentRadius),
             ),
             child: Padding(

@@ -328,11 +328,19 @@ void main() {
     expect(tester.getRect(find.text('Movies')), movies, reason: 'the 48 dp header row keeps its height');
     expect(tester.getRect(find.byType(NetImage).first), poster);
 
-    final close = find.byWidgetPredicate((w) => w is FocusFrame && w.semanticLabel == 'Close search');
-    tester.widget<Focus>(find.descendant(of: close, matching: find.byType(Focus)).first).focusNode!.requestFocus();
-    await tester.pumpAndSettle();
+    // The D-pad reaches Close: Right on an empty field, or with the caret at the end of the text.
+    await key(tester, LogicalKeyboardKey.arrowRight);
     expect(focused(), 'Close search');
     expect(rings, findsOneWidget, reason: 'Close shows its own ring');
+
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(textFocused(), isTrue);
+    await tester.enterText(find.byType(TextField), 'ab');
+    tester.widget<TextField>(find.byType(TextField)).controller!.selection = const TextSelection.collapsed(offset: 1);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(textFocused(), isTrue, reason: 'Right inside the text moves the caret');
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(focused(), 'Close search');
   });
 
   testWidgets('11: the grid starts at y 175 (±6), and captions clear the ring and lift', (tester) async {

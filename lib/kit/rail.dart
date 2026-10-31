@@ -84,9 +84,14 @@ class _FlickRailState extends State<FlickRail> with SingleTickerProviderStateMix
         focusNode: _nodes[i],
         semanticLabel: d.label,
         onActivate: () => widget.onSelect(i),
-        child: SizedBox(
-          height: target,
-          width: open ? FlickTv.railExpanded - left - FlickTv.contentGap : target,
+        // Grows with the panel, so the ring is never cut open at the clip while it slides.
+        child: AnimatedBuilder(
+          animation: _curve,
+          builder: (_, child) => SizedBox(
+            height: target,
+            width: lerpDouble(target, FlickTv.railExpanded - left - FlickTv.contentGap, _curve.value),
+            child: child,
+          ),
           child: Row(children: [
             SizedBox.square(
               dimension: target,
