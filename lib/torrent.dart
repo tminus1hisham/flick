@@ -154,6 +154,17 @@ class TorrentEngine {
   /// The playing file's average bytes per second, which spaces the piece deadlines ahead of the player.
   Future<void> bitrate(int id, int bytesPerSec) =>
       _ch.invokeMethod('bitrate', {'id': id, 'bytesPerSec': bytesPerSec});
+
+  /// Whether this is an Android TV. False when the platform can't tell.
+  Future<bool> isTv() async {
+    try {
+      return await _ch.invokeMethod<bool>('tv') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
 }
 
 /// A download rate for display, such as "1.8 MB/s".

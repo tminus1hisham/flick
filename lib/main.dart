@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'kit/focus.dart';
 import 'screens/discover.dart';
 import 'screens/anime.dart';
 import 'screens/downloads.dart';
@@ -8,6 +9,7 @@ import 'screens/sources.dart';
 import 'screens/torrent.dart';
 import 'state.dart';
 import 'theme.dart';
+import 'torrent.dart';
 import 'widgets.dart';
 
 Future<void> main() async {
@@ -17,6 +19,9 @@ Future<void> main() async {
   await downloads.init();
   await addons.load();
   await saved.load();
+  device.tv = await (await torrentEngine()).isTv();
+  // The remote is a keyboard: the ring shows from the first frame, even before a key press.
+  if (device.tv) FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
   runApp(const FlickApp());
 }
 
@@ -28,7 +33,8 @@ class FlickApp extends StatelessWidget {
         title: 'Flick',
         routes: {'/sources': (_) => const SourcesScreen()},
         debugShowCheckedModeBanner: false,
-        theme: flickTheme(),
+        theme: flickTheme(tv: device.tv),
+        shortcuts: device.tv ? tvShortcuts : null,
         builder: (_, child) => SplashHandoff(child: child!),
         home: const Shell(),
       );
