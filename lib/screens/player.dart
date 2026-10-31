@@ -312,7 +312,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   UpNextView _upNextView(NextUp next, Duration position) => upNextView(
     position: position,
     duration: _player.state.duration,
-    outro: next.outro,
     dismissed: _dismissed,
     forced: _forced,
     autoplay: settings.autoplayNext,
@@ -327,7 +326,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final next = _next;
     if (next == null || !mounted) return;
     final p = position ?? _player.state.position;
-    final at = upNextAt(_player.state.duration, outro: next.outro);
+    final at = upNextAt(_player.state.duration);
     // Not at 0: open() (Retry) reports 0 until mpv seeks to
     // its start, and that is no seek back.
     if (at != null && p > Duration.zero && p < at) {

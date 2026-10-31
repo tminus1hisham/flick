@@ -97,7 +97,6 @@ Future<NextUp?>? _nextUp(AddonStream s, Playback p, Addon? addon) {
   if (meta == null || video == null) return null;
   final NextUp up = (
     episode: (label: episodeLabel(video.season, video.episode), title: video.title, thumbnail: video.thumbnail),
-    outro: null,
     resolve: () => resolveNext(addon, meta, video, group),
   );
   return Future.value(up);

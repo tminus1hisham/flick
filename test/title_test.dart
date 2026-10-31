@@ -190,7 +190,7 @@ void main() {
     expect(json.containsKey('url'), isFalse);
   });
 
-  test('stream metadata round trips a movie and leaves Jellyfin metadata alone', () {
+  test('stream metadata round trips a movie and ignores metadata without stream fields', () {
     const Playback p = (
       title: 'The Kid',
       subtitle: null,
@@ -206,7 +206,7 @@ void main() {
     expect(decoded.title, 'The Kid');
     expect(decoded.poster, isNull);
     expect(decoded.playback, p);
-    expect(StreamDownload.fromMetaData(jsonEncode({'Id': 'jellyfin-id', 'Name': 'Film'})), isNull);
+    expect(StreamDownload.fromMetaData(jsonEncode({'Id': 'x', 'Name': 'Film'})), isNull);
   });
 
   testWidgets('a movie groups streams per source, and a failing source keeps the others', (tester) async {
