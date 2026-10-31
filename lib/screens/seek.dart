@@ -34,6 +34,9 @@ class _SeekRippleState extends State<SeekRipple>
   );
   late int _side;
   late int _seconds;
+  // A new burst after a fade-out starts a fresh label, so the last burst's
+  // total doesn't cross-fade out under it (QA critic round 3).
+  int _burst = 0;
 
   @override
   void initState() {
@@ -59,6 +62,7 @@ class _SeekRippleState extends State<SeekRipple>
   @override
   void didUpdateWidget(covariant SeekRipple oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_visibility.isDismissed && widget.side != 0) _burst++;
     if (widget.side == 0) {
       _visibility.reverse();
     } else if (widget.side != _side && _visibility.value > 0) {
@@ -118,7 +122,7 @@ class _SeekRippleState extends State<SeekRipple>
                   alignment:
                       left ? Alignment.centerLeft : Alignment.centerRight,
                   child: SizedBox(
-                    key: ValueKey(_side),
+                    key: ValueKey((_side, _burst)),
                     width: radius,
                     height: radius * 2,
                     child: CustomPaint(
@@ -227,7 +231,8 @@ class _SeekGlowPainter extends CustomPainter {
     final bounds = Rect.fromCircle(center: center, radius: radius);
     final glow = Paint()
       // A plateau under the whole label (out to 0.75 r at 1.3× text), so it
-      // holds 3:1 over a white frame; no solid black at the edge.
+      // holds ≥ 5.4:1 (text, 1.3×) and 6:1 (icon) over a white frame
+      // (design/seek.md); no solid black at the edge.
       ..shader = RadialGradient(
         colors: [
           FlickTokens.background.withValues(alpha: 0.88),

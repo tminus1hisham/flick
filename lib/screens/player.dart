@@ -210,11 +210,34 @@ class SeekBurst {
   }
 
   /// Ends the burst: where to seek, or null. [total] stays for the fade-out.
-  Duration? settle() {
+  Duration? settle([DateTime? now]) {
     final target = _target;
     _target = null;
     side = 0;
+    if (target != null) {
+      _landing = target;
+      _settledAt = now ?? DateTime.now();
+    }
     return target;
+  }
+
+  Duration? _landing;
+  DateTime _settledAt = DateTime(0);
+
+  /// Whether position report [p] is current. For a moment after a seek mpv can
+  /// still report the time from before it, and the next burst must not count
+  /// from that (found on the phone: taps 0.6 s apart lost 10 s on a torrent).
+  /// Until a report lands near the target, or 2 s pass, others are stale.
+  bool current(Duration p, [DateTime? now]) {
+    final landing = _landing;
+    if (landing == null) return true;
+    final near = (p - landing).abs() <= const Duration(milliseconds: 1500);
+    final late =
+        (now ?? DateTime.now()).difference(_settledAt) >
+        const Duration(seconds: 2);
+    if (!near && !late) return false;
+    _landing = null;
+    return true;
   }
 }
 
@@ -411,7 +434,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // Before the early return: a seek to the start must reset Up Next.
           _upNext(p);
           if (p <= Duration.zero) return;
-          _pos = p;
+          if (_burst.current(p)) _pos = p;
           if (!widget.addonPlayback) return;
           _pauseWait.position(p, DateTime.now());
           if (!_started) {

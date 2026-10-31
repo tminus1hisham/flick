@@ -126,6 +126,19 @@ void main() {
     }
   });
 
+  testWidgets('a new burst on the same side starts a fresh label', (
+    tester,
+  ) async {
+    await tester.pumpWidget(ripple(1, 30));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(ripple(0, 30));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(ripple(1, 10));
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(find.text('30 s'), findsNothing);
+    expect(find.text('10 s'), findsOneWidget);
+  });
+
   testWidgets('fades out on side 0 keeping the last total', (tester) async {
     await tester.pumpWidget(ripple(-1, 30));
     await tester.pumpAndSettle();

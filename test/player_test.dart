@@ -201,6 +201,23 @@ void main() {
       expect((burst.side, burst.total), (-1, 10));
       expect(burst.settle(), const Duration(seconds: 110));
     });
+    test('a report from before the seek is stale until one lands', () {
+      final t0 = DateTime(2026);
+      final burst = SeekBurst()..nudge(10, position: at, duration: duration);
+      expect(burst.settle(t0), const Duration(seconds: 110));
+      // mpv still says 100 s just after seeking to 110 s.
+      expect(burst.current(at, t0.add(const Duration(milliseconds: 300))), isFalse);
+      // A report near the target lands it; later reports count again.
+      expect(burst.current(const Duration(milliseconds: 110500), t0), isTrue);
+      expect(burst.current(at, t0), isTrue);
+    });
+    test('a seek that never reports near its target stops holding after 2 s', () {
+      final t0 = DateTime(2026);
+      final burst = SeekBurst()..nudge(10, position: at, duration: duration);
+      burst.settle(t0);
+      expect(burst.current(at, t0.add(const Duration(seconds: 1))), isFalse);
+      expect(burst.current(at, t0.add(const Duration(seconds: 3))), isTrue);
+    });
     test('nothing before the video has a duration', () {
       final burst = SeekBurst();
       expect(burst.nudge(10, position: at, duration: Duration.zero), isFalse);
