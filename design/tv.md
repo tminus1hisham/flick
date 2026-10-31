@@ -82,7 +82,7 @@ Mockups (untracked, ~1.5 MB each): design/tv/{discover,title,player,banner}.png.
 | canvas | 960×540 dp; safe insets 48 h / 27 v (all chrome and focusable items inside) |
 | type | hero 32/800, title 28/800, page 26/800, railHeading 22/700, card 18/700, body 16/500, meta 14/500 (nothing under 14) |
 | rail | panel from the screen edge to x 120 (48 inset + 72 column; 24 dp icons in 48 dp targets centred at x 84), expanded to x 248 as an overlay |
-| content | x 144 → 912 (768 dp): rail 120 + gap 24, right inset 48; posters 144×216, gap 12, 5 per row = 768 |
+| content | x 144 → 912 (768 dp): rail 120 + gap 24, right inset 48; posters derived (rev. 1: 140×210 at 960), gap 12, 5 per row |
 | title panes | art + facts 264 · gap 24 · streams/episodes 480 |
 | player | sides 48, bar labels 16, time in `streamMonoStyle` tabular; tracks panel 320 |
 | focus | ring 3 dp `textPrimary`, outside the element, 3 dp gap (background shows through); radius = element radius + 3 |
@@ -119,3 +119,27 @@ Home hero / dwell backdrop on Discover, Quick Connect + LAN discovery (no Jellyf
 - 960×540 widget tests with `device.tv = true` and `tester.sendKeyEvent`: Discover initial focus; Right moves along the grid; Left from column 1 reaches the rail and the rail expands; Back at root focuses the rail; Select opens Title; Back restores the poster's focus; chip change keeps focus on the chip.
 - Phone guard: 360×640, `tv = false`: NavigationBar present, no rail, Discover poster width 98.7 (existing test).
 - Pure player key-map helper tests (when the player step lands).
+
+## Spec revision 1 (answers Codex spec review round 1; these win over the sections above)
+1. **Grid clearance.** The grid gets 10 dp padding on each side and on top/bottom, inside the 768 content area, so ring (6) + lift (~2.2) never clips. Posters are derived, not fixed: `w = (contentWidth − 20 − 4×12) / 5`, `h = w × 1.5` → at 960 wide: **140×210**, gap 12. Scroll views keep their default clip; the padding gives the ring room.
+2. **Shell.** The rail base is a 120 dp column (48 inset + 72). Content has 24 dp left padding (content x 144 → 912). Expansion = a 248 dp opaque `surface1` panel stacked over the content; its labels fade + slide in (opacity/translate only, no width animation). The base column never changes width.
+3. **Vertical budget (Discover, 540 tall).** 27 top inset · header 32 · 12 · switch row 40 · 8 · chips row 40 · 16 → grid starts at y 175. Cell = poster 210 + 8 + title 22 (1 line, ellipsis) + year 18 = 258; the second row is half visible (grid scrolls; the header scrolls away with it). **Title:** left pane fixed, no scroll: art 264×148 (16:9 backdrop, poster fallback), 16, title max 2 lines, 8, meta 1 line, 12, synopsis max 4 lines (ellipsis), 8, cast 1 line; right pane scrolls. **Other viewports:** every TV size is derived from the actual width (rail fixed, content = width − 192, posters from content width), so 720p/4K devices that report a different logical size still lay out; no letterboxing.
+4. **Activation.** `FocusFrame` = `FocusableActionDetector(actions: {ActivateIntent: CallbackAction(onActivate)})`. On TV the app root adds `Shortcuts` overriding Select / Enter / numpadEnter / gameButtonA with `SingleActivator(key, includeRepeats: false)`, so holding Select never re-activates; arrow repeat stays on.
+5. **One ring.** One `FocusRing` painter used by `FocusFrame`; Material buttons used on TV are wrapped in `FocusFrame` (no `ButtonStyle.side` variant). On TV, `FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional` at startup; phone stays automatic. The ring rebuilds on highlight-mode changes and is 0 ms on/off, independent of the lift.
+6. **Traversal rules.** Inside grids and lists, Up/Down/Left/Right use the default directional policy (nearest item). Memory applies only to re-entry: (a) Right from the rail → the tab's remembered item (by stable item id), else its initial target; (b) route pop → the item that opened the route. Entering the rail (Left from the content's left edge, or Back at root) always lands on the selected destination, not the geometrically nearest. If a remembered item has been scrolled out of a virtualized list, scroll its index into view, then focus it. The rail keeps the ring while collapsing.
+7. **Loading never moves focus.** Discover's initial focus is the **Movies/Series switch**; Down enters the grid at the first poster. No automatic transfer. The only "in place" replacement: a focused skeleton row/cell is swapped for the real item at the same index. If a remembered or focused item disappears → same index clamped to the new list, else the screen's initial target.
+8. **Initial / fallback focus per screen and state:**
+   | Screen | Initial | Empty | Error / all failed | Offline |
+   |---|---|---|---|---|
+   | Discover | Movies switch | Add sources | first Retry | Retry |
+   | Search (Discover) | search field | the field (Back closes search) | field | field |
+   | Title (movie) | first stream row (skeleton → real in place) | Add sources | first per-source Retry | Retry |
+   | Title (series) | current season chip | (no episodes) season chip | Retry | Retry |
+   | Anime (TV) | first Kitsu catalog chip | Add sources | Retry | Retry |
+   | Downloads | first row | nothing focusable in content: focus stays on the rail | row Retry | first row |
+   | Sources | first source row | n/a (Cinemeta locked) | the URL field | the URL field |
+   | Torrent start | auto-open, else the Suggested file row | (no playable files) Choose another source | Retry | Retry |
+   | Player | key layer (bar hidden) | – | recovery overlay: first button | Waiting panel: Try another source |
+9. **Player.** Bar hidden → a root `Focus` key layer owns keys (Select = play/pause + show bar; Left/Right consumed: seek ∓10 s, after 1 s of hold ∓30 s per repeat, clamped to [0, duration − 1 s]; no seek when duration is unknown/0 → just show the bar; Up/Down = show bar). Bar shown → focus **Play/Pause**; auto-hide 4 s after the last key while playing (never while paused, panel open, or Up Next card focused). Up Next is reachable with Up from the bar's right side; it never takes focus itself; if it disappears while focused, focus Play/Pause. The tracks panel traps focus (FocusScope), opens on the current track row, closes back to the control that opened it.
+10. **Back precedence** (one `PopScope` chain; Android system Back goes through it): IME open → close IME; search/panel/sheet open → close it (focus to its opener); series streams pane → back to the episode list on that episode; otherwise pop the route (focus restored per 6b); at a tab root → focus the rail; rail focused → exit. Sheets and recovery overlays trap focus.
+**Tests added to the list:** held Select doesn't re-activate; held Right seeks/accelerates (helper); item deleted while focused (Downloads) → neighbour; results arriving after the user moved on don't steal focus; ring not clipped at the grid's first/last column (paint bounds inside the viewport).
