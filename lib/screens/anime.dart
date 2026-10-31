@@ -18,6 +18,9 @@ String _message(Object error) => error is AnimeException
     ? error.toString()
     : 'Could not load anime. Try again.';
 
+/// The Anime destination's glyph: a line-drawn blossom, the rail's stroke.
+const animeIcon = Icons.filter_vintage_outlined;
+
 class AnimeTab extends StatefulWidget {
   const AnimeTab({this.client, this.onAddSources, super.key});
   final Anime? client;
@@ -63,7 +66,8 @@ class _AnimeTabState extends State<AnimeTab> {
   @override
   void dispose() {
     _cancelBrowser();
-    _anime.close();
+    // TV never builds the Miruro client.
+    if (!device.tv) _anime.close();
     _search.dispose();
     super.dispose();
   }
@@ -75,9 +79,11 @@ class _AnimeTabState extends State<AnimeTab> {
   void _addSources() => (widget.onAddSources ?? () => Navigator.pushNamed(context, '/sources'))();
 
   Widget _buildTv(List<Catalog> catalogs, Catalog? selected) {
+    // One reveal area: focusing a chip scrolls the whole header in, title included, since nothing focusable
+    // sits above the chips.
     final header = KeyedSubtree(
       key: _tvHeader,
-      child: Padding(
+      child: RevealArea(child: Padding(
         padding: const EdgeInsets.only(top: FlickTv.insetV),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Padding(
@@ -109,7 +115,7 @@ class _AnimeTabState extends State<AnimeTab> {
             ),
           ),
         ]),
-      ),
+      )),
     );
     return FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(requestFocusCallback: tvReveal),
@@ -119,7 +125,7 @@ class _AnimeTabState extends State<AnimeTab> {
             ? TvDiscoverScroll(header: header, slivers: [
                 SliverToBoxAdapter(
                   child: TvNotice(
-                    Icons.video_library_outlined,
+                    animeIcon,
                     'No anime catalogs are switched on.',
                     action: 'Add sources',
                     onAction: _addSources,

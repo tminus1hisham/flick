@@ -114,7 +114,8 @@ class _ShellState extends State<Shell> {
                   Scaffold(appBar: _downloadsBar(), body: const DownloadsScreen()),
                   const SourcesScreen(),
                 ].indexed)
-                  FocusScope(node: _tabs[i], child: tab),
+                  // Only the visible tab's posters fly: a title in two tabs' grids would be two Heroes with one tag.
+                  FocusScope(node: _tabs[i], child: HeroMode(enabled: i == _tab, child: tab)),
               ]),
             ),
             Positioned(
@@ -126,7 +127,7 @@ class _ShellState extends State<Shell> {
                 scope: _rail,
                 destinations: const [
                   (icon: Icons.explore_outlined, label: 'Discover'),
-                  (icon: Icons.local_florist_outlined, label: 'Anime'),
+                  (icon: animeIcon, label: 'Anime'),
                   (icon: Icons.download_outlined, label: 'Downloads'),
                 ],
                 bottom: (icon: Icons.settings_outlined, label: 'Sources'),

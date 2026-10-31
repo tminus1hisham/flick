@@ -461,4 +461,19 @@ void main() {
     expect(find.byType(SourcesScreen), findsOneWidget);
     expect(ModalRoute.of(tester.element(find.byType(SourcesScreen)))!.isFirst, isTrue, reason: 'the rail tab');
   });
+
+  testWidgets('17: back up from the grid, a chip brings the whole Anime header in, title included', (tester) async {
+    await pumpApp(tester, with_: withAnime());
+    await openAnime(tester);
+    for (var i = 0; i < 3; i++) {
+      await key(tester, LogicalKeyboardKey.arrowDown);
+    }
+    final title = find.text('Anime');
+    expect(title.evaluate().isEmpty || tester.getTopLeft(title).dy < 0, isTrue, reason: 'scrolled away with the grid');
+    for (var i = 0; i < 4; i++) {
+      await key(tester, LogicalKeyboardKey.arrowUp);
+    }
+    expect(focusedText(), 'Trending');
+    expect(tester.getTopLeft(find.text('Anime')).dy, greaterThanOrEqualTo(FlickTv.insetV));
+  });
 }
