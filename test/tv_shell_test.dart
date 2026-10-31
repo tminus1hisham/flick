@@ -226,6 +226,32 @@ void main() {
     expect(find.byType(SourcesScreen), findsNothing);
   });
 
+  testWidgets('i: entering the rail paints the ring on the selected item (Left, then Back)', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (_) async => null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await pumpApp(tester);
+    bool ring(String label) => find
+        .descendant(
+          of: find.descendant(
+              of: find.byType(FlickRail),
+              matching: find.byWidgetPredicate((w) => w is FocusFrame && w.semanticLabel == label)),
+          matching: find.byWidgetPredicate((w) => w is CustomPaint && w.foregroundPainter is FocusRing),
+        )
+        .evaluate()
+        .isNotEmpty;
+
+    for (final enter in [() => key(tester, LogicalKeyboardKey.arrowLeft), () => systemBack(tester)]) {
+      leftmost(tester, DiscoverScreen).requestFocus();
+      await tester.pumpAndSettle();
+      expect(ring('Discover'), isFalse);
+
+      await enter();
+      expect(railFocus(), 'Discover');
+      expect(ring('Discover'), isTrue);
+      expect(ring('Anime'), isFalse);
+    }
+  });
+
   testWidgets('h: with reduced motion the rail expands in one frame', (tester) async {
     tester.platformDispatcher.accessibilityFeaturesTestValue = const FakeAccessibilityFeatures(disableAnimations: true);
     addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);

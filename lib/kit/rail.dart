@@ -150,7 +150,10 @@ class _FlickRailState extends State<FlickRail> with SingleTickerProviderStateMix
                 child: const ColoredBox(key: ValueKey('rail-panel'), color: FlickTokens.surface1),
               ),
             ),
+          // Keyed: the panel above is inserted only while open, and without a key the items would be matched
+          // to its slot and rebuilt, so the focused item's FocusFrame would lose its state (and its ring).
           Positioned(
+            key: const ValueKey('rail-items'),
             left: left,
             top: FlickTv.insetV,
             bottom: FlickTv.insetV,
