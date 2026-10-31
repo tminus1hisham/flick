@@ -110,7 +110,7 @@ class _ShellState extends State<Shell> {
               child: IndexedStack(index: _tab, children: [
                 for (final (i, tab) in [
                   DiscoverScreen(onAddSources: () => _select(3)),
-                  const AnimeTab(),
+                  AnimeTab(onAddSources: () => _select(3)),
                   Scaffold(appBar: _downloadsBar(), body: const DownloadsScreen()),
                   const SourcesScreen(),
                 ].indexed)
@@ -126,7 +126,7 @@ class _ShellState extends State<Shell> {
                 scope: _rail,
                 destinations: const [
                   (icon: Icons.explore_outlined, label: 'Discover'),
-                  (icon: Icons.animation_outlined, label: 'Anime'),
+                  (icon: Icons.local_florist_outlined, label: 'Anime'),
                   (icon: Icons.download_outlined, label: 'Downloads'),
                 ],
                 bottom: (icon: Icons.settings_outlined, label: 'Sources'),

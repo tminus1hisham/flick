@@ -112,7 +112,7 @@ void main() {
     await pumpApp(tester);
     expect(find.byType(FlickRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
-    for (final icon in [Icons.explore_outlined, Icons.animation_outlined, Icons.download_outlined, Icons.settings_outlined]) {
+    for (final icon in [Icons.explore_outlined, Icons.local_florist_outlined, Icons.download_outlined, Icons.settings_outlined]) {
       expect(find.descendant(of: find.byType(FlickRail), matching: find.byIcon(icon)), findsOneWidget);
     }
     expect(find.byKey(const ValueKey('rail-panel')), findsNothing, reason: 'collapsed while content has focus');

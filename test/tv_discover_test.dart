@@ -5,6 +5,7 @@ import 'package:flick/downloads.dart';
 import 'package:flick/kit/focus.dart';
 import 'package:flick/kit/rail.dart';
 import 'package:flick/main.dart';
+import 'package:flick/screens/anime.dart';
 import 'package:flick/screens/discover.dart';
 import 'package:flick/screens/sources.dart';
 import 'package:flick/screens/title.dart';
@@ -414,5 +415,50 @@ void main() {
     await key(tester, LogicalKeyboardKey.select);
     expect(find.textContaining("You're offline"), findsNothing);
     expect(find.text('top 0'), findsOneWidget);
+  });
+
+  /// Discover's fake plus two Kitsu catalogs.
+  _Addons withAnime() {
+    final fake = _Addons();
+    fake._addon.catalogs = [
+      ...fake._addon.catalogs,
+      (addon: fake._addon, type: 'anime', id: 'kitsu-anime-trending', name: 'Trending', searchable: false),
+      (addon: fake._addon, type: 'anime', id: 'kitsu-anime-airing', name: 'Airing', searchable: false),
+    ];
+    return fake;
+  }
+
+  Future<void> openAnime(WidgetTester tester) async {
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    await key(tester, LogicalKeyboardKey.arrowDown);
+    await key(tester, LogicalKeyboardKey.select);
+  }
+
+  testWidgets('15: Anime opens on its first Kitsu chip with no search; a chip switches the feed and keeps focus',
+      (tester) async {
+    await pumpApp(tester, with_: withAnime());
+    await openAnime(tester);
+    expect(focusedText(), 'Trending');
+    expect(find.descendant(of: find.byType(AnimeTab), matching: find.byType(TextField)), findsNothing,
+        reason: 'no Miruro search on TV');
+    expect(find.text('kitsu-anime-trending 0'), findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(focusedText(), 'Airing');
+    await key(tester, LogicalKeyboardKey.select);
+    expect(find.text('kitsu-anime-airing 0'), findsOneWidget);
+    expect(focusedText(), 'Airing');
+    await key(tester, LogicalKeyboardKey.arrowDown);
+    expect(focused(), startsWith('kitsu-anime-airing '), reason: 'Down reaches the grid');
+  });
+
+  testWidgets('16: with no anime catalogs, Anime offers Add sources, which selects the Sources tab', (tester) async {
+    await pumpApp(tester);
+    await openAnime(tester);
+    expect(find.text('No anime catalogs are switched on.'), findsOneWidget);
+    expect(focusedText(), 'Add sources');
+    await key(tester, LogicalKeyboardKey.select);
+    expect(find.byType(SourcesScreen), findsOneWidget);
+    expect(ModalRoute.of(tester.element(find.byType(SourcesScreen)))!.isFirst, isTrue, reason: 'the rail tab');
   });
 }

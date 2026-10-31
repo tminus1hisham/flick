@@ -205,7 +205,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
             for (final (type, label) in [('movie', 'Movies'), ('series', 'Series')])
-              _TvChoice(
+              TvChoice(
                 label,
                 segment: true,
                 selected: _type == type,
@@ -228,7 +228,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad, vertical: 6),
             child: Row(children: [
               if (hasFavourites) ...[
-                _TvChoice(
+                TvChoice(
                   'Favourites',
                   icon: Icons.favorite_border,
                   selected: showFavourites,
@@ -240,7 +240,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ],
               for (final c in catalogs) ...[
                 if (c != catalogs.first) const SizedBox(width: 8),
-                _TvChoice(
+                TvChoice(
                   c.name,
                   selected: !showFavourites && c == selected,
                   onActivate: () {
@@ -266,11 +266,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final header = KeyedSubtree(key: _header, child: _tvHeader(catalogs, selected, hasFavourites, showFavourites));
     final Widget body;
     if (searching && searchable == null) {
-      body = _TvDiscoverScroll(
+      body = TvDiscoverScroll(
         header: header,
         slivers: [
           SliverToBoxAdapter(
-            child: _TvNotice(
+            child: TvNotice(
               Icons.search,
               "Your sources can't search these titles.",
               action: 'Clear search',
@@ -296,11 +296,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         key: ValueKey(('tv-saved', favourites.map((f) => f.id).join(','))),
       );
     } else if (selected == null) {
-      body = _TvDiscoverScroll(
+      body = TvDiscoverScroll(
         header: header,
         slivers: [
           SliverToBoxAdapter(
-            child: _TvNotice(
+            child: TvNotice(
               Icons.video_library_outlined,
               'No catalogs for this type yet.',
               action: 'Add sources',
@@ -493,8 +493,9 @@ class _Segment extends StatelessWidget {
 
 /// Selection stays distinct from focus: the slash marks selection; the frame
 /// supplies the only focus owner, activation action and ring.
-class _TvChoice extends StatelessWidget {
-  const _TvChoice(this.label, {
+class TvChoice extends StatelessWidget {
+  const TvChoice(this.label, {
+    super.key,
     required this.selected,
     required this.onActivate,
     this.icon,
@@ -550,8 +551,9 @@ class _TvChoice extends StatelessWidget {
 
 /// One viewport for header, filters, results and feedback. The shell already
 /// places the content's left edge at x 144; only the right inset is added here.
-class _TvDiscoverScroll extends StatelessWidget {
-  const _TvDiscoverScroll({
+class TvDiscoverScroll extends StatelessWidget {
+  const TvDiscoverScroll({
+    super.key,
     this.header,
     this.controller,
     required this.slivers,
@@ -702,7 +704,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
 
     if (_items.isEmpty && _error != null) {
       slivers.add(SliverToBoxAdapter(
-        child: _TvNotice(
+        child: TvNotice(
           _offline(_error) ? Icons.wifi_off : Icons.report_outlined,
           _offline(_error) ? "You're offline. Check your connection and try again." : "Couldn't load these titles.",
           action: 'Retry',
@@ -711,7 +713,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
       ));
     } else if (_items.isEmpty && _done) {
       slivers.add(SliverToBoxAdapter(
-        child: _TvNotice(
+        child: TvNotice(
           widget.query == null ? Icons.video_library_outlined : Icons.search,
           widget.query == null ? 'No titles in this catalog yet.' : 'Nothing found for “${widget.query}”',
           action: widget.query == null ? 'Add sources' : 'Clear search',
@@ -740,7 +742,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
       }
       if (_items.isNotEmpty && _error != null) {
         slivers.add(SliverToBoxAdapter(
-          child: _TvNotice(
+          child: TvNotice(
             _offline(_error) ? Icons.wifi_off : Icons.report_outlined,
             _offline(_error) ? "You're offline. Check your connection." : "Couldn't load more titles.",
             action: 'Retry',
@@ -760,7 +762,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
       },
       child: Actions(
         actions: {DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(onInvoke: _move)},
-        child: _TvDiscoverScroll(header: widget.tvHeader, controller: _scroll, slivers: slivers),
+        child: TvDiscoverScroll(header: widget.tvHeader, controller: _scroll, slivers: slivers),
       ),
     );
   }
@@ -1022,8 +1024,8 @@ class _PosterState extends State<_Poster> {
 }
 
 /// TV feedback is a sliver child, so it scrolls with the header and grid.
-class _TvNotice extends StatelessWidget {
-  const _TvNotice(this.icon, this.text, {this.action, this.onAction});
+class TvNotice extends StatelessWidget {
+  const TvNotice(this.icon, this.text, {this.action, this.onAction, super.key});
   final IconData icon;
   final String text;
   final String? action;

@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../addons.dart';
 import '../anime.dart';
+import '../kit/focus.dart';
 import '../miruro_browser.dart';
 import '../playback.dart';
 import '../state.dart';
@@ -17,8 +19,11 @@ String _message(Object error) => error is AnimeException
     : 'Could not load anime. Try again.';
 
 class AnimeTab extends StatefulWidget {
-  const AnimeTab({this.client, super.key});
+  const AnimeTab({this.client, this.onAddSources, super.key});
   final Anime? client;
+
+  /// TV: the shell selects its Sources destination. Otherwise the app's named Sources route is used.
+  final VoidCallback? onAddSources;
   @override
   State<AnimeTab> createState() => _AnimeTabState();
 }
@@ -63,8 +68,87 @@ class _AnimeTabState extends State<AnimeTab> {
     super.dispose();
   }
 
+  // TV: Kitsu catalogs only, no Miruro search or WebView. The header keeps its element across feeds, so the
+  // chip just used keeps focus.
+  final _tvHeader = GlobalKey(debugLabel: 'Anime header');
+
+  void _addSources() => (widget.onAddSources ?? () => Navigator.pushNamed(context, '/sources'))();
+
+  Widget _buildTv(List<Catalog> catalogs, Catalog? selected) {
+    final header = KeyedSubtree(
+      key: _tvHeader,
+      child: Padding(
+        padding: const EdgeInsets.only(top: FlickTv.insetV),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad),
+            child: SizedBox(
+              height: FlickTokens.minTouchTarget,
+              child: Align(alignment: Alignment.centerLeft, child: Text('Anime', style: FlickTv.page)),
+            ),
+          ),
+          // The tab's initial target: entering Anime with nothing remembered lands on the first catalog chip.
+          InitialFocus(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad, vertical: 6),
+              child: Row(children: [
+                for (final c in catalogs) ...[
+                  if (c != catalogs.first) const SizedBox(width: 8),
+                  TvChoice(
+                    c.name,
+                    selected: c == selected,
+                    onActivate: () {
+                      if (c == selected) return;
+                      HapticFeedback.selectionClick();
+                      setState(() => _selected = (c.addon.base, c.type, c.id));
+                    },
+                  ),
+                ],
+              ]),
+            ),
+          ),
+        ]),
+      ),
+    );
+    return FocusTraversalGroup(
+      policy: ReadingOrderTraversalPolicy(requestFocusCallback: tvReveal),
+      child: HeroMode(
+        enabled: !MediaQuery.disableAnimationsOf(context),
+        child: selected == null
+            ? TvDiscoverScroll(header: header, slivers: [
+                SliverToBoxAdapter(
+                  child: TvNotice(
+                    Icons.video_library_outlined,
+                    'No anime catalogs are switched on.',
+                    action: 'Add sources',
+                    onAction: _addSources,
+                  ),
+                ),
+              ])
+            : CatalogFeed(
+                selected,
+                tvHeader: header,
+                onAddSources: _addSources,
+                key: ValueKey(('tv-anime', selected.addon.base, selected.type, selected.id)),
+              ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Material(
+  Widget build(BuildContext context) => context.tv
+      ? ListenableBuilder(
+          listenable: addons,
+          builder: (context, _) {
+            final catalogs = addons.animeCatalogs;
+            return _buildTv(
+              catalogs,
+              catalogs.where((c) => (c.addon.base, c.type, c.id) == _selected).firstOrNull ?? catalogs.firstOrNull,
+            );
+          },
+        )
+      : Material(
     color: FlickTokens.background,
     child: ListenableBuilder(
       listenable: addons,
