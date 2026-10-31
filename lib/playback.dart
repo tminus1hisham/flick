@@ -13,6 +13,8 @@ import 'upnext.dart';
 typedef Playback = ({
   String title,
   String? subtitle,
+  String? logo,
+  String? poster,
   String type,
   String videoId,
   int? season,
@@ -26,6 +28,8 @@ Playback episodePlayback(Meta meta, Video video) {
   return (
     title: meta.name,
     subtitle: video.title.isEmpty ? ep : '$ep · ${video.title}',
+    logo: meta.logo,
+    poster: meta.poster,
     type: meta.type,
     videoId: video.id,
     season: video.season,

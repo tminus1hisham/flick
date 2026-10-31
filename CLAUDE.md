@@ -58,6 +58,9 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Status (2026-10-31)
 
+### Anime icon
+`AnimeGlyph` in `lib/theme.dart` now has Naruto-inspired spiky hair, a leaf forehead protector and cheek marks, retaining IconTheme sizing/colour and both navigation states. Analyzer and all 177 Flutter tests pass; both states were rendered at 24 dp in `.scratch/anime-icon-preview.png`. No APK rebuild or phone check for this icon edit.
+
 ### Accounts hidden (branch `guest`, 2026-10-31)
 At the user's request sign-in is hidden until a later release: `session.accounts = false` (session.dart). Everyone opens on the 3-tab shell (Discover, Anime, Downloads) with no Login, no profile button and no sign-in gates; favourites, likes and downloads are open (`session.unlocked`). Login, the sheet and Jellyfin code are untouched; set `accounts` to true to bring them back. test/accounts_off_test.dart pins it; guest_test.dart switches accounts on.
 
@@ -121,6 +124,8 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi → LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
+- **TV Anime Kitsu catalogs:** continued in `../stremio-tv` (`tv-anime`, current HEAD 4551cdf). Implementation and round-1 fixes already committed there; independent round-2 critic now PASS, with added large-text focus and offline recovery tests. See that worktree's `CLAUDE.md` and `design/critic/tv-anime.md`. TV Title is now redesigned and emulator-tested (208 Flutter + 22 Kotlin pass, critic PASS); TV Player is now redesigned and emulator-tested (221 Flutter + 22 Kotlin pass, critic PASS), including single-layer Android Back, seek/media keys and large text. Video renders black with EGL errors, so decoded playback is unverified. Downloads is next. TV work remains separate and unmerged.
+- Check the updated Anime icon on the phone with the next APK build.
 - **Up Next, to close it out (needs the phone):** install the current APK and re-capture `design/critic/upnext/` 01 (countdown, new "6 s"), 02 (1.3× text), 06 (a screen recording of the handoff: player → blank → next episode fading in, no stream list), the "Finding next episode…" card (bar tap right after an episode starts, before the card's prefetch, ideally on slow Wi-Fi), and a failed-thumbnail card. Check E1→E2 in a season pack starts in ~10 s with peers (the seed fix), Autoplay into E2 with Wi-Fi only, Jellyfin Up Next if a server is reachable. Restore the phone afterwards: Autoplay on, font scale 1.0. Ask before driving the phone: it is the user's own phone and was in use during this session.
 - **Torrent start screen redesign (Codex, follow-up from the Up Next critic):** it still has a stock `AppBar` and shows the raw season-pack path in "Opening …"; between episodes it is the only generic moment. Ideas from the critic: no start screen when the torrent is warm and the file is known; push the player with `EpisodeRoute(next: true)` when auto-opened; no system-bar flash between two torrent episodes (the player restores edgeToEdge when the last one disposes, before the next one exists).
 - Check the other media_kit bar items for the frozen-theme problem (the Subtitles label in the top bar, the quality label).

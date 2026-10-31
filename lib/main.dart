@@ -65,7 +65,7 @@ class _ShellState extends State<Shell> {
           icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'));
   static const _anime = (AnimeTab(), 'Anime',
       NavigationDestination(
-          icon: Icon(Icons.animation_outlined), selectedIcon: Icon(Icons.animation), label: 'Anime'));
+          icon: AnimeGlyph(), selectedIcon: AnimeGlyph(filled: true), label: 'Anime'));
   static const _downloads = (DownloadsScreen(), 'Downloads',
       NavigationDestination(
           icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'));

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:flick/stall.dart';
@@ -6,10 +8,15 @@ import 'package:flick/torrent.dart';
 
 /// Playback status with a pass-through surface and an optional source action.
 class BufferingPanel extends StatefulWidget {
-  const BufferingPanel({required this.view, required this.onSwitch, super.key});
+  const BufferingPanel({required this.view, required this.onSwitch,
+    required this.title, this.logo, this.poster, this.waiting = false, super.key});
 
   final BufferView view;
   final VoidCallback onSwitch;
+  final String title;
+  final String? logo, poster;
+  /// A new buffering episode can still be inside its 600 ms suppression window.
+  final bool waiting;
 
   @override
   State<BufferingPanel> createState() => _BufferingPanelState();
@@ -18,10 +25,12 @@ class BufferingPanel extends StatefulWidget {
 class _BufferingPanelState extends State<BufferingPanel> {
   BufferView? _lastVisible;
   bool _shown = false;
+  Timer? _dismiss;
+  bool _completing = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _sync();
   }
 
@@ -34,9 +43,36 @@ class _BufferingPanelState extends State<BufferingPanel> {
   void _sync() {
     final visible = widget.view.phase != BufferPhase.hidden;
     if (!visible) {
-      _shown = false;
+      if (_lastVisible == null) return;
+      if (widget.waiting || MediaQuery.disableAnimationsOf(context)) {
+        _dismiss?.cancel();
+        _lastVisible = null;
+        _shown = false;
+        _completing = false;
+        return;
+      }
+      if (_completing) return;
+      _completing = true;
+      _lastVisible = (
+        phase: _lastVisible!.phase, progress: 1,
+        stats: _lastVisible!.stats, offerSwitch: false,
+      );
+      _dismiss = Timer(FlickTokens.artworkFadeDuration, () {
+        if (!mounted) return;
+        setState(() => _shown = false);
+        _dismiss = Timer(FlickTokens.stateDuration, () {
+          if (mounted) {
+            setState(() {
+              _lastVisible = null;
+              _completing = false;
+            });
+          }
+        });
+      });
       return;
     }
+    _dismiss?.cancel();
+    _completing = false;
     final appearing = _lastVisible == null;
     _lastVisible = widget.view;
     if (!appearing) {
@@ -49,6 +85,12 @@ class _BufferingPanelState extends State<BufferingPanel> {
         setState(() => _shown = true);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _dismiss?.cancel();
+    super.dispose();
   }
 
   @override
@@ -70,11 +112,6 @@ class _BufferingPanelState extends State<BufferingPanel> {
           opacity: _shown ? 1 : 0,
           duration: _shown ? enter : exit,
           curve: _shown ? FlickTokens.curveIn : FlickTokens.curveOut,
-          onEnd: () {
-            if (mounted && widget.view.phase == BufferPhase.hidden) {
-              setState(() => _lastVisible = null);
-            }
-          },
           child: Stack(
             children: [
               Positioned.fill(
@@ -92,7 +129,8 @@ class _BufferingPanelState extends State<BufferingPanel> {
                 duration: enter,
                 curve: FlickTokens.curveIn,
                 child: Padding(
-                  padding: const EdgeInsets.all(FlickTokens.grid * 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FlickTokens.grid * 6, vertical: FlickTokens.grid * 4),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,10 +140,11 @@ class _BufferingPanelState extends State<BufferingPanel> {
                       ),
                       const SizedBox(height: FlickTokens.grid * 4),
                       IgnorePointer(
-                        child: _BufferRail(
+                        child: ArtworkProgress(
+                          title: widget.title,
+                          logo: widget.logo,
+                          poster: widget.poster,
                           progress: view.progress,
-                          offline: view.phase == BufferPhase.offline,
-                          enter: enter,
                         ),
                       ),
                       IgnorePointer(
@@ -242,7 +281,7 @@ class _PhaseText extends StatelessWidget {
               title,
               key: ValueKey(phase),
               textAlign: TextAlign.start,
-              style: FlickText.railHeading.copyWith(color: FlickTokens.textPrimary),
+              style: FlickText.cardTitle.copyWith(color: FlickTokens.textPrimary),
             ),
           ),
         ),
@@ -266,66 +305,61 @@ class _PhaseText extends StatelessWidget {
   }
 }
 
-class _BufferRail extends StatelessWidget {
-  const _BufferRail({
-    required this.progress,
-    required this.offline,
-    required this.enter,
-  });
+/// The same artwork in two layers: a translucent base and a clipped clear reveal.
+class ArtworkProgress extends StatelessWidget {
+  const ArtworkProgress({required this.title, required this.progress,
+    this.logo, this.poster, super.key});
 
+  final String title;
+  final String? logo, poster;
   final double? progress;
-  final bool offline;
-  final Duration enter;
+
+  Widget _layers(Widget artwork, double progress) => Stack(children: [
+    Opacity(opacity: 0.25, child: artwork),
+    Positioned.fill(child: ClipRect(clipper: _ArtworkReveal(progress), child: artwork)),
+  ]);
+
+  Widget _artwork(double progress) {
+    final text = _layers(Text(title, textAlign: TextAlign.center,
+      maxLines: 2, overflow: TextOverflow.ellipsis,
+      style: FlickText.railHeading.copyWith(color: FlickTokens.accent)), progress);
+    Widget image(String url, Widget fallback) => Image.network(url,
+      fit: BoxFit.contain,
+      frameBuilder: (_, child, frame, _) => frame == null ? text : _layers(child, progress),
+      errorBuilder: (_, _, _) => fallback);
+    final cover = poster == null || poster!.isEmpty ? text : image(poster!, text);
+    return logo == null || logo!.isEmpty ? cover : image(logo!, cover);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final value = progress?.clamp(0.0, 1.0).toDouble();
-
+    final value = progress == null || !progress!.isFinite
+        ? 0.0 : progress!.clamp(0.0, 1.0).toDouble();
     return ExcludeSemantics(
-      child: AnimatedOpacity(
-        opacity: offline ? 0.4 : 1,
-        duration: enter,
-        curve: FlickTokens.curveIn,
-        child: SizedBox(
-          height: FlickTokens.grid,
-          child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(end: value ?? 0),
-            duration: enter,
-            curve: FlickTokens.curveIn,
-            builder: (context, animatedValue, child) {
-              return Row(
-                children: [
-                  for (var index = 0; index < 6; index++) ...[
-                    if (index > 0) const SizedBox(width: FlickTokens.grid),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(FlickTokens.grid),
-                        child: ColoredBox(
-                          color: FlickTokens.outline,
-                          child: value == null
-                              ? const SizedBox.expand()
-                              : Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: FractionallySizedBox(
-                                    widthFactor: (animatedValue * 6 - index)
-                                        .clamp(0.0, 1.0)
-                                        .toDouble(),
-                                    heightFactor: 1,
-                                    child: const ColoredBox(color: FlickTokens.progress),
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              );
-            },
-          ),
+      child: SizedBox(
+        width: double.infinity,
+        height: FlickTokens.grid * 18,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: value),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero : FlickTokens.artworkFadeDuration,
+          curve: FlickTokens.curveIn,
+          builder: (context, value, child) => Center(child: _artwork(value)),
         ),
       ),
     );
   }
+}
+
+class _ArtworkReveal extends CustomClipper<Rect> {
+  const _ArtworkReveal(this.progress);
+  final double progress;
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTWH(0, 0, size.width * progress, size.height);
+
+  @override
+  bool shouldReclip(_ArtworkReveal oldClipper) => progress != oldClipper.progress;
 }
 
 class _BufferStats extends StatelessWidget {

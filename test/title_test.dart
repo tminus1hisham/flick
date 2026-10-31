@@ -89,13 +89,13 @@ AddonStream _stream(String title, {
       bingeGroup: null,
     );
 
-Meta _meta(String type, [List<Video> videos = const []]) => (
+Meta _meta(String type, [List<Video> videos = const [], bool artwork = false]) => (
       id: 'tt1',
       type: type,
       name: 'Rick and Morty',
-      poster: null,
+      poster: artwork ? 'https://images.example/poster.jpg' : null,
       background: null,
-      logo: null,
+      logo: artwork ? 'https://images.example/logo.png' : null,
       description: null,
       releaseInfo: '2013',
       runtime: null,
@@ -167,8 +167,10 @@ void main() {
     final meta = _meta('series', [
       (id: 'tt1:4:2', title: 'The Old Man and the Seat', season: 4, episode: 2,
           released: null, thumbnail: null),
-    ]);
+    ], true);
     final p = episodePlayback(meta, meta.videos.single);
+    expect(p.logo, meta.logo);
+    expect(p.poster, meta.poster);
     final data = StreamDownload(title: p.title, poster: 'https://images.example/poster.jpg', playback: p);
     final encoded = data.toMetaData();
     final decoded = StreamDownload.fromMetaData(encoded)!;
@@ -178,6 +180,8 @@ void main() {
     expect(decoded.playback, (
       title: p.title,
       subtitle: p.subtitle,
+      logo: p.logo,
+      poster: p.poster ?? data.poster,
       type: p.type,
       videoId: p.videoId,
       season: p.season,
@@ -194,6 +198,8 @@ void main() {
     const Playback p = (
       title: 'The Kid',
       subtitle: null,
+      logo: 'https://images.example/movie-logo.png',
+      poster: 'https://images.example/movie-cover.jpg',
       type: 'movie',
       videoId: 'tt123',
       season: null,
@@ -207,6 +213,17 @@ void main() {
     expect(decoded.poster, isNull);
     expect(decoded.playback, p);
     expect(StreamDownload.fromMetaData(jsonEncode({'Id': 'jellyfin-id', 'Name': 'Film'})), isNull);
+  });
+
+  test('older download metadata keeps its poster without requiring new artwork fields', () {
+    final decoded = StreamDownload.fromMetaData(jsonEncode({
+      'flickDownload': 'stream', 'title': 'Old download',
+      'poster': 'https://images.example/old-cover.jpg',
+      'playback': {'title': 'Old download', 'subtitle': null, 'type': 'movie',
+        'videoId': 'tt-old', 'season': null, 'episode': null},
+    }))!;
+    expect(decoded.playback.logo, isNull);
+    expect(decoded.playback.poster, decoded.poster);
   });
 
   testWidgets('a movie groups streams per source, and a failing source keeps the others', (tester) async {

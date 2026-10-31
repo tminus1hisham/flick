@@ -1,5 +1,34 @@
 # Buffering overlay: brief + spec delta
 
+## Current artwork loader (2026-10-31)
+
+This section supersedes the historical rail and panel geometry specifications below.
+
+- Addon playback only: keep the Starting, Stalled and Offline states, 600 ms stall suppression,
+  torrent stats, source-switch thresholds, pointer pass-through and error screen behaviour.
+- Replace the segmented rail with artwork in a 272 × 72 dp area. Prefer title logo, then
+  cover, then two lines of styled title text. Preserve image aspect ratio with `BoxFit.contain`;
+  failed or missing images advance to the next fallback.
+- Paint identical layers: base at 25% opacity, clear foreground clipped from the left to
+  `progress × artwork width` (excluding letterboxing). Clamp measured progress to 0..1;
+  unknown progress has no clear fill. Show title text while the image is still decoding.
+  Offline retains the last measured fill without an extra opacity reduction.
+- Panel stays 320 dp wide with 24 dp horizontal and 16 dp vertical padding. Phase heading
+  uses `FlickText.cardTitle` so Offline plus its source action fits 640 × 360 at 1.3× text.
+- Animate progress over `artworkFadeDuration` (180 ms). Successful resume reveals to 100%
+  over 180 ms, then fades the panel over `stateDuration` (120 ms), while playback continues.
+  Remove semantics, focus and button hit testing immediately on resume. Errors/source exits
+  remove the overlay without completing the reveal. A new stall cancels dismissal, including
+  during its initial 600 ms suppression window (`BufferingPanel.waiting`).
+- Reduced motion updates and removes the overlay immediately. Only phase changes are live
+  announcements; artwork and frequent progress updates are excluded from semantics.
+- `Playback` carries nullable `logo` and `poster` URLs through direct/torrent playback,
+  episode transitions, anime and download metadata. Older downloads accept missing artwork
+  fields and reuse their existing top-level poster URL. No new packages or native changes.
+- Progress means readiness to start/resume, not percentage of the entire video downloaded.
+
+## Historical design and implementation notes
+
 User request (2026-10-30): "come up with a plan with codex about how to handle buffering and have stable and seamless playing/streaming", then "start the next phases". Plan: `~/.claude/plans/come-up-with-a-twinkling-peach.md`, Phase 3. Codex's first-pass design is folded in below (section 3, marked where Claude changed it).
 
 ## 1. Brief delta (UX, Claude)

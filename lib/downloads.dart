@@ -25,6 +25,8 @@ class StreamDownload {
         'playback': {
           'title': playback.title,
           'subtitle': playback.subtitle,
+          'logo': playback.logo,
+          'poster': playback.poster,
           'type': playback.type,
           'videoId': playback.videoId,
           'season': playback.season,
@@ -42,6 +44,8 @@ class StreamDownload {
       playback: (
         title: p['title'] as String,
         subtitle: p['subtitle'] as String?,
+        logo: p['logo'] as String?,
+        poster: (p['poster'] ?? m['poster']) as String?,
         type: p['type'] as String,
         videoId: p['videoId'] as String,
         season: p['season'] as int?,

@@ -165,7 +165,8 @@ class _TitleScreenState extends State<TitleScreen> {
       return [
         const SliverToBoxAdapter(child: _Heading('Streams', style: FlickText.railHeading)),
         _StreamList(
-            (title: m.name, subtitle: null, type: m.type, videoId: m.id, season: null, episode: null, meta: null),
+            (title: m.name, subtitle: null, logo: m.logo, poster: m.poster ?? widget.preview.poster,
+                type: m.type, videoId: m.id, season: null, episode: null, meta: null),
             poster: m.poster ?? widget.preview.poster),
       ];
     }

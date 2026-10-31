@@ -304,6 +304,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }),
       )
       ..add(_player.stream.buffering.listen(_onBuffering))
+      ..add(_player.stream.bufferingPercentage.listen((_) {
+        if (mounted && widget.addonPlayback && _since != null) setState(() {});
+      }))
       ..add(_player.stream.error.listen(_showError));
     _init().catchError(_showError);
     if (widget.addonPlayback && widget.playback != null) _fetchSubtitles();
@@ -1095,6 +1098,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       excluding: _panel,
                       child: BufferingPanel(
                         view: _bufferView,
+                        waiting: _since != null,
+                        title: widget.playback?.title ?? widget.item.name,
+                        logo: widget.playback?.logo,
+                        poster: widget.playback?.poster,
                         onSwitch: () => Navigator.pop(context),
                       ),
                     ),

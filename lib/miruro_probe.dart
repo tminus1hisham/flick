@@ -267,6 +267,8 @@ class _MiruroProbeState extends State<MiruroProbe> {
                           : () => play(context, animeStream(variant, link), (
                               title: 'Anime ${result.episode.animeId}',
                               subtitle: result.episode.title,
+                              logo: null,
+                              poster: null,
                               type: 'anime',
                               videoId:
                                   'anilist:${result.episode.animeId}:${result.episode.number}',

@@ -676,3 +676,117 @@ class _FlickMarkPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _FlickMarkPainter oldDelegate) => oldDelegate != this;
 }
+
+/// The Anime tab's Naruto-inspired icon: spiky hair, headband and cheek marks. Takes
+/// colour and size from [IconTheme] like an [Icon].
+class AnimeGlyph extends StatelessWidget {
+  const AnimeGlyph({super.key, this.filled = false});
+
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = IconTheme.of(context);
+    return CustomPaint(
+      // IconTheme.of merges the fallback theme, so size and colour are set.
+      size: Size.square(icon.size!),
+      painter: _AnimeGlyphPainter(icon.color!, filled),
+    );
+  }
+}
+
+class _AnimeGlyphPainter extends CustomPainter {
+  const _AnimeGlyphPainter(this.color, this.filled);
+
+  final Color color;
+  final bool filled;
+
+  // 24-unit grid: a wide crown of spikes and a tapered face.
+  static final _silhouette = Path.combine(
+    PathOperation.union,
+    Path.combine(
+      PathOperation.union,
+      Path()
+        ..addPolygon(const [
+          Offset(4, 10), Offset(2, 7), Offset(5.5, 7), Offset(4, 3.5), Offset(8, 5),
+          Offset(8, 1.5), Offset(11, 4), Offset(13, 1), Offset(14.5, 4),
+          Offset(18, 2.5), Offset(17, 6), Offset(21, 5), Offset(19, 8),
+          Offset(22, 9), Offset(19, 11),
+        ], true),
+      Path()
+        ..moveTo(5, 8)
+        ..lineTo(19, 8)
+        ..lineTo(18, 15)
+        ..quadraticBezierTo(17, 19, 12, 21)
+        ..quadraticBezierTo(7, 19, 6, 15)
+        ..close(),
+    ),
+    Path()
+      ..moveTo(4, 23)
+      ..quadraticBezierTo(5, 20, 9, 20)
+      ..lineTo(12, 22)
+      ..lineTo(15, 20)
+      ..quadraticBezierTo(19, 20, 20, 23)
+      ..close(),
+  );
+
+  static final _details = Path()
+    ..addRRect(RRect.fromRectAndRadius(const Rect.fromLTRB(6, 8, 18, 12), const Radius.circular(1)))
+    // A compact leaf spiral on the forehead protector.
+    ..moveTo(10, 10.8)
+    ..lineTo(11, 9)
+    ..cubicTo(14, 8.4, 14, 11.4, 12, 11)
+    ..quadraticBezierTo(11, 10.6, 12, 10)
+    ..moveTo(10, 10.8)
+    ..lineTo(9, 11)
+    ..moveTo(8, 13.5)
+    ..lineTo(10, 14)
+    ..moveTo(14, 14)
+    ..lineTo(16, 13.5)
+    ..moveTo(6.5, 15)
+    ..lineTo(9, 15.5)
+    ..moveTo(7, 17)
+    ..lineTo(9, 17)
+    ..moveTo(8, 18.5)
+    ..lineTo(9.5, 18)
+    ..moveTo(15, 15.5)
+    ..lineTo(17.5, 15)
+    ..moveTo(15, 17)
+    ..lineTo(17, 17)
+    ..moveTo(14.5, 18)
+    ..lineTo(16, 18.5);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 24, size.height / 24);
+    canvas.clipPath(_silhouette);
+    canvas.saveLayer(Offset.zero & const Size.square(24), Paint());
+    final line = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    if (filled) {
+      canvas.drawPath(_silhouette, Paint()..color = color);
+      line
+        ..blendMode = BlendMode.clear
+        ..strokeWidth = 1.0;
+    } else {
+      canvas.drawPath(_silhouette, Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        // Doubled: the clip keeps only the inner half.
+        ..strokeWidth = 2.4);
+      line.strokeWidth = 1.2;
+    }
+    canvas.drawPath(_details, line);
+    canvas.restore();
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _AnimeGlyphPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.filled != filled;
+}

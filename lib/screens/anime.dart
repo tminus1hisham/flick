@@ -427,6 +427,8 @@ class _AnimeSourcesScreenState extends State<AnimeSourcesScreen> {
         await play(context, animeStream(fresh, target), (
           title: widget.card.title,
           subtitle: widget.episode.title,
+          logo: null,
+          poster: widget.card.poster,
           type: 'anime',
           videoId: 'anilist:${widget.card.id}:${widget.episode.number}',
           season: null,

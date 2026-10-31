@@ -183,6 +183,8 @@ void main() {
     playback: (
       title: '星の旅 "Season 1"',
       subtitle: 'S01E02 · Departure',
+      logo: 'https://example.com/logo.png',
+      poster: 'https://example.com/poster.jpg',
       type: 'series',
       videoId: 'tt123:1:2',
       season: 1,
