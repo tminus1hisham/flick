@@ -369,7 +369,7 @@ void main() {
     );
   });
 
-  testWidgets('13: Movies / Series sit on a 40 dp surface1 track; the chips stay bare', (tester) async {
+  testWidgets('13: Movies / Series sit on a 40 dp surface1 track; the catalog chips are outlined', (tester) async {
     await pumpApp(tester);
     Finder track(String label) => find.ancestor(
           of: find.text(label),
@@ -390,5 +390,29 @@ void main() {
       reason: 'the selected segment is filled',
     );
     expect(find.descendant(of: track('Movies'), matching: find.byType(SlashMarker)), findsOneWidget);
+    Finder outlined(String label) => find.ancestor(
+          of: find.text(label),
+          matching: find.byWidgetPredicate((w) =>
+              w is Container && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).border != null),
+        );
+    expect(outlined('Popular'), findsOneWidget, reason: 'the selected chip keeps its outline (mockup)');
+    expect(outlined('New'), findsOneWidget);
+    expect(outlined('Movies'), findsNothing, reason: 'segments sit on their track instead');
+  });
+
+  testWidgets('14: offline, the grid becomes a notice whose Retry the D-pad reaches and that reloads', (tester) async {
+    final fake = _Addons()..respond = (_, _, _) => Future.error(AddonException(AddonError.unreachable));
+    await pumpApp(tester, with_: fake);
+    expect(find.text("You're offline. Check your connection and try again."), findsOneWidget);
+    expect(find.byIcon(Icons.wifi_off), findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.arrowDown);
+    await key(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedText(), 'Retry');
+
+    fake.respond = (_, _, _) => null;
+    await key(tester, LogicalKeyboardKey.select);
+    expect(find.textContaining("You're offline"), findsNothing);
+    expect(find.text('top 0'), findsOneWidget);
   });
 }
