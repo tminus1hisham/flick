@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme.dart';
+import '../kit/focus.dart';
 import '../upnext.dart' show NextEpisode, UpNextView, countdownLength;
 import '../widgets.dart' show NetImage, Skeleton;
 
@@ -52,7 +53,7 @@ class UpNextCard extends StatelessWidget {
                     child: IgnorePointer(child: _EpisodeHeader(episode)),
                   ),
                   const SizedBox(height: FlickTokens.railGap),
-                  _NextAction(view: view, onPressed: _next),
+                  _tvFocus(context, view.resolving ? null : _next, _NextAction(view: view, onPressed: _next)),
                   const SizedBox(height: FlickTokens.grid),
                   Wrap(
                     spacing: FlickTokens.railGap,
@@ -63,7 +64,7 @@ class UpNextCard extends StatelessWidget {
                         width: FlickTokens.grid * 36,
                         child: Material(
                           type: MaterialType.transparency,
-                          child: TextButton(
+                          child: _tvFocus(context, view.resolving ? null : onDismiss, TextButton(
                             style: TextButton.styleFrom(
                               foregroundColor: FlickTokens.textPrimary,
                               minimumSize: const Size(0, FlickTokens.minTouchTarget),
@@ -73,13 +74,13 @@ class UpNextCard extends StatelessWidget {
                             ),
                             onPressed: view.resolving ? null : onDismiss,
                             child: const Text('Watch credits'),
-                          ),
+                          )),
                         ),
                       ),
-                      _AutoplayControl(
+                      _tvFocus(context, view.resolving ? null : () => onAutoplay(!autoplay), _AutoplayControl(
                         value: autoplay,
                         onChanged: view.resolving ? null : onAutoplay,
-                      ),
+                      )),
                     ],
                   ),
                 ],
@@ -89,6 +90,9 @@ class UpNextCard extends StatelessWidget {
         ),
       );
 }
+
+Widget _tvFocus(BuildContext context, VoidCallback? onActivate, Widget child) => context.tv
+    ? FocusFrame(onActivate: onActivate, child: ExcludeFocus(child: child)) : child;
 
 // The label's font with tabular figures: RobotoMono's space read as a gap ("6  s"). Claude override, decisions.md.
 const _seconds = TextStyle(fontFeatures: [FontFeature.tabularFigures()]);
@@ -225,7 +229,7 @@ class _AutoplayControl extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Autoplay', style: FlickText.metadata.copyWith(color: FlickTokens.textSecondary)),
+                    Text('Autoplay', style: (context.tv ? FlickTv.meta : FlickText.metadata).copyWith(color: FlickTokens.textSecondary)),
                     const SizedBox(width: FlickTokens.grid * 2),
                     Switch(
                       value: value,
@@ -288,7 +292,7 @@ class _EpisodeHeaderState extends State<_EpisodeHeader> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(episode.label, style: FlickText.metadata.copyWith(color: FlickTokens.textSecondary)),
+              Text(episode.label, style: (context.tv ? FlickTv.meta : FlickText.metadata).copyWith(color: FlickTokens.textSecondary)),
               const SizedBox(height: FlickTokens.grid),
               Text(episode.title, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: FlickText.cardTitle.copyWith(color: FlickTokens.textPrimary)),

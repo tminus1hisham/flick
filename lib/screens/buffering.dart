@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:flick/stall.dart';
+import '../kit/focus.dart';
 import 'package:flick/theme.dart';
 import 'package:flick/torrent.dart';
 
@@ -141,7 +142,13 @@ class _BufferingPanelState extends State<BufferingPanel> {
                                           minWidth: double.infinity,
                                           minHeight: FlickTokens.minTouchTarget,
                                         ),
-                                        child: Material(
+                                        child: context.tv
+                                            ? FocusFrame.button(
+                                                semanticLabel: 'Try another source', onActivate: widget.onSwitch,
+                                                child: const Padding(padding: EdgeInsets.all(12),
+                                                  child: Text('Try another source', style: FlickTv.body)),
+                                              )
+                                            : Material(
                                           type: MaterialType.transparency,
                                           child: OutlinedButton(
                                             onPressed: widget.onSwitch,
@@ -256,7 +263,7 @@ class _PhaseText extends StatelessWidget {
                   child: Text(
                     'Playback will resume automatically.',
                     textAlign: TextAlign.start,
-                    style: FlickText.body.copyWith(color: FlickTokens.textSecondary),
+                    style: (context.tv ? FlickTv.body : FlickText.body).copyWith(color: FlickTokens.textSecondary),
                   ),
                 )
               : const SizedBox.shrink(key: ValueKey('online')),
@@ -335,7 +342,7 @@ class _BufferStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final numberStyle = streamMonoStyle.copyWith(color: FlickTokens.textSecondary);
+    final numberStyle = streamMonoStyle.copyWith(color: FlickTokens.textSecondary, fontSize: context.tv ? 14 : 12);
     final rate = stats.rate;
     final formattedRate = rate == null ? null : formatRate(rate);
     final separator = formattedRate?.indexOf(' ') ?? -1;
@@ -356,7 +363,7 @@ class _BufferStats extends StatelessWidget {
         ],
       ),
       textAlign: TextAlign.start,
-      style: FlickText.metadata.copyWith(color: FlickTokens.textSecondary),
+      style: (context.tv ? FlickTv.meta : FlickText.metadata).copyWith(color: FlickTokens.textSecondary),
     );
   }
 }

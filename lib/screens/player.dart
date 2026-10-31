@@ -9,6 +9,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../kit/route.dart';
+import '../kit/focus.dart';
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
 import '../stall.dart';
@@ -19,6 +20,7 @@ import '../upnext.dart';
 import '../widgets.dart';
 import 'buffering.dart';
 import 'upnext.dart';
+import 'tv_player.dart';
 
 typedef _Caption = ({
   SubtitleTrack track,
@@ -198,6 +200,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   List<Subtitle> _catalogue = [];
   final _entryFocus = FocusNode();
   final _headingFocus = FocusNode();
+  final _tvLanguageFocus = FocusNode(debugLabel: 'Subtitle language');
+  final _tvLanguageChoice = FocusNode(debugLabel: 'Selected subtitle language');
   final _scrolls = <String, ScrollController>{};
   SubtitleTrack? _selected;
   _Caption? _failed;
@@ -220,6 +224,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // media_kit 2.0.1 never rebuilds its button bars when the theme changes
   // (its updateShouldNotify is inverted), so the Next button listens itself.
   final _nextBar = ValueNotifier(0);
+  final _tvRefresh = ValueNotifier(0);
   final _video = GlobalKey<VideoState>();
 
   // Up Next pushes the next player before this one is disposed: only the last
@@ -234,6 +239,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subs
       ..add(
         _player.stream.position.listen((p) {
+          if (device.tv) _tvRefresh.value++;
           // Before the early return: a seek to the start must reset Up Next.
           _upNext(p);
           if (p <= Duration.zero) return;
@@ -273,11 +279,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       )
       ..add(
         _player.stream.playing.listen((playing) {
+          if (device.tv) _tvRefresh.value++;
           if (!playing && _lastPlaybackError != null) _checkStopped();
         }),
       )
       ..add(
         _player.stream.duration.listen((d) {
+          if (device.tv) _tvRefresh.value++;
           _upNext();
           final t = widget.torrent, size = widget.size;
           if (_bitrateSent || t == null || size == null || d.inSeconds <= 0) {
@@ -286,6 +294,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _bitrateSent = true;
           // Best-effort: without it the engine assumes 1 MiB/s.
           t.engine.bitrate(t.id, size ~/ d.inSeconds).catchError((_) {});
+        }),
+      )
+      ..add(
+        _player.stream.buffer.listen((_) {
+          if (device.tv) _tvRefresh.value++;
         }),
       )
       ..add(_player.stream.buffering.listen(_onBuffering))
@@ -343,7 +356,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } else if (!view.visible && _shown?.visible == true) {
       // The card's controls are gone: hand focus back to the player.
-      _entryFocus.requestFocus();
+      if (!device.tv) _entryFocus.requestFocus();
     }
     if (view.visible && settings.autoplayNext && !_committed) {
       _countdown ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
@@ -789,7 +802,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Closing the panel releases a held countdown or a completion waiting on it.
     _upNext();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) (_panel ? _headingFocus : _entryFocus).requestFocus();
+      if (mounted && !device.tv) {
+        (_panel ? _headingFocus : _entryFocus).requestFocus();
+      }
     });
   }
 
@@ -860,6 +875,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void dispose() {
     _entryFocus.dispose();
     _headingFocus.dispose();
+    _tvLanguageFocus.dispose();
+    _tvLanguageChoice.dispose();
     _languageSearch.dispose();
     for (final controller in _scrolls.values) {
       controller.dispose();
@@ -868,6 +885,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _countdown?.cancel();
     _token++;
     _nextBar.dispose();
+    _tvRefresh.dispose();
     for (final s in _subs) {
       s.cancel();
     }
@@ -881,6 +899,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (context.tv) return _buildTv();
     final next = _next;
     final bar = <Widget>[
       _TopBar(
@@ -1101,6 +1120,268 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTv() => Scaffold(
+    backgroundColor: FlickTokens.background,
+    body: Stack(
+      children: [
+        Video(
+          key: _video,
+          controller: _controller,
+          controls: NoVideoControls,
+          onExitFullscreen: _immersive,
+        ),
+        Positioned.fill(
+          child: ListenableBuilder(
+            listenable: _tvRefresh,
+            builder: (context, _) {
+              final next = _next;
+              final view = next == null
+                  ? null
+                  : _upNextView(next, _player.state.position);
+              return TvPlayerControls(
+                title: widget.playback?.title ?? widget.title,
+                subtitle: widget.playback?.subtitle,
+                position: _player.state.position,
+                duration: _player.state.duration,
+                buffer: _player.state.buffer,
+                playing: _player.state.playing,
+                panel: _panel,
+                tracks: _panel ? _tracksPanelTv() : const SizedBox(),
+                buffering: _bufferView,
+                error: _error,
+                retrying: _retrying,
+                subtitlesOn: _activeSubtitle != 'Off',
+                onToggle: () => _player.playOrPause().catchError(_showError),
+                onSeek: (at) => _player.seek(at).catchError(_showError),
+                onExit: () => Navigator.pop(context),
+                onRetry: _retry,
+                onTracks: () => _togglePanel(true),
+                onCloseTracks: () {
+                  if (_languages) {
+                    _tvLanguages(false);
+                  } else {
+                    _togglePanel(false);
+                  }
+                },
+                onNext: next == null || _resolving
+                    ? null
+                    : () => _commit(forced: true),
+                upNextVisible: view?.visible ?? false,
+                upNext: next == null
+                    ? null
+                    : UpNextCard(
+                        view: view!,
+                        episode: next.episode,
+                        autoplay: settings.autoplayNext,
+                        onNext: _commit,
+                        onDismiss: () {
+                          setState(() => _dismissed = true);
+                          _upNext();
+                        },
+                        onAutoplay: _setAutoplay,
+                      ),
+              );
+            },
+          ),
+        ),
+      ],
+    ),
+  );
+
+  void _tvLanguages(bool open) {
+    setState(() => _languages = open);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _panel) {
+        (open ? _tvLanguageChoice : _tvLanguageFocus).requestFocus();
+      }
+    });
+  }
+
+  Widget _tracksPanelTv() {
+    final captions = _captions;
+    final languages = captions.map((c) => c.lang).toSet();
+    final language = _language ?? languages.firstOrNull;
+    final active = _selected ?? _player.state.track.subtitle;
+    Widget row(
+      String label,
+      VoidCallback? onTap, {
+      bool selected = false,
+      String? detail,
+      FocusNode? node,
+    }) {
+      final child = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: RevealArea(
+          child: Semantics(
+            selected: selected,
+            child: FocusFrame.button(
+              semanticLabel: [label, ?detail].join(', '),
+              onActivate: onTap,
+              focusNode: node,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    if (selected) ...[
+                      const SlashMarker(),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: FlickTv.body,
+                          ),
+                          if (detail != null)
+                            Text(
+                              detail,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: FlickTv.meta.copyWith(
+                                color: FlickTokens.textSecondary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return selected ? InitialFocus(child: child) : child;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          _languages ? 'Languages' : 'Subtitles & audio',
+          style: FlickTv.railHeading,
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(FlickTv.gridPad),
+            children: [
+              if (_languages) ...[
+                for (final lang in languages)
+                  row(
+                    subtitleLanguageName(lang),
+                    () {
+                      _language = lang;
+                      _tvLanguages(false);
+                    },
+                    selected: lang == language,
+                    node: lang == language ? _tvLanguageChoice : null,
+                  ),
+                if (languages.isEmpty)
+                  Text('No subtitle languages available', style: FlickTv.body),
+              ] else ...[
+                row(
+                  'Off',
+                  _pending == null
+                      ? () => _choose((
+                          track: SubtitleTrack.no(),
+                          url: null,
+                          lang: language ?? 'und',
+                          label: 'Off',
+                          detail: '',
+                        ))
+                      : null,
+                  selected: active.id == 'no' || active.id == 'auto',
+                ),
+                row(
+                  'Language',
+                  languages.isEmpty ? null : () => _tvLanguages(true),
+                  node: _tvLanguageFocus,
+                  detail: language == null
+                      ? 'Choose language'
+                      : subtitleLanguageName(language),
+                ),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Skeleton(height: 48),
+                  ),
+                if (_catalogueError != null)
+                  row(
+                    'Retry subtitles',
+                    _fetchSubtitles,
+                    detail: _catalogueError,
+                  ),
+                if (_subtitleError != null)
+                  row('Retry subtitle file', () {
+                    if (_failed case final caption?) _choose(caption);
+                  }, detail: _subtitleError),
+                if (_notice != null)
+                  row(
+                    'Choose language',
+                    languages.isEmpty ? null : () => _tvLanguages(true),
+                    detail: _notice,
+                  ),
+                if (!_loading && _catalogueError == null && captions.isEmpty)
+                  row('Retry subtitles', () {
+                    _fetched = false;
+                    _fetchSubtitles();
+                  }, detail: 'No subtitles found for this episode'),
+                for (final caption in captions.where((c) => c.lang == language))
+                  row(
+                    caption.label,
+                    _pending == null ? () => _choose(caption) : null,
+                    selected: active.id == caption.track.id,
+                    detail: _pending == (caption.url ?? caption.track.id)
+                        ? 'Opening subtitles…'
+                        : caption.detail,
+                  ),
+                const SizedBox(height: 16),
+                Text('Audio', style: FlickTv.card),
+                for (final audio in _player.state.tracks.audio.where(
+                  (a) => a.id != 'no' && a.id != 'auto',
+                ))
+                  row(
+                    audio.title ??
+                        subtitleLanguageName(audio.language ?? 'und'),
+                    () async {
+                      try {
+                        await _player.setAudioTrack(audio);
+                      } catch (e) {
+                        if (mounted) {
+                          setState(() => _subtitleError = friendlyError(e));
+                        }
+                      }
+                    },
+                    selected: audio.id == _player.state.track.audio.id,
+                  ),
+                if (_next != null)
+                  row(
+                    'Autoplay next episode',
+                    _resolving
+                        ? null
+                        : () => _setAutoplay(!settings.autoplayNext),
+                    detail: settings.autoplayNext ? 'On' : 'Off',
+                  ),
+              ],
+              row(_languages ? 'Back to subtitles' : 'Close', () {
+                if (_languages) {
+                  _tvLanguages(false);
+                } else {
+                  _togglePanel(false);
+                }
+              }),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

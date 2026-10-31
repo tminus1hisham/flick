@@ -627,18 +627,28 @@ class _CatalogFeedState extends State<CatalogFeed> {
     super.dispose();
   }
 
-  /// Up/Down in the lazy grid: the default policy first; when it finds no built poster, jump the target row
-  /// (one row of [FlickTv.columns]) into view and focus that index in the next frame.
+  /// Keep vertical moves in the grid; materialize the target row before focusing an unbuilt poster.
   Object? _move(DirectionalFocusIntent intent) {
     final from = primaryFocus;
-    if (from == null || from.focusInDirection(intent.direction)) return null;
+    if (from == null) return null;
     final down = intent.direction == TraversalDirection.down;
-    if (!down && intent.direction != TraversalDirection.up) return null;
     final index = _items.indexWhere((m) => _focus[m.id] == from);
-    if (index < 0 || !_scroll.hasClients) return null;
+    if (index < 0 || !_scroll.hasClients ||
+        (!down && intent.direction != TraversalDirection.up) || (!down && index < FlickTv.columns)) {
+      from.focusInDirection(intent.direction);
+      return null;
+    }
     final target = (index + (down ? FlickTv.columns : -FlickTv.columns)).clamp(0, _items.length - 1);
     final rows = target ~/ FlickTv.columns - index ~/ FlickTv.columns;
-    if (rows == 0) return null;
+    if (rows == 0) {
+      if (_error != null) from.focusInDirection(intent.direction);
+      return null;
+    }
+    final built = _focus[_items[target].id];
+    if (built?.context != null) {
+      tvReveal(built!);
+      return null;
+    }
     final p = _scroll.position;
     p.jumpTo((p.pixels + rows * (_row + FlickTv.gridGap)).clamp(p.minScrollExtent, p.maxScrollExtent));
     final id = _items[target].id;

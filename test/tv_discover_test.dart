@@ -476,4 +476,63 @@ void main() {
     expect(focusedText(), 'Trending');
     expect(tester.getTopLeft(find.text('Anime')).dy, greaterThanOrEqualTo(FlickTv.insetV));
   });
+
+  testWidgets('18: Anime at 1.3x text restores its header and poster focus after Title', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpApp(tester, with_: withAnime());
+    await openAnime(tester);
+    for (var i = 0; i < 3; i++) {
+      await key(tester, LogicalKeyboardKey.arrowDown);
+    }
+    final poster = focused();
+    expect(poster, startsWith('kitsu-anime-trending '));
+    await key(tester, LogicalKeyboardKey.select);
+    expect(find.byType(TitleScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await systemBack(tester);
+    expect(focused(), poster);
+    for (var i = 0; i < 4; i++) {
+      await key(tester, LogicalKeyboardKey.arrowUp);
+    }
+    expect(focusedText(), 'Trending');
+    expect(tester.getTopLeft(find.text('Anime')).dy, greaterThanOrEqualTo(FlickTv.insetV));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('19: Anime loading and offline keep chip focus; Retry reloads the feed', (tester) async {
+    final page = Completer<List<MetaPreview>>();
+    final fake = withAnime()..respond = (c, _, _) => c.type == 'anime' ? page.future : null;
+    await pumpApp(tester, with_: fake, settle: false);
+    await tester.pump();
+    await tester.pump();
+    await openAnime(tester);
+    expect(focusedText(), 'Trending');
+    expect(find.descendant(of: find.byType(AnimeTab), matching: find.byType(Skeleton)), findsWidgets);
+    page.completeError(AddonException(AddonError.unreachable));
+    await tester.pumpAndSettle();
+    expect(focusedText(), 'Trending');
+    expect(find.text("You're offline. Check your connection and try again."), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedText(), 'Retry');
+    fake.respond = (_, _, _) => null;
+    await key(tester, LogicalKeyboardKey.select);
+    expect(find.text('kitsu-anime-trending 0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('20: Down at the end of Anime stays on the last row', (tester) async {
+    await pumpApp(tester, with_: withAnime());
+    await openAnime(tester);
+    for (var i = 0; i < 8; i++) {
+      await key(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(focused(), 'kitsu-anime-trending 35, 2019');
+    await key(tester, LogicalKeyboardKey.arrowDown);
+    expect(focused(), 'kitsu-anime-trending 35, 2019');
+    expect(railFocused(), isFalse);
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(railFocused(), isTrue, reason: 'Left still opens the rail');
+  });
+
 }
