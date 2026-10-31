@@ -40,7 +40,7 @@ class SeekRipple extends StatefulWidget {
 ```
 - The player keeps exactly one `SeekRipple` mounted in its Stack, inside `Positioned.fill` + `IgnorePointer`, and sets `side`/`seconds` on every counted tap. It sets `side: 0` 400 ms after the last tap, when the seek is issued.
 - The ripple owns its in/out animation: it appears on a side, pulses each time `seconds` changes, and fades out when `side` becomes 0, keeping the last side and total while fading.
-- Visual: a half-disc anchored on the tapped edge, vertically centred; the direction icon (`Icons.replay_10`-family or chevrons, Codex's call); the total in `monoStyle` ("10 s"; the space follows the countdown precedent in upnext.dart). Afterglow tokens only.
+- Visual: a half-disc anchored on the tapped edge, vertically centred; the direction icon (`Icons.replay_10`-family or chevrons, Codex's call); the total in `FlickText.button` with tabular figures ("10 s"), like the Up Next countdown: `monoStyle`'s space reads "10  s" (decisions.md, Up Next). Afterglow tokens only.
 - Motion: `FlickTokens.stateDuration` / `artworkFadeDuration`, `curveIn` / `curveOut`. With `MediaQuery.disableAnimationsOf`: opacity only, no scale or pulse.
 - It speaks nothing (the haptic and the seek itself are the feedback). Wrap it in `ExcludeSemantics`.
 

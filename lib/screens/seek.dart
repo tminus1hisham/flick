@@ -154,8 +154,13 @@ class _SeekRippleState extends State<SeekRipple>
                                   const SizedBox(height: FlickTokens.grid),
                                   Text(
                                     '$_seconds s',
-                                    style: monoStyle.copyWith(
+                                    // Not monoStyle: RobotoMono's wide space
+                                    // reads "10  s" (decisions.md, Up Next).
+                                    style: FlickText.button.copyWith(
                                       color: FlickTokens.textPrimary,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
                                     ),
                                   ),
                                 ],

@@ -92,3 +92,12 @@ User: Jellyfin and addon/torrent series; Autoplay switch in the player (card + a
   - The torrent start screen titles itself with the episode ("Slow Horses · S1 E3 · …") instead of "Stream a link". Its stock AppBar and raw file path stay: a redesign of that screen is a follow-up for Codex, not part of Up Next.
   - Leaving media_kit fullscreen (on its own or when the card appears) re-applies immersive landscape; media_kit's default showed the bars and unlocked rotation.
   - media_kit 2.0.1 never rebuilds its button bars on a theme change (inverted `updateShouldNotify`): anything in a bar that changes after the first build must listen for itself (the Next button does).
+
+## 10-second seek (2026-10-31, design/seek.md)
+- Buttons: back 10 s · play/pause · forward 10 s replace media_kit's playlist skip buttons (no-ops here). Stateless, because of the frozen-bar bug.
+- media_kit's `seekOnDoubleTap` stays off: its indicator is a private grey widget with raw colours and no theme hook. Double tap is ours: a raw `Listener` (outside the gesture arena, so media_kit's tap/drag gestures still work) over media_kit's controls, injected through `Video(controls:)` so it also exists in media_kit's fullscreen route. Ripple state is a `ValueNotifier` for the same reason.
+- Codex review round 1 (accepted): tap qualification (one pointer, slop, long press, cancel); the burst side becomes an opaque absorber so later taps don't flash the controls; bands are the real bar bounds, and the bottom band includes media_kit's 36 dp seek bar.
+- One seek per burst, 400 ms after the last tap, counted from `_pos` (open() reports 0 until mpv seeks). Torrents clear piece deadlines once per burst.
+- Override of Codex: the ripple's total uses the button font with tabular figures, not `monoStyle` (same reason as the Up Next countdown).
+- Ponytail cut: no running total under the bar buttons (it would need a notifier in a frozen bar); a button tap shows the side ripple instead.
+- Out of scope: TV / D-pad and keyboard arrows, a configurable length, swipe-to-seek.
