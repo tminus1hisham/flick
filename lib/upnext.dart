@@ -7,7 +7,6 @@ typedef NextEpisode = ({String label, String title, String? thumbnail});
 /// route with it; the caller's play loop decides what that answer means.
 typedef NextUp = ({
   NextEpisode episode,
-  Duration? outro, // Jellyfin Outro start; null = unknown
   Future<Object?> Function() resolve,
 });
 
@@ -31,11 +30,9 @@ Video? nextVideo(List<Video> videos, String id) {
 AddonStream? bingeMatch(List<AddonStream> streams, String? group) =>
     group == null ? null : streams.where((s) => s.bingeGroup == group).firstOrNull;
 
-/// When Up Next shows: the Jellyfin outro if it is plausible (second half, at least 5 s before the end), else 30 s
-/// before the end. Null for clips under 3 minutes.
-Duration? upNextAt(Duration duration, {Duration? outro}) {
+/// When Up Next shows: 30 s before the end. Null for clips under 3 minutes.
+Duration? upNextAt(Duration duration) {
   if (duration < const Duration(minutes: 3)) return null;
-  if (outro != null && outro * 2 >= duration && outro <= duration - const Duration(seconds: 5)) return outro;
   return duration - const Duration(seconds: 30);
 }
 
@@ -44,10 +41,10 @@ const countdownLength = Duration(seconds: 10);
 /// What the Up Next card shows. [countdown] is the autoplay progress 0..1, null when there is no countdown.
 typedef UpNextView = ({bool visible, double? countdown, int secondsLeft, bool resolving});
 
-UpNextView upNextView({required Duration position, required Duration duration, Duration? outro,
+UpNextView upNextView({required Duration position, required Duration duration,
     required bool dismissed, required bool forced, required bool autoplay, required Duration counted,
     required bool resolving}) {
-  final at = upNextAt(duration, outro: outro);
+  final at = upNextAt(duration);
   // A commit in flight stays on screen ("Finding next episode…") even after a seek back.
   final visible = forced || resolving || (!dismissed && at != null && position >= at);
   final left = countdownLength - counted;

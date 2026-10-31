@@ -130,6 +130,117 @@ abstract final class FlickText {
   );
 }
 
+/// Android TV (10-foot UI) sizes, type and motion; colours stay [FlickTokens]. Spec: design/tv.md.
+abstract final class FlickTv {
+  // Overscan-safe insets: all chrome and focusable items sit inside them.
+  static const insetH = 48.0;
+  static const insetV = 27.0;
+
+  // Rail: the inset plus the 72 dp collapsed rail; expands over the content, never shifting it.
+  static const railColumn = 120.0;
+  static const railExpanded = 248.0;
+  static const contentGap = 24.0;
+
+  // Poster grid: the padding leaves room for the ring and the lift.
+  static const gridPad = 10.0;
+  static const gridGap = 12.0;
+  static const columns = 5;
+  static const posterAspect = 2 / 3;
+  // Poster to caption: clears the ring (ringGap + ringWidth) plus the lift's growth below the poster.
+  static const captionGap = 12.0;
+
+  // The Movies / Series switch: a surface1 track, the selected segment surface2.
+  static const segmentRadius = 8.0;
+
+  // Title: art and facts | streams or episodes.
+  static const artPane = 264.0;
+  static const paneGap = 24.0;
+  static const listPane = 480.0;
+
+  static const tracksPanel = 320.0;
+
+  // Focus: the ring has no animation; only the lift moves (FlickTokens.curveIn).
+  static const ringWidth = 3.0;
+  static const ringGap = 3.0;
+  static const lift = 1.03;
+  static const liftDuration = Duration(milliseconds: 100);
+  static final liftShadow = BoxShadow(
+    color: FlickTokens.background.withValues(alpha: 0.6),
+    blurRadius: 16,
+    offset: const Offset(0, 6),
+  );
+
+  // Rows scroll to the focused item (0 ms while a key repeats). The rail opens with
+  // FlickTokens.curveIn and closes faster with FlickTokens.curveOut.
+  static const scrollDuration = Duration(milliseconds: 150);
+  static const railIn = Duration(milliseconds: 160);
+  static const railOut = Duration(milliseconds: 120);
+
+  // Selected marker: the slash from Flick's mark, in FlickTokens.activeMarker.
+  static const slashWidth = 3.0;
+  static const slashHeight = 16.0;
+
+  /// Degrees the top leans right of vertical, so the bar reads as a forward slash.
+  static const slashLean = 20.0;
+
+  // Type: nothing under 14.
+  static const hero = TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 32,
+    height: 38 / 32,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -1,
+  );
+
+  static const title = TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 28,
+    height: 34 / 28,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.6,
+  );
+
+  static const page = TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 26,
+    height: 32 / 26,
+    fontWeight: FontWeight.w800,
+    letterSpacing: -0.4,
+  );
+
+  static const railHeading = TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 22,
+    height: 28 / 22,
+    fontWeight: FontWeight.w700,
+    letterSpacing: -0.2,
+  );
+
+  static const card = TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 18,
+    height: 22 / 18,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0,
+  );
+
+  static const body = TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 16,
+    height: 22 / 16,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+  );
+
+  static const meta = TextStyle(
+    fontFamily: 'Manrope',
+    fontSize: 14,
+    height: 18 / 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.1,
+  );
+}
+
 const monoStyle = TextStyle(
   fontFamily: 'RobotoMono',
   fontSize: 14,
@@ -246,7 +357,23 @@ const _inputBorder = OutlineInputBorder(
   borderSide: BorderSide.none,
 );
 
-ThemeData flickTheme() {
+/// On TV, Material's focus overlays are transparent so only `FocusRing` (lib/kit/focus.dart) marks focus.
+/// The phone theme is unchanged.
+ThemeData flickTheme({bool tv = false}) {
+  ButtonStyle focus(ButtonStyle style) {
+    if (!tv) return style;
+    final overlay = style.overlayColor;
+    return style.copyWith(
+      overlayColor: WidgetStateProperty.resolveWith<Color?>(
+        (states) => states.contains(WidgetState.focused) &&
+                !states.contains(WidgetState.pressed) &&
+                !states.contains(WidgetState.hovered)
+            ? Colors.transparent
+            : overlay?.resolve(states),
+      ),
+    );
+  }
+
   const scheme = ColorScheme.dark(
     primary: FlickTokens.accent,
     onPrimary: FlickTokens.onAccent,
@@ -314,6 +441,7 @@ ThemeData flickTheme() {
     canvasColor: FlickTokens.background,
     applyElevationOverlayColor: false,
     splashFactory: InkRipple.splashFactory,
+    focusColor: tv ? Colors.transparent : null,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     visualDensity: VisualDensity.standard,
     extensions: <ThemeExtension<dynamic>>[FlickColors.afterglow],
@@ -374,7 +502,7 @@ ThemeData flickTheme() {
       splashFactory: InkRipple.splashFactory,
     ),
     filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(
+      style: focus(FilledButton.styleFrom(
         backgroundColor: FlickTokens.accent,
         foregroundColor: FlickTokens.onAccent,
         disabledBackgroundColor: FlickTokens.surface2,
@@ -388,10 +516,10 @@ ThemeData flickTheme() {
         surfaceTintColor: Colors.transparent,
         animationDuration: FlickTokens.stateDuration,
         splashFactory: InkRipple.splashFactory,
-      ),
+      )),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(
+      style: focus(OutlinedButton.styleFrom(
         foregroundColor: FlickTokens.textPrimary,
         disabledForegroundColor:
             FlickTokens.textPrimary.withValues(alpha: 0.38),
@@ -402,10 +530,10 @@ ThemeData flickTheme() {
         textStyle: FlickText.button,
         animationDuration: FlickTokens.stateDuration,
         splashFactory: InkRipple.splashFactory,
-      ),
+      )),
     ),
     textButtonTheme: TextButtonThemeData(
-      style: TextButton.styleFrom(
+      style: focus(TextButton.styleFrom(
         foregroundColor: FlickTokens.textPrimary,
         disabledForegroundColor:
             FlickTokens.textPrimary.withValues(alpha: 0.38),
@@ -414,10 +542,10 @@ ThemeData flickTheme() {
         textStyle: FlickText.button,
         animationDuration: FlickTokens.stateDuration,
         splashFactory: InkRipple.splashFactory,
-      ),
+      )),
     ),
     iconButtonTheme: IconButtonThemeData(
-      style: IconButton.styleFrom(
+      style: focus(IconButton.styleFrom(
         foregroundColor: FlickTokens.textPrimary,
         disabledForegroundColor:
             FlickTokens.textPrimary.withValues(alpha: 0.38),
@@ -426,7 +554,7 @@ ThemeData flickTheme() {
         visualDensity: VisualDensity.standard,
         shape: _controlShape,
         animationDuration: FlickTokens.stateDuration,
-      ),
+      )),
     ),
     chipTheme: ChipThemeData(
       brightness: Brightness.dark,

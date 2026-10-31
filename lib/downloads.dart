@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
-import 'jellyfin.dart';
 import 'playback.dart';
 import 'torrent.dart';
 
@@ -111,7 +110,7 @@ class Downloads extends ChangeNotifier {
       error: const TaskNotification('Download failed', '{displayName}'),
       progressBar: true,
     );
-    // Foreground mode lifts Android's 9-minute limit on non-pausable transcodes.
+    // Foreground mode keeps long downloads alive past Android's background limits.
     await _fd.configure(globalConfig: (Config.runInForeground, true));
     // database.updates fires after the record is stored; _fd.updates fires before.
     _fd.database.updates.listen((r) async {
@@ -202,13 +201,6 @@ class Downloads extends ChangeNotifier {
 
   StreamDownload? streamOf(TaskRecord r) => StreamDownload.fromMetaData(r.task.metaData);
 
-  Item itemOf(TaskRecord r) {
-    final stream = streamOf(r);
-    return stream == null
-        ? Item(jsonDecode(r.task.metaData) as Map<String, dynamic>)
-        : Item({'Id': r.taskId, 'Name': stream.title, 'Type': 'Video'});
-  }
-
   File posterOf(String itemId) => File('${_posters.path}/$itemId.jpg');
 
   TaskRecord? recordFor(String itemId) =>
@@ -225,29 +217,6 @@ class Downloads extends ChangeNotifier {
     if (r == null || r.status != TaskStatus.complete) return null;
     final path = await r.task.filePath();
     return File(path).existsSync() ? path : null;
-  }
-
-  Future<void> enqueue(JellyfinClient c, Item item, Quality q) async {
-    _deleted.remove(item.id);
-    await _fd.permissions.request(PermissionType.notifications);
-    try {
-      final img = await http.get(Uri.parse(c.imageUrl(item.id)));
-      if (img.statusCode == 200) await posterOf(item.id).writeAsBytes(img.bodyBytes);
-    } catch (_) {} // poster is cosmetic
-    await _fd.enqueue(DownloadTask(
-      taskId: item.id,
-      url: c.downloadUrl(item, q),
-      filename: q == Quality.original ? item.id : '${item.id}.mp4',
-      directory: 'videos',
-      baseDirectory: BaseDirectory.applicationDocuments,
-      updates: Updates.statusAndProgress,
-      // Original is a static file with Range support; transcodes cannot resume.
-      allowPause: q == Quality.original,
-      retries: 5,
-      displayName: item.title,
-      metaData: jsonEncode(item.json),
-    ));
-    await refresh();
   }
 
   Future<void> enqueueStream({

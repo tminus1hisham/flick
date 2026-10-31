@@ -1,7 +1,9 @@
 package dev.local.flick
 
+import android.app.UiModeManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -117,8 +119,18 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler {
             runCatching {
                 val uri = Uri.parse(call.argument<String>("url")!!)
                 require(uri.scheme?.lowercase() in listOf("http", "https")) { "only http/https URLs are allowed" }
-                context.startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            }.fold({ result.success(null) }, { result.error("external", it.message ?: it.toString(), null) })
+                val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                // A TV usually has no browser; the caller then shows the URL instead.
+                if (intent.resolveActivity(context.packageManager) == null) return@runCatching false
+                context.startActivity(intent)
+                true
+            }.fold({ if (it) result.success(null) else result.error("noHandler", "No app can open this link", null) },
+                { result.error("external", it.message ?: it.toString(), null) })
+            return
+        }
+        if (call.method == "tv") {
+            val ui = context.getSystemService(Context.UI_MODE_SERVICE) as UiModeManager
+            result.success(ui.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION)
             return
         }
         // Also on the main thread: the buffering panel polls it while a torrent call may be slow.

@@ -1,25 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 
+import 'kit/focus.dart';
+import 'kit/rail.dart';
 import 'screens/discover.dart';
 import 'screens/anime.dart';
 import 'screens/downloads.dart';
-import 'screens/home.dart';
-import 'screens/library.dart';
-import 'screens/login.dart';
 import 'screens/sources.dart';
 import 'screens/torrent.dart';
 import 'state.dart';
 import 'theme.dart';
+import 'torrent.dart';
 import 'widgets.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  await session.load();
+  await settings.load();
   await downloads.init();
   await addons.load();
   await saved.load();
+  device.tv = await isTv();
+  // The remote is a keyboard: the ring shows from the first frame, even before a key press.
+  if (device.tv) FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
   runApp(const FlickApp());
 }
 
@@ -31,24 +35,16 @@ class FlickApp extends StatelessWidget {
         title: 'Flick',
         routes: {'/sources': (_) => const SourcesScreen()},
         debugShowCheckedModeBanner: false,
-        theme: flickTheme(),
+        theme: flickTheme(tv: device.tv),
+        shortcuts: device.tv ? tvShortcuts : null,
         builder: (_, child) => SplashHandoff(child: child!),
-        home: ListenableBuilder(
-          listenable: session,
-          builder: (_, _) => session.loggedIn
-              ? (session.online ? const Shell() : const OfflineShell())
-              : session.onboarded || !session.accounts
-                  ? const Shell(guest: true)
-                  : const LoginScreen(),
-        ),
+        home: const Shell(),
       );
 }
 
+/// Discover, Anime and Downloads: a bottom bar on the phone, the [FlickRail] (plus Sources) on TV.
 class Shell extends StatefulWidget {
-  const Shell({this.guest = false, super.key});
-
-  /// No server: Discover, Anime and Downloads.
-  final bool guest;
+  const Shell({super.key});
 
   @override
   State<Shell> createState() => _ShellState();
@@ -56,90 +52,111 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _tab = 0;
-  static const _home = (HomeScreen(), 'Home',
-      NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'));
-  static const _discover = (DiscoverScreen(), 'Discover',
-      NavigationDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'));
-  static const _browse = (BrowseScreen(), 'Browse',
-      NavigationDestination(
-          icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'));
-  static const _anime = (AnimeTab(), 'Anime',
-      NavigationDestination(
-          icon: AnimeGlyph(), selectedIcon: AnimeGlyph(filled: true), label: 'Anime'));
-  static const _downloads = (DownloadsScreen(), 'Downloads',
-      NavigationDestination(
-          icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'));
 
-  // Global, not ValueKeys: IndexedStack wraps each child in an unkeyed Visibility, so only a
-  // GlobalKey moves Discover's state from guest position 0 to member position 1.
-  final _keys = <String, GlobalKey>{};
+  // TV only. One scope per tab remembers its last focused item; Left at a tab's edge searches the shell.
+  final _rail = FocusScopeNode(debugLabel: 'rail');
+  final _tabs = List.generate(
+      4, (i) => FocusScopeNode(debugLabel: 'tab $i', directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope));
 
-  static List<(Widget, String, NavigationDestination)> _tabsFor(bool guest) =>
-      guest ? const [_discover, _anime, _downloads] : const [_home, _discover, _browse, _anime, _downloads];
-
-  /// Signing in or out keeps the current tab where both shells have it, so a guest who signs in
-  /// from a Discover title comes back to Discover, not Home.
   @override
-  void didUpdateWidget(Shell old) {
-    super.didUpdateWidget(old);
-    if (old.guest == widget.guest) return;
-    final (_, name, _) = _tabsFor(old.guest)[_tab];
-    final tabs = _tabsFor(widget.guest);
-    _tab = tabs.indexWhere((t) => t.$2 == name).clamp(0, tabs.length - 1);
+  void initState() {
+    super.initState();
+    // Launch is the first entry into Discover.
+    if (device.tv) WidgetsBinding.instance.addPostFrameCallback((_) => _enter());
   }
 
   @override
-  Widget build(BuildContext context) {
-    final tabs = _tabsFor(widget.guest);
-    final (_, name, _) = tabs[_tab];
-    return Scaffold(
-      // Home, Discover, Browse and Anime draw their own headers.
-      appBar: name == 'Home' || name == 'Discover' || name == 'Browse' || name == 'Anime'
-          ? null
-          : AppBar(
-              title: Text(name),
-              actions: [const MagnetButton(), if (session.showProfile) const ProfileButton()],
+  void dispose() {
+    _rail.dispose();
+    for (final t in _tabs) {
+      t.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Into the selected tab: its remembered item, else its [InitialFocus]; with neither, focus stays on the rail.
+  void _enter() => enterScope(_tabs[_tab]);
+
+  void _select(int i) {
+    setState(() => _tab = i);
+    // The tab becomes focusable once the IndexedStack shows it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _enter());
+  }
+
+  /// TV Back at the shell (system Back too): an open search or panel in the content closes first (it handles
+  /// [DismissIntent], like Escape, and answers true); then content goes to the rail's selected item; the rail
+  /// leaves the app.
+  void _back() {
+    final focus = primaryFocus?.context;
+    if (_rail.hasFocus) {
+      SystemNavigator.pop();
+    } else if (focus == null || Actions.maybeInvoke(focus, const DismissIntent()) != true) {
+      _rail.requestFocus();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => context.tv ? _tv() : _phone();
+
+  Widget _tv() => PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _back();
+        },
+        child: Scaffold(
+          body: Stack(children: [
+            Padding(
+              padding: const EdgeInsets.only(left: FlickTv.railColumn + FlickTv.contentGap),
+              child: IndexedStack(index: _tab, children: [
+                for (final (i, tab) in [
+                  DiscoverScreen(onAddSources: () => _select(3)),
+                  AnimeTab(onAddSources: () => _select(3)),
+                  Scaffold(appBar: _downloadsBar(), body: const DownloadsScreen()),
+                  const SourcesScreen(),
+                ].indexed)
+                  // Only the visible tab's posters fly: a title in two tabs' grids would be two Heroes with one tag.
+                  FocusScope(node: _tabs[i], child: HeroMode(enabled: i == _tab, child: tab)),
+              ]),
             ),
-      // Shared tabs keep their state across sign-in and sign-out.
-      body: IndexedStack(index: _tab, children: [
-        for (final (screen, name, _) in tabs) KeyedSubtree(key: _keys.putIfAbsent(name, GlobalKey.new), child: screen),
-      ]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: [for (final (_, _, destination) in tabs) destination],
-      ),
-    );
-  }
-}
-
-class OfflineShell extends StatelessWidget {
-  const OfflineShell({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Downloads'), actions: const [MagnetButton()]),
-      body: Column(children: [
-        ColoredBox(
-          color: FlickTokens.surface1,
-          child: Padding(
-            padding: const EdgeInsets.all(FlickTokens.pageGutter),
-            child: Row(children: [
-              Icon(Icons.wifi_off, color: cs.onSurfaceVariant),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text("You're offline. Downloaded videos still play.",
-                    style: Theme.of(context).textTheme.bodyMedium),
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: FlickTv.railExpanded,
+              child: FlickRail(
+                scope: _rail,
+                destinations: const [
+                  (icon: Icons.explore_outlined, label: 'Discover'),
+                  (icon: animeIcon, label: 'Anime'),
+                  (icon: Icons.download_outlined, label: 'Downloads'),
+                ],
+                bottom: (icon: Icons.settings_outlined, label: 'Sources'),
+                selected: _tab,
+                onSelect: _select,
+                onRight: _enter,
               ),
-              const SizedBox(width: 12),
-              OutlinedButton(onPressed: session.recheck, child: const Text('Reconnect')),
-            ]),
-          ),
+            ),
+          ]),
         ),
-        const Expanded(child: DownloadsScreen()),
-      ]),
-    );
-  }
+      );
+
+  Widget _phone() => Scaffold(
+        // Discover and Anime draw their own headers.
+        appBar: _tab == 2 ? _downloadsBar() : null,
+        body: IndexedStack(index: _tab, children: const [DiscoverScreen(), AnimeTab(), DownloadsScreen()]),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (i) => setState(() => _tab = i),
+          destinations: const [
+            NavigationDestination(
+                icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'),
+            NavigationDestination(
+                icon: AnimeGlyph(), selectedIcon: AnimeGlyph(filled: true), label: 'Anime'),
+            NavigationDestination(
+                icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'),
+          ],
+        ),
+      );
 }
+
+AppBar _downloadsBar() => AppBar(title: const Text('Downloads'), actions: const [MagnetButton()]);

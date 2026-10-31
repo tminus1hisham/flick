@@ -92,3 +92,10 @@ User: Jellyfin and addon/torrent series; Autoplay switch in the player (card + a
   - The torrent start screen titles itself with the episode ("Slow Horses · S1 E3 · …") instead of "Stream a link". Its stock AppBar and raw file path stay: a redesign of that screen is a follow-up for Codex, not part of Up Next.
   - Leaving media_kit fullscreen (on its own or when the card appears) re-applies immersive landscape; media_kit's default showed the bars and unlocked rotation.
   - media_kit 2.0.1 never rebuilds its button bars on a theme change (inverted `updateShouldNotify`): anything in a bar that changes after the first build must listen for itself (the Next button does).
+
+## TV (2026-10-31)
+- Overrode Codex: the focus ring appears in 0 ms (D-pad moves are high-frequency keyboard actions; emil-design-eng "never animate keyboard-initiated actions"); only the poster lift animates (100 ms).
+- Overrode the critic's 18 dp poster gap: 12 dp, so five posters fit the 768 dp content area; posters are derived from the width (140×210 at 960) to leave ring clearance.
+- Codex spec review closed after 3 rounds at REVISE on two points: the Title height sum (Codex's 498 was an addition slip; it is 398) and the lazy-list boundary (answered with an index fallback, spec revision 3).
+- Ponytail cuts: no hero/backdrop on Discover, no Quick Connect/LAN discovery (no Jellyfin), no Miruro on TV, no goldens, no separate TV APK, low-RAM tuning only as a Phase C experiment.
+- TV Anime (step 3): Discover's TV header, outlined chips and grid, minus the Movies/Series switch and Search (Kitsu only, no Miruro). The grid starts one row higher than Discover's. The empty state keeps the phone copy ("No anime catalogs are switched on.") with Discover's "Add sources" action. Rail glyph: Codex picked `Icons.local_florist_outlined` (blossom; runner-up `auto_awesome_outlined`, which reads as "recommendations"); the critic (round 1) found its petals solid, heavier than the rail's line glyphs, so it is `filter_vintage_outlined` (`animeIcon`), the same flower in lines, also the empty state's icon; the phone bottom bar keeps `animation_outlined` for now.

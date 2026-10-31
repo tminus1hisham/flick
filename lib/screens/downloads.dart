@@ -4,11 +4,8 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 
 import '../downloads.dart';
-import '../jellyfin.dart';
 import '../state.dart';
 import '../theme.dart';
-import 'account.dart';
-import 'detail.dart';
 import 'player.dart';
 
 class DownloadsScreen extends StatelessWidget {
@@ -18,12 +15,13 @@ class DownloadsScreen extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: downloads,
         builder: (context, _) {
-          final records = downloads.records;
+          // Only stream downloads play; a record without stream metadata is skipped.
+          final records = [
+            for (final r in downloads.records)
+              if (downloads.streamOf(r) case final stream?) (r, stream),
+          ];
           final torrents = downloads.torrentRecords;
-          // Files from an earlier sign-in still list and play; only an empty guest list asks to sign in.
-          if (records.isEmpty && torrents.isEmpty && !downloads.torrentError) {
-            return session.unlocked ? const _Empty() : const SignInPrompt();
-          }
+          if (records.isEmpty && torrents.isEmpty && !downloads.torrentError) return const _Empty();
           final cs = Theme.of(context).colorScheme;
           return ListView(children: [
             Padding(
@@ -59,22 +57,12 @@ class DownloadsScreen extends StatelessWidget {
                 ]),
               ),
             for (final r in torrents)
-              DownloadRow.torrent(
-                download: r,
-                item: Item({'Id': r.taskId, 'Name': r.stream.title, 'Type': 'Video'}),
-                poster: downloads.posterOf(r.taskId),
-              ),
-            for (final r in records) _row(r),
+              DownloadRow.torrent(download: r, poster: downloads.posterOf(r.taskId)),
+            for (final (r, stream) in records)
+              DownloadRow(record: r, poster: downloads.posterOf(r.taskId), stream: stream),
           ]);
         },
       );
-
-  Widget _row(TaskRecord r) {
-    final item = downloads.itemOf(r);
-    return DownloadRow(
-      record: r, item: item, poster: downloads.posterOf(item.id), stream: downloads.streamOf(r),
-    );
-  }
 }
 
 class _Empty extends StatelessWidget {
@@ -102,14 +90,13 @@ class _Empty extends StatelessWidget {
 
 /// One download row. Public only so previews can render it without the manager.
 class DownloadRow extends StatefulWidget {
-  const DownloadRow({super.key, required this.record, required this.item, required this.poster, this.stream})
+  const DownloadRow({super.key, required this.record, required this.poster, required StreamDownload this.stream})
       : torrent = null;
   const DownloadRow.torrent({
-    super.key, required TorrentDownload download, required this.item, required this.poster,
+    super.key, required TorrentDownload download, required this.poster,
   }) : torrent = download, record = null, stream = null;
   final TaskRecord? record;
   final TorrentDownload? torrent;
-  final Item item;
   final File poster;
   final StreamDownload? stream;
 
@@ -121,7 +108,7 @@ class _DownloadRowState extends State<DownloadRow> {
   String? _error;
   bool _deleting = false;
 
-  StreamDownload? get _stream => widget.torrent?.stream ?? widget.stream;
+  StreamDownload get _stream => widget.torrent?.stream ?? widget.stream!;
   String get _taskId => widget.torrent?.taskId ?? widget.record!.taskId;
 
   Future<void> _playStream() async {
@@ -133,12 +120,11 @@ class _DownloadRowState extends State<DownloadRow> {
         return;
       }
       setState(() => _error = null);
-      final stream = _stream!;
+      final stream = _stream;
       final p = stream.playback;
       final title = p.subtitle == null ? stream.title : '${stream.title} · ${p.subtitle}';
       await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
-        item: Item({'Id': p.videoId, 'Name': title, 'Type': 'Video'}),
-        source: path, report: false, headers: const {}, playback: p,
+        title: title, source: path, headers: const {}, playback: p,
       )));
     } catch (_) {
       if (mounted) setState(() => _error = "Couldn't open this download. Try again.");
@@ -170,7 +156,6 @@ class _DownloadRowState extends State<DownloadRow> {
     final r = widget.record;
     final torrent = widget.torrent;
     final stream = _stream;
-    final item = widget.item;
     final poster = widget.poster;
     final status = torrent?.status ?? r!.status;
     final progress = torrent?.progress ?? r!.progress;
@@ -198,7 +183,7 @@ class _DownloadRowState extends State<DownloadRow> {
     final error = _error ?? torrent?.info?.error;
 
     return InkWell(
-      onTap: done && !_deleting ? () => stream == null ? play(context, item) : _playStream() : null,
+      onTap: done && !_deleting ? _playStream : null,
       child: Container(
         padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 16, 4, 16),
         decoration: BoxDecoration(border: Border(bottom: BorderSide(color: cs.outline))),
@@ -224,8 +209,8 @@ class _DownloadRowState extends State<DownloadRow> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.titleSmall),
-                  if (stream?.playback.subtitle case final String subtitle) ...[
+                  Text(stream.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.titleSmall),
+                  if (stream.playback.subtitle case final String subtitle) ...[
                     const SizedBox(height: 2),
                     Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis,
                         style: t.labelMedium?.copyWith(color: cs.onSurfaceVariant)),
@@ -270,8 +255,8 @@ class _DownloadRowState extends State<DownloadRow> {
               icon: const Icon(Icons.pause),
               onPressed: () => downloads.pause(r),
             ),
-          // Addon tasks retain their own request headers and do not need a Jellyfin session.
-          if (paused && r != null && (stream != null || session.loggedIn))
+          // Tasks keep their own request headers, so they resume as they were queued.
+          if (paused && r != null)
             IconButton(
               tooltip: 'Resume download',
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),

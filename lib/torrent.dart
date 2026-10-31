@@ -159,6 +159,17 @@ class TorrentEngine {
 /// A download rate for display, such as "1.8 MB/s".
 String formatRate(int bytesPerSec) => '${(bytesPerSec / (1 << 20)).toStringAsFixed(1)} MB/s';
 
+/// Whether Flick runs on an Android TV. False when it can't tell.
+Future<bool> isTv() async {
+  try {
+    return await TorrentEngine._ch.invokeMethod<bool>('tv') ?? false;
+  } on MissingPluginException {
+    return false;
+  } on PlatformException {
+    return false;
+  }
+}
+
 /// Whether the phone has a validated network. True when it can't tell.
 Future<bool> networkOnline() async {
   try {

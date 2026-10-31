@@ -8,8 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
-import '../jellyfin.dart';
 import '../kit/route.dart';
+import '../kit/focus.dart';
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
 import '../stall.dart';
@@ -20,6 +20,7 @@ import '../upnext.dart';
 import '../widgets.dart';
 import 'buffering.dart';
 import 'upnext.dart';
+import 'tv_player.dart';
 
 typedef _Caption = ({
   SubtitleTrack track,
@@ -136,9 +137,8 @@ bool stoppedEarly({
 
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
-    required this.item,
-    this.source,
-    this.report = true,
+    required this.title,
+    required this.source,
     this.headers = const {},
     this.subtitles = const [],
     this.playback,
@@ -152,7 +152,9 @@ class PlayerScreen extends StatefulWidget {
   final Playback? playback;
   final String? filename, hash;
   final int? size;
-  final Item item;
+
+  /// Shown when there is no [playback], e.g. for a pasted magnet link.
+  final String title;
   final Map<String, String> headers;
   final List<Subtitle> subtitles;
 
@@ -162,15 +164,8 @@ class PlayerScreen extends StatefulWidget {
   /// The next episode, for Up Next; the route pops with its `resolve()` answer. Null for movies.
   final Future<NextUp?>? next;
 
-  /// Plays this file/URL instead of streaming from Jellyfin.
-  final String? source;
-
-  /// Report playback progress to Jellyfin for [item].
-  final bool report;
-
-  /// Stremio addon or torrent stream. Jellyfin items, streamed or downloaded
-  /// (those pass [source] too), keep the plain Jellyfin player.
-  bool get addonPlayback => !report;
+  /// An addon stream URL, the local torrent stream server or a downloaded file.
+  final String source;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -181,12 +176,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     configuration: const PlayerConfiguration(bufferSize: 400 * 1024 * 1024),
   );
   late final _controller = VideoController(_player);
-  final _stalls = StallDetector();
   final _pauseWait = PauseWait();
   final _subs = <StreamSubscription>[];
-  Quality _quality = Quality.original;
-  bool _started = false, _prompted = false;
-  Timer? _progress;
+  bool _started = false;
   String? _error;
   bool _retrying = false;
   // Buffering panel (addon playback). An episode runs from open() to the first
@@ -208,6 +200,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   List<Subtitle> _catalogue = [];
   final _entryFocus = FocusNode();
   final _headingFocus = FocusNode();
+  final _tvLanguageFocus = FocusNode(debugLabel: 'Subtitle language');
+  final _tvLanguageChoice = FocusNode(debugLabel: 'Selected subtitle language');
   final _scrolls = <String, ScrollController>{};
   SubtitleTrack? _selected;
   _Caption? _failed;
@@ -216,9 +210,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Subtitle file text and the mpv track id it was added as, by URL.
   final _subtitleFiles = <String, String>{};
   final _added = <String, String>{};
-  ScaffoldMessengerState? _messenger;
-  // open() resets state.position to 0 until mpv reports time-pos; report this instead.
-  late Duration _pos = widget.item.resumePosition;
+  // open() resets state.position to 0 until mpv reports time-pos; Retry and the stop check use this instead.
+  Duration _pos = Duration.zero;
   // Up Next (design/upnext.md). _token invalidates a commit in flight on dispose.
   NextUp? _next;
   Future<Object?>? _resolved;
@@ -231,14 +224,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // media_kit 2.0.1 never rebuilds its button bars when the theme changes
   // (its updateShouldNotify is inverted), so the Next button listens itself.
   final _nextBar = ValueNotifier(0);
+  final _tvRefresh = ValueNotifier(0);
   final _video = GlobalKey<VideoState>();
 
   // Up Next pushes the next player before this one is disposed: only the last
   // one out restores the system bars and rotation.
   static int _live = 0;
-
-  JellyfinClient? get _client =>
-      widget.report && session.online ? session.client : null;
 
   @override
   void initState() {
@@ -248,11 +239,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _subs
       ..add(
         _player.stream.position.listen((p) {
+          if (device.tv) _tvRefresh.value++;
           // Before the early return: a seek to the start must reset Up Next.
           _upNext(p);
           if (p <= Duration.zero) return;
           _pos = p;
-          if (!widget.addonPlayback) return;
           _pauseWait.position(p, DateTime.now());
           if (!_started) {
             // Errors before playback started weren't fatal after all.
@@ -281,18 +272,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ..add(
         _player.stream.completed.listen((done) {
           _completed = done;
-          _endedEarly = done && widget.addonPlayback && _stoppedEarly;
+          _endedEarly = done && _stoppedEarly;
           if (_endedEarly) _fatalError();
           _upNext();
         }),
       )
       ..add(
         _player.stream.playing.listen((playing) {
+          if (device.tv) _tvRefresh.value++;
           if (!playing && _lastPlaybackError != null) _checkStopped();
         }),
       )
       ..add(
         _player.stream.duration.listen((d) {
+          if (device.tv) _tvRefresh.value++;
           _upNext();
           final t = widget.torrent, size = widget.size;
           if (_bitrateSent || t == null || size == null || d.inSeconds <= 0) {
@@ -303,13 +296,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
           t.engine.bitrate(t.id, size ~/ d.inSeconds).catchError((_) {});
         }),
       )
+      ..add(
+        _player.stream.buffer.listen((_) {
+          if (device.tv) _tvRefresh.value++;
+        }),
+      )
       ..add(_player.stream.buffering.listen(_onBuffering))
       ..add(_player.stream.bufferingPercentage.listen((_) {
         if (mounted && widget.addonPlayback && _since != null) setState(() {});
       }))
       ..add(_player.stream.error.listen(_showError));
     _init().catchError(_showError);
-    if (widget.addonPlayback && widget.playback != null) _fetchSubtitles();
+    if (widget.playback != null) _fetchSubtitles();
     widget.next?.then((next) {
       if (!mounted) return;
       setState(() => _next = next);
@@ -330,10 +328,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   UpNextView _upNextView(NextUp next, Duration position) => upNextView(
     position: position,
     duration: _player.state.duration,
-    outro: next.outro,
     dismissed: _dismissed,
     forced: _forced,
-    autoplay: session.autoplayNext,
+    autoplay: settings.autoplayNext,
     counted: _counted,
     resolving: _resolving,
   );
@@ -345,8 +342,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final next = _next;
     if (next == null || !mounted) return;
     final p = position ?? _player.state.position;
-    final at = upNextAt(_player.state.duration, outro: next.outro);
-    // Not at 0: open() (Retry, a quality switch) reports 0 until mpv seeks to
+    final at = upNextAt(_player.state.duration);
+    // Not at 0: open() (Retry) reports 0 until mpv seeks to
     // its start, and that is no seek back.
     if (at != null && p > Duration.zero && p < at) {
       _counted = Duration.zero;
@@ -362,9 +359,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } else if (!view.visible && _shown?.visible == true) {
       // The card's controls are gone: hand focus back to the player.
-      _entryFocus.requestFocus();
+      if (!device.tv) _entryFocus.requestFocus();
     }
-    if (view.visible && session.autoplayNext && !_committed) {
+    if (view.visible && settings.autoplayNext && !_committed) {
       _countdown ??= Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     } else {
       _countdown?.cancel();
@@ -375,7 +372,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         onCompletion(
               stoppedEarly: _endedEarly,
               visible: view.visible,
-              autoplay: session.autoplayNext,
+              autoplay: settings.autoplayNext,
               dismissed: _dismissed,
               panel: _panel,
             ) ==
@@ -391,7 +388,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (next == null || !mounted) return;
     final eligible = countdownEligible(
       visible: _upNextView(next, _player.state.position).visible,
-      autoplay: session.autoplayNext,
+      autoplay: settings.autoplayNext,
       committed: _committed,
       playing: _player.state.playing,
       buffering: _player.state.buffering,
@@ -457,7 +454,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _setAutoplay(bool on) {
     setState(() {
-      session.autoplayNext = on;
+      settings.autoplayNext = on;
       _counted = Duration.zero;
     });
     _upNext();
@@ -578,31 +575,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _showError(Object e) {
     debugPrint('player: $e');
-    if (widget.addonPlayback) {
-      final message = '$e'.toLowerCase();
-      if (message.contains('subtitle') || message.contains('sub-add')) {
-        // _choose reports a file that failed to load; these never end playback.
-        if (_pending != null) _applicationError = '$e';
-        return;
-      }
-      _lastPlaybackError = '$e';
-      // Before the first frame too, only a stopped player is a failure.
-      _checkStopped();
-      // mpv logs the error before it goes idle and media_kit reports no
-      // stop after a failed load, so look again shortly.
-      if (!_started) {
-        for (final s in [1, 3]) {
-          Timer(Duration(seconds: s), () {
-            if (mounted && !_started && _lastPlaybackError != null) {
-              _checkStopped();
-            }
-          });
-        }
-      }
+    final message = '$e'.toLowerCase();
+    if (message.contains('subtitle') || message.contains('sub-add')) {
+      // _choose reports a file that failed to load; these never end playback.
+      if (_pending != null) _applicationError = '$e';
       return;
     }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    _lastPlaybackError = '$e';
+    // Before the first frame too, only a stopped player is a failure.
+    _checkStopped();
+    // mpv logs the error before it goes idle and media_kit reports no
+    // stop after a failed load, so look again shortly.
+    if (!_started) {
+      for (final s in [1, 3]) {
+        Timer(Duration(seconds: s), () {
+          if (mounted && !_started && _lastPlaybackError != null) {
+            _checkStopped();
+          }
+        });
+      }
     }
   }
 
@@ -814,7 +805,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Closing the panel releases a held countdown or a completion waiting on it.
     _upNext();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) (_panel ? _headingFocus : _entryFocus).requestFocus();
+      if (mounted && !device.tv) {
+        (_panel ? _headingFocus : _entryFocus).requestFocus();
+      }
     });
   }
 
@@ -839,122 +832,63 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _init() async {
     final mpv = _player.platform as NativePlayer;
-    final addon = widget.addonPlayback;
     // Buffer hard up front and after a stall instead of stuttering.
-    // Jellyfin read-ahead is bounded by bufferSize (demuxer-max-bytes) only.
     for (final (k, v) in [
-      if (addon) ('demuxer-max-bytes', '${128 * 1024 * 1024}'),
-      ('demuxer-max-back-bytes', '${(addon ? 16 : 100) * 1024 * 1024}'),
+      ('demuxer-max-bytes', '${128 * 1024 * 1024}'),
+      ('demuxer-max-back-bytes', '${16 * 1024 * 1024}'),
       ('cache-pause-initial', 'yes'),
-      // Addon playback resumes sooner; _onBuffering raises it if stalls repeat.
-      ('cache-pause-wait', addon ? '${_pauseWait.seconds}' : '8'),
+      // Resumes sooner; _onBuffering raises it if stalls repeat.
+      ('cache-pause-wait', '${_pauseWait.seconds}'),
       // The torrent server holds a request open until its piece downloads, so outwait
       // media_kit's 5 s network-timeout, and reconnect at the current offset if it drops an idle one.
-      if (addon) ('network-timeout', widget.torrent != null ? '120' : '30'),
-      if (addon)
-        (
-          'stream-lavf-o',
-          'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5',
-        ),
+      ('network-timeout', widget.torrent != null ? '120' : '30'),
+      (
+        'stream-lavf-o',
+        'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5',
+      ),
     ]) {
       if (!mounted) return;
       await mpv.setProperty(k, v);
     }
     if (!mounted) return;
     await _open(_pos);
-    if (!mounted) return;
-    _report((c) => c.reportStart(widget.item.id, _pos));
-    _progress = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _report(
-        (c) => c.reportProgress(
-          widget.item.id,
-          _pos,
-          paused: !_player.state.playing,
-        ),
-      ),
-    );
   }
 
   Future<void> _open(Duration start) {
-    if (widget.addonPlayback) {
-      _openedAt = start;
-      _beginEpisode(opening: true);
-    }
+    _openedAt = start;
+    _beginEpisode(opening: true);
     return _player.open(
-      Media(
-        widget.source ?? session.client!.playUrl(widget.item, _quality),
-        start: start,
-        httpHeaders: widget.headers,
-      ),
+      Media(widget.source, start: start, httpHeaders: widget.headers),
     );
   }
 
-  void _report(Future<void> Function(JellyfinClient) call) {
-    final c = _client;
-    if (c != null) call(c).catchError((_) {}); // progress is best-effort
-  }
-
   void _onBuffering(bool buffering) {
-    if (widget.addonPlayback &&
-        _pauseWait.buffering(buffering, DateTime.now())) {
+    if (_pauseWait.buffering(buffering, DateTime.now())) {
       (_player.platform as NativePlayer)
           .setProperty('cache-pause-wait', '${_pauseWait.seconds}')
           .catchError((Object e) => debugPrint('cache-pause-wait: $e'));
     }
-    if (widget.addonPlayback && _started && !_opening) {
+    if (_started && !_opening) {
       if (buffering && _since == null) _beginEpisode(opening: false);
       if (!buffering && _since != null) _endEpisode();
     }
-    if (!buffering) {
-      // The first buffer-complete after real playback position ends the initial fill.
-      // Addon playback starts in the position listener, which also clears early errors.
-      if (_player.state.position > Duration.zero && !widget.addonPlayback) {
-        _started = true;
-      }
-      return;
-    }
-    // ponytail: out-of-cache seeks also count as stalls.
-    if (!_started || _prompted) return;
-    if (widget.source != null || _quality != Quality.original) return;
-    if (!_stalls.record(DateTime.now())) return;
-    _prompted = true;
-    _messenger = ScaffoldMessenger.of(context)
-      ..showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 15),
-          content: const Text('Playback keeps stalling on this connection'),
-          action: SnackBarAction(
-            label: 'Use 1.5 Mbps',
-            onPressed: () => _switch(Quality.mbps1_5),
-          ),
-        ),
-      );
-  }
-
-  Future<void> _switch(Quality q) async {
-    if (q == _quality || !mounted) return;
-    setState(() => _quality = q);
-    _stalls.reset();
-    await _open(_pos);
   }
 
   @override
   void dispose() {
     _entryFocus.dispose();
     _headingFocus.dispose();
+    _tvLanguageFocus.dispose();
+    _tvLanguageChoice.dispose();
     _languageSearch.dispose();
     for (final controller in _scrolls.values) {
       controller.dispose();
     }
-    _messenger?.hideCurrentSnackBar();
-    final pos = _pos;
-    _report((c) => c.reportStopped(widget.item.id, pos));
-    _progress?.cancel();
     _endTimers();
     _countdown?.cancel();
     _token++;
     _nextBar.dispose();
+    _tvRefresh.dispose();
     for (final s in _subs) {
       s.cancel();
     }
@@ -968,76 +902,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final item = widget.item;
+    if (context.tv) return _buildTv();
     final next = _next;
     final bar = <Widget>[
       _TopBar(
-        title: widget.playback?.title ?? headline(item),
-        subtitle: widget.playback?.subtitle ?? episodeLine(item),
+        title: widget.playback?.title ?? widget.title,
+        subtitle: widget.playback?.subtitle,
         buffer: _BufferAhead(_player),
-        subtitles: !widget.addonPlayback
-            ? null
-            : Semantics(
-                label: 'Subtitles, $_activeSubtitle',
-                button: true,
-                child: TextButton.icon(
-                  focusNode: _entryFocus,
-                  style: TextButton.styleFrom(
-                    fixedSize: const Size(96, 48),
-                    padding: EdgeInsets.zero,
-                    foregroundColor: FlickTokens.textPrimary,
-                    textStyle: FlickText.button,
-                  ),
-                  onPressed: _togglePanel,
-                  icon: const Icon(Icons.closed_caption_outlined, size: 20),
-                  label: const Text('Subtitles'),
-                ),
-              ),
-        quality: widget.source == null
-            ? PopupMenuButton<Quality>(
-                tooltip: 'Playback quality',
-                initialValue: _quality,
-                onSelected: _switch,
-                itemBuilder: (_) => [
-                  for (final q in Quality.values)
-                    PopupMenuItem(value: q, child: Text(q.label)),
-                ],
-                child: SizedBox(
-                  height: 48,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.high_quality, color: Colors.white),
-                      const SizedBox(width: 6),
-                      Text(
-                        _quality.label,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.labelLarge?.copyWith(color: Colors.white),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                  ),
-                ),
-              )
-            : null,
+        subtitles: Semantics(
+          label: 'Subtitles, $_activeSubtitle',
+          button: true,
+          child: TextButton.icon(
+            focusNode: _entryFocus,
+            style: TextButton.styleFrom(
+              fixedSize: const Size(96, 48),
+              padding: EdgeInsets.zero,
+              foregroundColor: FlickTokens.textPrimary,
+              textStyle: FlickText.button,
+            ),
+            onPressed: _togglePanel,
+            icon: const Icon(Icons.closed_caption_outlined, size: 20),
+            label: const Text('Subtitles'),
+          ),
+        ),
       ),
     ];
     final theme = MaterialVideoControlsThemeData(
       topButtonBar: bar,
       topButtonBarMargin: EdgeInsets.zero,
       buttonBarHeight: 64,
-      // Jellyfin: media_kit's default bar (position, spacer, fullscreen).
       bottomButtonBar: [
         const MaterialPositionIndicator(),
         const Spacer(),
-        if (widget.addonPlayback)
-          IconButton(
-            tooltip: 'Subtitles',
-            onPressed: _togglePanel,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            icon: const Icon(Icons.closed_caption_outlined),
-          ),
+        IconButton(
+          tooltip: 'Subtitles',
+          onPressed: _togglePanel,
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          icon: const Icon(Icons.closed_caption_outlined),
+        ),
         if (widget.next != null)
           ListenableBuilder(
             listenable: _nextBar,
@@ -1054,9 +956,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       seekBarPositionColor: FlickTokens.accent,
       seekBarThumbColor: FlickTokens.accent,
       // Addon playback shows BufferingPanel instead.
-      bufferingIndicatorBuilder: widget.addonPlayback
-          ? (_) => const SizedBox.shrink()
-          : null,
+      bufferingIndicatorBuilder: (_) => const SizedBox.shrink(),
     );
     return PopScope(
       canPop: !_panel,
@@ -1090,7 +990,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
                 ),
               ),
-              if (widget.addonPlayback && _error == null)
+              if (_error == null)
                 Positioned.fill(
                   child: ExcludeFocus(
                     excluding: _panel,
@@ -1099,7 +999,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       child: BufferingPanel(
                         view: _bufferView,
                         waiting: _since != null,
-                        title: widget.playback?.title ?? widget.item.name,
+                        title: widget.playback?.title ?? widget.title,
                         logo: widget.playback?.logo,
                         poster: widget.playback?.poster,
                         onSwitch: () => Navigator.pop(context),
@@ -1126,7 +1026,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             child: UpNextCard(
                               view: _upNextView(next, _player.state.position),
                               episode: next.episode,
-                              autoplay: session.autoplayNext,
+                              autoplay: settings.autoplayNext,
                               onNext: _commit,
                               onDismiss: () {
                                 setState(() => _dismissed = true);
@@ -1187,48 +1087,308 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
-              if (widget.addonPlayback) ...[
-                if (_panel)
-                  Positioned.fill(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      excludeFromSemantics: true,
-                      onTap: () => _togglePanel(false),
-                    ),
-                  ),
+              if (_panel)
                 Positioned.fill(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: FractionallySizedBox(
-                      widthFactor: .5,
-                      heightFactor: 1,
-                      child: AnimatedSlide(
-                        offset: _panel ? Offset.zero : const Offset(1, 0),
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : FlickTokens.sheetDuration,
-                        curve: _panel
-                            ? FlickTokens.curveIn
-                            : FlickTokens.curveOut,
-                        child: IgnorePointer(
-                          ignoring: !_panel,
-                          child: ExcludeFocus(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    excludeFromSemantics: true,
+                    onTap: () => _togglePanel(false),
+                  ),
+                ),
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FractionallySizedBox(
+                    widthFactor: .5,
+                    heightFactor: 1,
+                    child: AnimatedSlide(
+                      offset: _panel ? Offset.zero : const Offset(1, 0),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : FlickTokens.sheetDuration,
+                      curve: _panel
+                          ? FlickTokens.curveIn
+                          : FlickTokens.curveOut,
+                      child: IgnorePointer(
+                        ignoring: !_panel,
+                        child: ExcludeFocus(
+                          excluding: !_panel,
+                          child: ExcludeSemantics(
                             excluding: !_panel,
-                            child: ExcludeSemantics(
-                              excluding: !_panel,
-                              child: _tracksPanel(),
-                            ),
+                            child: _tracksPanel(),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ],
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTv() => Scaffold(
+    backgroundColor: FlickTokens.background,
+    body: Stack(
+      children: [
+        Video(
+          key: _video,
+          controller: _controller,
+          controls: NoVideoControls,
+          onExitFullscreen: _immersive,
+        ),
+        Positioned.fill(
+          child: ListenableBuilder(
+            listenable: _tvRefresh,
+            builder: (context, _) {
+              final next = _next;
+              final view = next == null
+                  ? null
+                  : _upNextView(next, _player.state.position);
+              return TvPlayerControls(
+                title: widget.playback?.title ?? widget.title,
+                subtitle: widget.playback?.subtitle,
+                position: _player.state.position,
+                duration: _player.state.duration,
+                buffer: _player.state.buffer,
+                playing: _player.state.playing,
+                panel: _panel,
+                tracks: _panel ? _tracksPanelTv() : const SizedBox(),
+                buffering: _bufferView,
+                error: _error,
+                retrying: _retrying,
+                subtitlesOn: _activeSubtitle != 'Off',
+                onToggle: () => _player.playOrPause().catchError(_showError),
+                onSeek: (at) => _player.seek(at).catchError(_showError),
+                onExit: () => Navigator.pop(context),
+                onRetry: _retry,
+                onTracks: () => _togglePanel(true),
+                onCloseTracks: () {
+                  if (_languages) {
+                    _tvLanguages(false);
+                  } else {
+                    _togglePanel(false);
+                  }
+                },
+                onNext: next == null || _resolving
+                    ? null
+                    : () => _commit(forced: true),
+                upNextVisible: view?.visible ?? false,
+                upNext: next == null
+                    ? null
+                    : UpNextCard(
+                        view: view!,
+                        episode: next.episode,
+                        autoplay: settings.autoplayNext,
+                        onNext: _commit,
+                        onDismiss: () {
+                          setState(() => _dismissed = true);
+                          _upNext();
+                        },
+                        onAutoplay: _setAutoplay,
+                      ),
+              );
+            },
+          ),
+        ),
+      ],
+    ),
+  );
+
+  void _tvLanguages(bool open) {
+    setState(() => _languages = open);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _panel) {
+        (open ? _tvLanguageChoice : _tvLanguageFocus).requestFocus();
+      }
+    });
+  }
+
+  Widget _tracksPanelTv() {
+    final captions = _captions;
+    final languages = captions.map((c) => c.lang).toSet();
+    final language = _language ?? languages.firstOrNull;
+    final active = _selected ?? _player.state.track.subtitle;
+    Widget row(
+      String label,
+      VoidCallback? onTap, {
+      bool selected = false,
+      String? detail,
+      FocusNode? node,
+    }) {
+      final child = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: RevealArea(
+          child: Semantics(
+            selected: selected,
+            child: FocusFrame.button(
+              semanticLabel: [label, ?detail].join(', '),
+              onActivate: onTap,
+              focusNode: node,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    if (selected) ...[
+                      const SlashMarker(),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            label,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: FlickTv.body,
+                          ),
+                          if (detail != null)
+                            Text(
+                              detail,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: FlickTv.meta.copyWith(
+                                color: FlickTokens.textSecondary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      return selected ? InitialFocus(child: child) : child;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          _languages ? 'Languages' : 'Subtitles & audio',
+          style: FlickTv.railHeading,
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(FlickTv.gridPad),
+            children: [
+              if (_languages) ...[
+                for (final lang in languages)
+                  row(
+                    subtitleLanguageName(lang),
+                    () {
+                      _language = lang;
+                      _tvLanguages(false);
+                    },
+                    selected: lang == language,
+                    node: lang == language ? _tvLanguageChoice : null,
+                  ),
+                if (languages.isEmpty)
+                  Text('No subtitle languages available', style: FlickTv.body),
+              ] else ...[
+                row(
+                  'Off',
+                  _pending == null
+                      ? () => _choose((
+                          track: SubtitleTrack.no(),
+                          url: null,
+                          lang: language ?? 'und',
+                          label: 'Off',
+                          detail: '',
+                        ))
+                      : null,
+                  selected: active.id == 'no' || active.id == 'auto',
+                ),
+                row(
+                  'Language',
+                  languages.isEmpty ? null : () => _tvLanguages(true),
+                  node: _tvLanguageFocus,
+                  detail: language == null
+                      ? 'Choose language'
+                      : subtitleLanguageName(language),
+                ),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Skeleton(height: 48),
+                  ),
+                if (_catalogueError != null)
+                  row(
+                    'Retry subtitles',
+                    _fetchSubtitles,
+                    detail: _catalogueError,
+                  ),
+                if (_subtitleError != null)
+                  row('Retry subtitle file', () {
+                    if (_failed case final caption?) _choose(caption);
+                  }, detail: _subtitleError),
+                if (_notice != null)
+                  row(
+                    'Choose language',
+                    languages.isEmpty ? null : () => _tvLanguages(true),
+                    detail: _notice,
+                  ),
+                if (!_loading && _catalogueError == null && captions.isEmpty)
+                  row('Retry subtitles', () {
+                    _fetched = false;
+                    _fetchSubtitles();
+                  }, detail: 'No subtitles found for this episode'),
+                for (final caption in captions.where((c) => c.lang == language))
+                  row(
+                    caption.label,
+                    _pending == null ? () => _choose(caption) : null,
+                    selected: active.id == caption.track.id,
+                    detail: _pending == (caption.url ?? caption.track.id)
+                        ? 'Opening subtitles…'
+                        : caption.detail,
+                  ),
+                const SizedBox(height: 16),
+                Text('Audio', style: FlickTv.card),
+                for (final audio in _player.state.tracks.audio.where(
+                  (a) => a.id != 'no' && a.id != 'auto',
+                ))
+                  row(
+                    audio.title ??
+                        subtitleLanguageName(audio.language ?? 'und'),
+                    () async {
+                      try {
+                        await _player.setAudioTrack(audio);
+                      } catch (e) {
+                        if (mounted) {
+                          setState(() => _subtitleError = friendlyError(e));
+                        }
+                      }
+                    },
+                    selected: audio.id == _player.state.track.audio.id,
+                  ),
+                if (_next != null)
+                  row(
+                    'Autoplay next episode',
+                    _resolving
+                        ? null
+                        : () => _setAutoplay(!settings.autoplayNext),
+                    detail: settings.autoplayNext ? 'On' : 'Off',
+                  ),
+              ],
+              row(_languages ? 'Back to subtitles' : 'Close', () {
+                if (_languages) {
+                  _tvLanguages(false);
+                } else {
+                  _togglePanel(false);
+                }
+              }),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1648,7 +1808,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                   ],
                                   if (_next != null)
                                     SwitchListTile(
-                                      value: session.autoplayNext,
+                                      value: settings.autoplayNext,
                                       onChanged: _resolving
                                           ? null
                                           : _setAutoplay,
@@ -1732,19 +1892,17 @@ class _BufferAhead extends StatelessWidget {
   );
 }
 
-/// Back target, title block (with buffer readout) and optional quality menu over a soft scrim.
+/// Back target, title block (with buffer readout) and the subtitles entry over a soft scrim.
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.title,
     this.subtitle,
     required this.buffer,
-    this.quality,
     this.subtitles,
   });
   final String title;
   final String? subtitle;
   final Widget buffer;
-  final Widget? quality;
   final Widget? subtitles;
 
   @override
@@ -1791,7 +1949,6 @@ class _TopBar extends StatelessWidget {
                 ],
               ),
             ),
-            ?quality,
             ?subtitles,
             const SizedBox(width: 8),
           ],

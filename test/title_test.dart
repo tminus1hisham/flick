@@ -9,6 +9,7 @@ import 'package:flick/screens/title.dart';
 import 'package:flick/state.dart';
 import 'package:flick/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Addon implements Addon {
@@ -194,7 +195,7 @@ void main() {
     expect(json.containsKey('url'), isFalse);
   });
 
-  test('stream metadata round trips a movie and leaves Jellyfin metadata alone', () {
+  test('stream metadata round trips a movie and ignores metadata without stream fields', () {
     const Playback p = (
       title: 'The Kid',
       subtitle: null,
@@ -212,7 +213,7 @@ void main() {
     expect(decoded.title, 'The Kid');
     expect(decoded.poster, isNull);
     expect(decoded.playback, p);
-    expect(StreamDownload.fromMetaData(jsonEncode({'Id': 'jellyfin-id', 'Name': 'Film'})), isNull);
+    expect(StreamDownload.fromMetaData(jsonEncode({'Id': 'x', 'Name': 'Film'})), isNull);
   });
 
   test('older download metadata keeps its poster without requiring new artwork fields', () {
@@ -274,6 +275,28 @@ void main() {
     expect(find.text('WatchHub · Opens another app or website.'), findsOneWidget);
     expect(find.bySemanticsLabel('Rakuten TV, Rent · Buy. Opens another app or website.'), findsOneWidget);
     expect(find.text('No streams for this movie'), findsOneWidget);
+  });
+
+  testWidgets('a noHandler error from openExternal shows the URL inline', (tester) async {
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(const MethodChannel('flick/torrent'), (call) async {
+      throw PlatformException(code: 'noHandler', message: 'No app can open this link');
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(const MethodChannel('flick/torrent'), null));
+    await _open(
+        tester,
+        _Addons(_meta('movie'), sources: [_Addon('WatchHub')], results: {
+          'WatchHub': [_stream('Rent · Buy', name: 'Rakuten TV', infoHash: null, externalUrl: 'https://rakuten.tv/x')],
+        }),
+        'movie');
+
+    await tester.tap(find.text('Rakuten TV'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('No browser on this device. Open on your phone:'), findsOneWidget);
+    expect(find.text('https://rakuten.tv/x'), findsOneWidget);
+    expect(find.text("Couldn't open Rakuten TV"), findsNothing);
   });
 
   testWidgets('URL and torrent streams show an accessible 48 dp download button, services none', (tester) async {

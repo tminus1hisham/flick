@@ -72,10 +72,7 @@ void main() {
     expect(bingeMatch([_s('a', null)], null), isNull);
   });
 
-  test('upNextAt: plausible outro, else 30 s before the end, nothing for short clips', () {
-    expect(upNextAt(_min * 40, outro: _min * 38), _min * 38);
-    expect(upNextAt(_min * 40, outro: _min * 10), _min * 40 - _sec * 30, reason: 'outro before the halfway mark');
-    expect(upNextAt(_min * 40, outro: _min * 40 - _sec * 2), _min * 40 - _sec * 30, reason: 'outro too late');
+  test('upNextAt: 30 s before the end, nothing for short clips', () {
     expect(upNextAt(_min * 40), _min * 40 - _sec * 30);
     expect(upNextAt(_min * 3 - _sec), isNull);
     expect(upNextAt(Duration.zero), isNull);
