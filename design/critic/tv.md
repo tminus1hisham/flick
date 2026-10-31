@@ -16,4 +16,18 @@ findings (ranked):
 4. [hierarchy, nit] The catalog filters are bare text. The mockup design/tv/discover.png has outlined chips. Fix: a 1 dp `outline` border at `controlRadius` on unselected `_TvChoice`.
 5. [out of scope] Discover → Title lands on the phone layout (14-title.png): back arrow and Sources outside the safe inset, Material FilterChips, no ring on entry. For the Title pilot.
 
-Evidence notes: 02-search-action-focused.png is mislabelled (shows Movies focused). Up does reach Search (s-up-from-movies.png). gates.txt: zero hits in the TV files. Motion tokens match the spec.
+## Round 3 (2026-10-31, the user chose a third round)
+Fixes: c860f46 (search Close by D-pad, rail item grows with the panel, outlined catalog chips), f594277 (tests 13 outline, 14 offline notice). Evidence: `round2/r3-*.png`.
+
+VERDICT: PASS
+scores: distinct 8, hierarchy 8, motion 8, craft 8, states 8, theme 9, a11y 8, space 8
+
+round-2 findings: 1 fixed (r3-search-ime-closed.png → r3-search-close-focused.png; test 10), 2 fixed (rail.dart width and clip on one curve; test j; r3-rail-open.png), 3 fixed (r3-skeleton.png, r3-posters-loading.png, r3-font13.png; offline/empty from tests 14 and 8), 4 fixed (r3-launch.png; test 13).
+
+nits (filed, not fixed; low severity):
+1. [hierarchy] Catalog chip labels are the same 16 dp as Movies/Series; the mockup's chip row is lighter. Try 14 dp for non-segment `_TvChoice` labels.
+2. [states] No device screenshot of the error/empty/offline notice (the emulator still loads catalogs in airplane mode; stage it with a dead addon URL). The notice is the plainest surface on the screen; consider the slash before its action.
+3. [craft] The notice's Retry uses `controlRadius`; chips and switch use `FlickTv.segmentRadius`.
+4. [out of scope] Discover → Title lands on the phone layout (Title pilot).
+
+Evidence notes (round 2): 02-search-action-focused.png is mislabelled (shows Movies focused). Up does reach Search (s-up-from-movies.png). gates.txt: zero hits in the TV files. Motion tokens match the spec.
