@@ -16,9 +16,10 @@ class TvPlayerControls extends StatefulWidget {
     required this.buffer, required this.playing, required this.panel, required this.tracks,
     required this.buffering, required this.onToggle, required this.onSeek, required this.onExit,
     required this.onTracks, required this.onCloseTracks, required this.onRetry,
-    this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.upNext, this.upNextVisible = false, super.key});
+    this.logo, this.poster, this.waiting = false, this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.upNext, this.upNextVisible = false, super.key});
   final String title;
-  final String? subtitle, error;
+  final String? subtitle, error, logo, poster;
+  final bool waiting;
   final Duration position, duration, buffer;
   final bool playing, panel, retrying, upNextVisible, subtitlesOn;
   final Widget tracks;
@@ -251,7 +252,8 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                   if (widget.subtitle != null) Text(widget.subtitle!, maxLines: 1, overflow: TextOverflow.ellipsis, style: FlickTv.body),
                 ]))),
               Positioned.fill(child: FocusScope(node: _waiting, canRequestFocus: widget.buffering.offerSwitch,
-                child: BufferingPanel(view: widget.buffering, onSwitch: widget.onExit))),
+                child: BufferingPanel(view: widget.buffering, title: widget.title, logo: widget.logo, poster: widget.poster,
+                  waiting: widget.waiting, onSwitch: widget.onExit))),
               if (widget.upNext != null) Positioned(right: FlickTv.insetH + FlickTv.gridPad,
                 bottom: FlickTv.insetV + 112,
                 child: FocusScope(node: _card, child: widget.upNext!)),

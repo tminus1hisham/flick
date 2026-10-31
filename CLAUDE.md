@@ -1,26 +1,22 @@
 # Flick: project handoff
 
-Flick is a Flutter 3.41 / Dart 3.11 Android app (package `flick`, Material 3, dark "Afterglow" theme). It is Stremio-style streaming (no Jellyfin, no accounts): addon catalogs, torrent streams through a native libtorrent4j engine, direct URL streams, and subtitles. One user, on a phone, often on flaky Wi-Fi.
+Flick is a Flutter 3.41 / Dart 3.11 Android app (package `flick`, Material 3, dark "Afterglow" theme). It provides Stremio addon catalogs, Anime, native torrent and direct URL playback, subtitles, offline downloads, and Android TV controls. Jellyfin and accounts have been removed.
 
 This file is the shared source for continuing the work in a new session. Read it before you change anything. Update the **Status** and **Next** sections when you finish a piece of work.
 
 ## Gates (run before calling anything done)
-- `flutter analyze`: must print `No issues found!`
-- `flutter test`: 221 tests pass on `tv-anime` (TV worktree). Kotlin: 22 tests (18 HttpTest + 4 MiruroPolicyTest).
-
-- `flutter test`: 141 tests pass on branch `guest` (204 on `seek`). Kotlin: 22 tests (18 HttpTest + 4 MiruroPolicyTest).
-- Kotlin unit tests: `cd android && ./gradlew :app:testDebugUnitTest` (results in `build/app/test-results/`). A fresh worktree first needs `flutter pub get` and the gitignored `android/gradlew*` + `android/gradle/wrapper/gradle-wrapper.jar` copied from the main checkout.
-- `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`).
-- Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits. Older files (player.dart, widgets.dart, library.dart) have known hits; that is expected.
-- `PlayerScreen` can't be pumped in `flutter test` because media_kit needs native libmpv. Put player logic in pure helpers or getters and test those (see test/player_test.dart).
+- `flutter analyze lib test`: no issues. Scope to app/test rather than the nested worktree in `.claude`.
+- `flutter test`: 263 tests pass after the integration.
+- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 24 tests pass (18 HttpTest, 4 MiruroPolicyTest, 2 DownloadsTest).
+- `flutter build apk --debug`: verify Android packaging and native compilation.
+- Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: 27 existing hits (26 color uses, one legacy progress bar); no new files have hits.
+- `PlayerScreen` cannot be pumped in widget tests without native libmpv. Test pure helpers and the independent TvPlayerControls instead.
 
 ## Branches and history
-- `main`: fast-forwarded to `guest` on 2026-10-30 at the user's request, so it holds the revamp, `discover`, `guest` and the buffering work. No git remote is configured, so nothing has been pushed.
-- `discover`, `guest`: merged into main (see above). `guest` is still the working branch of other sessions.
-- `anime`: worktree `../stremio-anime`, from main. Anime in Discover, built by Codex through `tool/anime_build.ps1` (plan: `~/.claude/plans/with-codex-debate-between-glimmering-koala.md`; log and status in `design/anime/`). Merged into `guest` 2026-10-31.
-- `stremio-tv`: worktree `../stremio-tv`, from `guest` at 8fcc7eb. Stremio-only (Jellyfin deleted) + Android TV. **Not merged anywhere yet.** `guest` has since gained b92455a ("hide sign-in", `session.accounts = false`): the user chose (2026-10-31) to **delete** Jellyfin/login instead, so when `stremio-tv` merges into `guest`, resolve b92455a's conflicts in favour of the deletion and drop its switch and `test/accounts_off_test.dart`.
-- `stremio-only` (`.claude/worktrees/agent-a3af29a600784d39f`, 2026-10-29): an older Jellyfin removal + native downloads; superseded by `stremio-tv` (its removals were ported, its DownloadService.kt was not).
-- Untracked and deliberately not committed: the TV mockups `design/tv/{discover,title,player,banner}.png`, the TV critic evidence `design/critic/tv/`, the 3 large mockups `design/mockups/{d3-watchhub,d4-sources-bundled,player-subtitles}.png` (~1.5 MB each), and the test torrent `ED0AFBC1â€¦.torrent` (Rick and Morty S04E02, used as a hash in tests).
+- `main`: integration requested 2026-11-01; includes `guest`, `anime`, `upnext`, `stremio-tv`, `tv-anime`, `seek`, and `stremio-only`. Existing main edits and the uncommitted TV Title/Player work were committed before merging. Original branch histories are retained.
+- `backup/main-before-integration-20261101` preserves main before the integration.
+- Remote `origin` is configured; this integration has not been pushed.
+- Large mockups, critic screenshots/recordings, the test torrent and local `.claude` state remain untracked in their original worktrees.
 
 ## Architecture
 | File | Holds |
@@ -65,7 +61,16 @@ This file is the shared source for continuing the work in a new session. Read it
 - In a `Stack`, `Row` or `Column`, an `if (...)` child placed before stateful siblings needs a `key` on those siblings, or they are rebuilt from scratch when the condition flips (lost focus/ring state; the TV rail ring bug of 2026-10-31).
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
-## Status (2026-10-31)
+## Status (2026-11-01)
+
+### Main integration
+All important work branches are integrated into `main`, including TV Title/Player, phone seek controls, native offline download pause/resume/delete and foreground notifications. The sections below retain prior review/device evidence; their historical "unmerged" statements are superseded by this status.
+- The existing Downloads controller now supports both the native shared-preferences registry and older direct/kept downloads. New torrent selections use the native registry and redesigned rows; older downloaded files remain listed and playable. Native and legacy progress types have distinct names.
+- The phone keeps the Naruto-inspired AnimeGlyph, Miruro and direct downloads. TV keeps Kitsu-only Anime, its focus shell, two-pane Title and remote Player. Expanded playback artwork is passed to both buffering surfaces.
+- One native selected file per torrent hash; choosing a different file requires deleting its existing download. This preserves data instead of silently replacing a download.
+- Validation: static analysis clean, 263 Flutter tests pass, 24 Kotlin tests pass, diff whitespace clean. Debug APK built successfully (`build/app/outputs/flutter-apk/app-debug.apk`). No physical-device interaction was performed for this merge.
+
+## Historical status (2026-10-31)
 
 ### Anime icon
 `AnimeGlyph` in `lib/theme.dart` now has Naruto-inspired spiky hair, a leaf forehead protector and cheek marks, retaining IconTheme sizing/colour and both navigation states. Analyzer and all 177 Flutter tests pass; both states were rendered at 24 dp in `.scratch/anime-icon-preview.png`. No APK rebuild or phone check for this icon edit.
@@ -175,16 +180,9 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
-- **TV Anime Kitsu catalogs:** continued in `../stremio-tv` (`tv-anime`, current HEAD 4551cdf). Implementation and round-1 fixes already committed there; independent round-2 critic now PASS, with added large-text focus and offline recovery tests. See that worktree's `CLAUDE.md` and `design/critic/tv-anime.md`. TV Title is now redesigned and emulator-tested (208 Flutter + 22 Kotlin pass, critic PASS); TV Player is now redesigned and emulator-tested (221 Flutter + 22 Kotlin pass, critic PASS), including single-layer Android Back, seek/media keys and large text. Video renders black with EGL errors, so decoded playback is unverified. Downloads is next. TV work remains separate and unmerged.
+- TV-specific Downloads, Sources and Torrent start layouts remain future work; the existing implementations are available through the TV shell. TV Discover, Anime, Title and Player are merged.
+- Verify the integrated APK on a phone/TV emulator, including resumed native downloads, streaming while downloading and the artwork buffering transition. Prior TV video decoding remained unverified because of emulator EGL errors.
 - Check the updated Anime icon on the phone with the next APK build.
-
-- **TV, in order** (branch `stremio-tv`; one worktree per maker from `stremio-tv`, merge back, Codex does the visual layer via the bridge in `~/.claude/skills/build-mobile/references/codex-bridge.md` â€” pack with `PYTHONIOENCODING=utf-8`):
-  1. ~~Critic on TV Discover~~: PASS in round 3 (2026-10-31).
-  2. **Checkpoint 2:** pilot shown 2026-10-31; user requested continuation of TV Anime, now completed.
-  3. ~~TV Anime: Kitsu catalogs only~~: implemented, critic round 2 PASS. TV Title and Player now complete (see Status); continue with Downloads next. Do not merge into guest until requested.
-  4. ~~TV Title and Player~~ complete and critic PASS; next Downloads, then Sources, Torrent start.
-  5. Critic per screen, one fresh `delegate:reviewer` over the whole `stremio-tv` diff, then merge into `guest` (resolve b92455a in favour of deletion, see Branches) only when the user asks.
-  6. Phase B/C of the plan: focus edge cases, overscan, emulator measurements; low-RAM cache experiment only if measured.
 - **Up Next, to close it out (needs the phone):** install the current APK and re-capture `design/critic/upnext/` 01 (countdown, new "6 s"), 02 (1.3Ã— text), 06 (a screen recording of the handoff: player â†’ blank â†’ next episode fading in, no stream list), the "Finding next episodeâ€¦" card (bar tap right after an episode starts, before the card's prefetch, ideally on slow Wi-Fi), and a failed-thumbnail card. Check E1â†’E2 in a season pack starts in ~10 s with peers (the seed fix), Autoplay into E2 with Wi-Fi only, Jellyfin Up Next if a server is reachable. Restore the phone afterwards: Autoplay on, font scale 1.0. Ask before driving the phone: it is the user's own phone and was in use during this session.
 - **Torrent start screen redesign (Codex, follow-up from the Up Next critic):** it still has a stock `AppBar` and shows the raw season-pack path in "Opening â€¦"; between episodes it is the only generic moment. Ideas from the critic: no start screen when the torrent is warm and the file is known; push the player with `EpisodeRoute(next: true)` when auto-opened; no system-bar flash between two torrent episodes (the player restores edgeToEdge when the last one disposes, before the next one exists).
 

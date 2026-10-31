@@ -4,9 +4,11 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 
 import '../downloads.dart';
+import '../kit/sheet.dart';
 import '../state.dart';
 import '../theme.dart';
 import 'player.dart';
+import 'native_downloads.dart' as native;
 
 class DownloadsScreen extends StatelessWidget {
   const DownloadsScreen({super.key});
@@ -21,7 +23,7 @@ class DownloadsScreen extends StatelessWidget {
               if (downloads.streamOf(r) case final stream?) (r, stream),
           ];
           final torrents = downloads.torrentRecords;
-          if (records.isEmpty && torrents.isEmpty && !downloads.torrentError) return const _Empty();
+          if (records.isEmpty && torrents.isEmpty && !downloads.torrentError) return native.NativeDownloadsScreen(onPlay: (d) => _playNative(context, d));
           final cs = Theme.of(context).colorScheme;
           return ListView(children: [
             Padding(
@@ -56,6 +58,8 @@ class DownloadsScreen extends StatelessWidget {
                   ),
                 ]),
               ),
+            for (final d in downloads.items)
+              native.DownloadRow(download: d, onPlay: (d) => _playNative(context, d)),
             for (final r in torrents)
               DownloadRow.torrent(download: r, poster: downloads.posterOf(r.taskId)),
             for (final (r, stream) in records)
@@ -63,29 +67,6 @@ class DownloadsScreen extends StatelessWidget {
           ]);
         },
       );
-}
-
-class _Empty extends StatelessWidget {
-  const _Empty();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.movie_outlined, size: 48, color: cs.onSurfaceVariant),
-          const SizedBox(height: 16),
-          Text('No downloads yet', style: t.titleMedium),
-          const SizedBox(height: 4),
-          Text('Downloaded videos will appear here.',
-              textAlign: TextAlign.center, style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant)),
-        ]),
-      ),
-    );
-  }
 }
 
 /// One download row. Public only so previews can render it without the manager.
@@ -279,4 +260,17 @@ class _DownloadRowState extends State<DownloadRow> {
       ),
     );
   }
+}
+
+void _playNative(BuildContext context, Download d) {
+  if (!File(d.path).existsSync()) {
+    showFlickSheet<void>(context, (_) => const Padding(
+      padding: EdgeInsets.all(FlickTokens.pageGutter),
+      child: Text('Downloaded file is missing. Delete it and download again.'),
+    ));
+    return;
+  }
+  Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+    title: d.playback.title, source: d.path, playback: d.playback,
+  )));
 }

@@ -486,7 +486,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       )
       ..add(_player.stream.buffering.listen(_onBuffering))
       ..add(_player.stream.bufferingPercentage.listen((_) {
-        if (mounted && widget.addonPlayback && _since != null) setState(() {});
+        if (mounted && _since != null) setState(() {});
       }))
       ..add(_player.stream.error.listen(_showError));
     _init().catchError(_showError);
@@ -1456,6 +1456,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 panel: _panel,
                 tracks: _panel ? _tracksPanelTv() : const SizedBox(),
                 buffering: _bufferView,
+                waiting: _since != null,
+                logo: widget.playback?.logo,
+                poster: widget.playback?.poster,
                 error: _error,
                 retrying: _retrying,
                 subtitlesOn: _activeSubtitle != 'Off',

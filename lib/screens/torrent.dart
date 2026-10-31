@@ -259,12 +259,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
       if (widget.download) {
         final playback = widget.playback;
         if (playback == null) throw StateError('Download playback details are missing');
-        await downloads.keepTorrent(
-          engine, id, f.index,
-          title: widget.title ?? playback.title,
-          poster: widget.poster,
-          playback: playback,
-        );
+        await downloads.start(widget.magnet, playback, f.index, poster: widget.poster);
         if (mounted && id == _id && ModalRoute.of(context)?.isCurrent == true) {
           Navigator.pop(context, true);
         }

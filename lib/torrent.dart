@@ -151,6 +151,34 @@ class TorrentEngine {
   /// Stops playback; kept downloads survive, other torrents stay available for 60 seconds.
   Future<void> release(int id) => _ch.invokeMethod('release', {'id': id});
 
+  /// Downloads only [file], fully, and pins the torrent so release and the 60 s timer leave it alone.
+  Future<void> download(int id, int file) => _ch.invokeMethod('download', {'id': id, 'file': file});
+
+  /// The pinned file's progress; null once the torrent is gone.
+  Future<NativeTorrentProgress?> progress(int id) async {
+    final m = await _ch.invokeMapMethod<String, Object?>('progress', {'id': id});
+    return m == null
+        ? null
+        : (
+            bytes: m['bytes'] as int,
+            total: m['total'] as int,
+            rate: m['rate'] as int,
+            peers: m['peers'] as int,
+            state: m['state'] as String,
+            error: m['error'] as String?,
+            path: m['path'] as String?,
+          );
+  }
+
+  Future<void> pause(int id) => _ch.invokeMethod('pause', {'id': id});
+  Future<void> resume(int id) => _ch.invokeMethod('resume', {'id': id});
+
+  /// Removes a download and deletes its files.
+  Future<void> delete(int id) => _ch.invokeMethod('delete', {'id': id});
+
+  /// Asks for the notification permission (Android 13+); true when granted.
+  Future<bool> requestNotifications() async => await _ch.invokeMethod<bool>('requestNotifications') ?? false;
+
   /// The playing file's average bytes per second, which spaces the piece deadlines ahead of the player.
   Future<void> bitrate(int id, int bytesPerSec) =>
       _ch.invokeMethod('bitrate', {'id': id, 'bytesPerSec': bytesPerSec});
@@ -177,6 +205,28 @@ Future<bool> networkOnline() async {
   } catch (_) {
     return true;
   }
+}
+
+/// state is downloading | paused | done | error.
+typedef NativeTorrentProgress = ({int bytes, int total, int rate, int peers, String state, String? error, String? path});
+
+/// The lowercase v1 info-hash in [magnet], or null.
+String? infoHashOf(String magnet) {
+  for (final v in Uri.parse(magnet.trim()).queryParametersAll['xt'] ?? const <String>[]) {
+    final m = _btih.firstMatch(v);
+    if (m != null) return m[1]!.toLowerCase();
+  }
+  return null;
+}
+
+/// Where a download's data lives: app storage, never the streaming session folders the engine sweeps.
+Future<String> downloadDir(String hash) async {
+  if (!RegExp(r'^(?:[0-9a-f]{40}|[a-z2-7]{32})$').hasMatch(hash)) {
+    throw ArgumentError.value(hash, 'hash', 'Invalid torrent hash');
+  }
+  final dir = Directory('${(await getApplicationSupportDirectory()).path}/downloads/$hash');
+  await dir.create(recursive: true);
+  return dir.path;
 }
 
 Future<Directory> _root() async =>

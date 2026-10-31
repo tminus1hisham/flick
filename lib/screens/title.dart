@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart';
+import '../downloads.dart' show DownloadState;
+import '../kit/download_button.dart';
 import '../kit/toggle.dart';
 import '../kit/focus.dart';
 import '../playback.dart';
@@ -841,7 +843,7 @@ class _StreamRowState extends State<_StreamRow> {
               ),
           ]),
         ),
-        if (downloadable)
+        if (downloadable && stream.infoHash == null)
           Semantics(
             container: true,
             label: downloadLabel,
@@ -856,6 +858,19 @@ class _StreamRowState extends State<_StreamRow> {
               onPressed: _queuing || _queued ? null : _download,
             ),
           ),
+        if (downloadable && stream.infoHash != null)
+          ListenableBuilder(listenable: downloads, builder: (context, _) {
+            final hash = stream.infoHash;
+            final d = hash == null ? null : downloads.of(hash, stream.fileIdx, playback.videoId);
+            final done = d?.state == DownloadState.done;
+            final active = d != null && d.state != DownloadState.failed && !done;
+            return DownloadButton(
+              progress: active ? (d.total > 0 ? (d.bytes / d.total).clamp(0.0, 1.0) : 0) : null,
+              done: done,
+              label: downloadLabel,
+              onPressed: _queuing || _queued || active || done ? null : _download,
+            );
+          }),
       ]),
     );
   }
