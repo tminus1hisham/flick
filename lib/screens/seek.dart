@@ -160,10 +160,15 @@ class _SeekRippleState extends State<SeekRipple>
                                   ),
                                 ),
                                 const SizedBox(height: FlickTokens.grid),
-                                Icon(
-                                  left ? Icons.replay : Icons.forward,
-                                  size: FlickTokens.grid * 5,
-                                  color: FlickTokens.textSecondary,
+                                // Icons.forward is a straight arrow; mirror
+                                // replay so both sides are the same circle.
+                                Transform.flip(
+                                  flipX: !left,
+                                  child: const Icon(
+                                    Icons.replay,
+                                    size: FlickTokens.grid * 5,
+                                    color: FlickTokens.textSecondary,
+                                  ),
                                 ),
                               ],
                             ),
