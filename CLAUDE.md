@@ -6,7 +6,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze`: must print `No issues found!`
-- `flutter test`: 141 tests pass on branch `guest` (205 on `seek`). Kotlin: 22 tests (18 HttpTest + 4 MiruroPolicyTest).
+- `flutter test`: 141 tests pass on branch `guest` (204 on `seek`). Kotlin: 22 tests (18 HttpTest + 4 MiruroPolicyTest).
 - Kotlin unit tests: `cd android && ./gradlew :app:testDebugUnitTest` (results in `build/app/test-results/`). A fresh worktree first needs `flutter pub get` and the gitignored `android/gradlew*` + `android/gradle/wrapper/gradle-wrapper.jar` copied from the main checkout.
 - `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`).
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits. Older files (player.dart, widgets.dart, library.dart) have known hits; that is expected.
@@ -58,7 +58,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Status (2026-10-31)
 
-### 10-second seek (branch `seek`, merged into `guest` 2026-10-31)
+### 10-second seek (branch `seek`, worktree `../stremio-seek`, 2026-10-31; ready, not merged: `git merge --ff-only seek` on `guest`)
 Netflix-style seeking for every playback: back 10 s · play/pause · forward 10 s in media_kit's middle bar, and double tap on the left/right side (further taps add up; one seek 400 ms after the last tap). Spec: design/seek.md; decisions: design/decisions.md "10-second seek". Visual (`SeekRipple`, lib/screens/seek.dart) by Codex: edge glow, 6-segment accent rim (one per tap), number-led label.
 - The tap layer is injected via `Video(controls:)` so it also works in media_kit's fullscreen route (state in a `ValueNotifier`); a raw translucent `Listener` keeps media_kit's gestures; during a burst an opaque absorber over that side stops the controls flashing. Logic is pure and tested in test/player_test.dart: `seekZone`/`seekMiddle` (the no-seek middle always covers the button group), `SeekTaps`, `SeekBurst`, `nudgeTarget`.
 - Gates: analyze clean, 201 Flutter tests, debug APK built, gates.py zero hits in new files. Code review: FAIL, then PASS-WITH-NITS (nits fixed). QA critic: FAIL round 1 (distinct 6), FAIL round 2 (theme 5 contrast, motion 7; the rest 8); both round-2 issues fixed with measured renders in design/critic/seek/ (PNGs untracked). Round 3 (user's call): PASS (distinct 8, hierarchy 9, motion 8, craft 8, states 8, theme 8, a11y 8, space 8).
