@@ -62,6 +62,8 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
     await saved.load();
     session.client = null;
+    // These tests cover sign-in, which is hidden for now (see accounts_off_test.dart).
+    session.accounts = true;
   });
 
   test('device favourites and likes survive a reload', () async {

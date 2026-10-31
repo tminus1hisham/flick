@@ -37,7 +37,7 @@ class FlickApp extends StatelessWidget {
           listenable: session,
           builder: (_, _) => session.loggedIn
               ? (session.online ? const Shell() : const OfflineShell())
-              : session.onboarded
+              : session.onboarded || !session.accounts
                   ? const Shell(guest: true)
                   : const LoginScreen(),
         ),
@@ -98,7 +98,7 @@ class _ShellState extends State<Shell> {
           ? null
           : AppBar(
               title: Text(name),
-              actions: const [MagnetButton(), ProfileButton()],
+              actions: [const MagnetButton(), if (session.showProfile) const ProfileButton()],
             ),
       // Shared tabs keep their state across sign-in and sign-out.
       body: IndexedStack(index: _tab, children: [

@@ -58,6 +58,9 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Status (2026-10-31)
 
+### Accounts hidden (branch `guest`, 2026-10-31)
+At the user's request sign-in is hidden until a later release: `session.accounts = false` (session.dart). Everyone opens on the 3-tab shell (Discover, Anime, Downloads) with no Login, no profile button and no sign-in gates; favourites, likes and downloads are open (`session.unlocked`). Login, the sheet and Jellyfin code are untouched; set `accounts` to true to bring them back. test/accounts_off_test.dart pins it; guest_test.dart switches accounts on.
+
 ### Up Next / auto next (branch `guest`, 2026-10-31)
 Netflix-style next episode for Jellyfin and addon/torrent series: a **Next episode** bar button, and an Up Next card at the Jellyfin Outro or T-30 s with a 10 s countdown, Watch credits, and an Autoplay switch (also in the addon tracks panel; device setting `autoplayNext`, default on). Addon: the same addon's stream with the same `bingeGroup` plays on (`resolveNext` in playback.dart), otherwise the next episode's stream list. Spec: design/upnext.md; decisions: design/decisions.md "Up Next" (incl. the 2026-10-31 review round). Plan: `~/.claude/plans/plan-to-add-auto-glistening-magpie.md`.
 - Built 2026-10-30 (4e37d30, 1330a6e, 83e8a58, merged at 8acfa24). Reviewed and fixed 2026-10-31: 2569168, dbaca75, 80d400c, caa0a86.

@@ -205,7 +205,7 @@ class _Saving extends StatelessWidget {
   /// A member's tap toggles. After the sign-in detour it sets instead: a guest always sees "off" but the
   /// device list survives sign-out, so a toggle there could remove what the guest meant to add.
   Future<bool> _tap(BuildContext context, Gate gate, bool Function() isOn, VoidCallback toggle) async {
-    if (session.loggedIn) {
+    if (session.unlocked) {
       toggle();
       return true;
     }
@@ -219,7 +219,7 @@ class _Saving extends StatelessWidget {
         listenable: Listenable.merge([saved, session]),
         builder: (context, _) => Wrap(spacing: FlickTokens.grid * 2, runSpacing: FlickTokens.grid * 2, children: [
           ToggleAction(
-            on: session.loggedIn && saved.isFavourite(preview.id),
+            on: session.unlocked && saved.isFavourite(preview.id),
             icon: Icons.favorite_border_rounded,
             onIcon: Icons.favorite_rounded,
             label: 'Add to favourites',
@@ -228,7 +228,7 @@ class _Saving extends StatelessWidget {
                 () => saved.toggleFavourite(preview)),
           ),
           ToggleAction(
-            on: session.loggedIn && saved.isLiked(preview.id),
+            on: session.unlocked && saved.isLiked(preview.id),
             icon: Icons.thumb_up_outlined,
             onIcon: Icons.thumb_up_rounded,
             label: 'Like title',

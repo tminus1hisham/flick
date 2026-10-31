@@ -22,7 +22,7 @@ class DownloadsScreen extends StatelessWidget {
           final torrents = downloads.torrentRecords;
           // Files from an earlier sign-in still list and play; only an empty guest list asks to sign in.
           if (records.isEmpty && torrents.isEmpty && !downloads.torrentError) {
-            return session.loggedIn ? const _Empty() : const SignInPrompt();
+            return session.unlocked ? const _Empty() : const SignInPrompt();
           }
           final cs = Theme.of(context).colorScheme;
           return ListView(children: [

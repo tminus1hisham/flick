@@ -21,6 +21,16 @@ class Session extends ChangeNotifier {
 
   bool get loggedIn => client?.token != null;
 
+  /// Sign-in (Jellyfin accounts) is hidden until a later release: no Login, no profile button,
+  /// no sign-in gates. Not final so tests can switch it back on.
+  bool accounts = false;
+
+  /// Favourites, likes and downloads are open: signed in, or accounts are off.
+  bool get unlocked => loggedIn || !accounts;
+
+  /// Show the profile button: there is something to sign in to or out of.
+  bool get showProfile => loggedIn || accounts;
+
   /// Up Next counts down and plays the next episode on its own; off, it waits for a tap.
   bool get autoplayNext => _prefs.getBool('autoplayNext') ?? true;
   set autoplayNext(bool on) => _prefs.setBool('autoplayNext', on);
