@@ -160,7 +160,7 @@ abstract final class FlickTv {
   static const lift = 1.03;
   static const liftDuration = Duration(milliseconds: 100);
   static final liftShadow = BoxShadow(
-    color: Colors.black.withValues(alpha: 0.5),
+    color: FlickTokens.background.withValues(alpha: 0.6),
     blurRadius: 16,
     offset: const Offset(0, 6),
   );
