@@ -153,3 +153,9 @@ Home hero / dwell backdrop on Discover, Quick Connect + LAN discovery (no Jellyf
 8. Torrent start loading target = **Choose another source** button (auto-open is an action, not a target). The state table's targets apply only **on entry or when the focused item is lost**; an error/offline state arriving later never moves valid focus.
 9. **Tracks panel edges:** arrows at the panel's edges are consumed (Left/Right at its sides, Up at the first row, Down at the last); only Back leaves. Seek clamp: `[0, max(0, duration − 1 s)]`. Whenever the bar hides, focus returns to the hidden key layer.
 10. **Tests (added):** a wrapped Material control has exactly one focus node and shows only the FocusRing; Down from the last built row reaches the next row; arrows at the tracks-panel edges don't leave it; deleting the last download focuses the rail; the bar's auto-hide returns focus to the key layer.
+
+## Spec revision 3 (closes the Codex loop; 3 rounds used)
+- **Lazy-list boundary fallback:** TV grids and lists override `DirectionalFocusIntent` with an `Action` that first tries the default policy; if focus would not move (no built candidate) it computes the target index (grid: ±columns, list: ±1), jumps the controller to that index's offset (fixed extents), and focuses the new item in the next frame. Default traversal everywhere else.
+- **Title fit:** recomputed: 148+16+68+8+22+12+96+8+20 = **398 dp** ≤ 486 (Codex's 498 is an addition slip). At 500 tall with a 2-line synopsis: 350 ≤ 446. Tests check the Title left pane has no overflow at 960×540 and 900×500 and that the first/last poster's ring paint bounds stay inside the viewport.
+- 960×540 is a device assumption (Android TV launchers render 1080p at xhdpi and 720p at tvdpi); the derived layout plus the 900×500 test covers drift.
+- Codex review: round 3 ended REVISE on these two points only; both answered here. Recorded in design/decisions.md.
