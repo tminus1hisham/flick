@@ -124,6 +124,23 @@ void main() {
         }
       }
     });
+    test('a cutout on one side shifts the buttons; skew keeps them out', () {
+      // media_kit's fullscreen pads its controls by the insets: a 40 dp cutout
+      // on the left moves the group 20 dp right.
+      const s = Size(760, 360), shift = 20.0;
+      const edge = 760 / 2 + primaryBarWidth / 2 + shift;
+      expect(seekZone(const Offset(edge, 180), s, top: 64, bottom: 100), 1);
+      expect(
+        seekZone(
+          const Offset(edge, 180),
+          s,
+          top: 64,
+          bottom: 100,
+          skew: shift,
+        ),
+        0,
+      );
+    });
     test('the top bar and the seek bar with the bottom bar never seek', () {
       const s = Size(800, 360);
       expect(zone(100, 40, s), 0);
@@ -226,6 +243,11 @@ void main() {
       expect(tap(right, after: 400), 0);
       expect(tap(left, zone: -1), 0);
       expect(tap(right), 0);
+    });
+    test('a slow second tap counts from its press, like Android', () {
+      // Pressed 250 ms after the first release, released 100 ms later.
+      expect(tap(right), 0);
+      expect(tap(right, after: 250, held: 100), 1);
     });
     test('the middle third never seeks', () {
       expect(tap(const Offset(400, 180), zone: 0), 0);

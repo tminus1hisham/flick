@@ -19,9 +19,19 @@ class SeekRipple extends StatefulWidget {
 }
 
 class _SeekRippleState extends State<SeekRipple>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _visibility;
   late final CurvedAnimation _opacity;
+  // Lights the newest rim segment; a colour change, so reduced motion keeps it.
+  late final AnimationController _step = AnimationController(
+    vsync: this,
+    duration: FlickTokens.stateDuration,
+    value: 1,
+  );
+  late final CurvedAnimation _lit = CurvedAnimation(
+    parent: _step,
+    curve: FlickTokens.curveIn,
+  );
   late int _side;
   late int _seconds;
 
@@ -54,6 +64,9 @@ class _SeekRippleState extends State<SeekRipple>
     } else if (widget.side != _side && _visibility.value > 0) {
       _visibility.reverse();
     } else {
+      if (widget.seconds > _seconds && widget.side == _side) {
+        _step.forward(from: 0);
+      }
       _side = widget.side;
       _seconds = widget.seconds;
       _visibility.forward();
@@ -76,6 +89,8 @@ class _SeekRippleState extends State<SeekRipple>
     _visibility.removeStatusListener(_onStatus);
     _opacity.dispose();
     _visibility.dispose();
+    _lit.dispose();
+    _step.dispose();
     super.dispose();
   }
 
@@ -110,6 +125,7 @@ class _SeekRippleState extends State<SeekRipple>
                       painter: _SeekGlowPainter(
                         left: left,
                         seconds: _seconds,
+                        step: _lit,
                       ),
                       child: Center(
                         child: Padding(
@@ -188,12 +204,19 @@ class _SeekRippleState extends State<SeekRipple>
 }
 
 class _SeekGlowPainter extends CustomPainter {
-  const _SeekGlowPainter({required this.left, required this.seconds});
+  _SeekGlowPainter({
+    required this.left,
+    required this.seconds,
+    required this.step,
+  }) : super(repaint: step);
 
   static const _segments = 6;
 
   final bool left;
   final int seconds;
+
+  /// 0 → 1 as the newest segment lights and the previous one dims.
+  final Animation<double> step;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -203,14 +226,16 @@ class _SeekGlowPainter extends CustomPainter {
     final center = Offset(left ? 0 : size.width, size.height / 2);
     final bounds = Rect.fromCircle(center: center, radius: radius);
     final glow = Paint()
+      // A plateau under the whole label (out to 0.75 r at 1.3× text), so it
+      // holds 3:1 over a white frame; no solid black at the edge.
       ..shader = RadialGradient(
         colors: [
-          FlickTokens.background,
-          FlickTokens.background.withValues(alpha: 0.82),
-          FlickTokens.background.withValues(alpha: 0.28),
+          FlickTokens.background.withValues(alpha: 0.88),
+          FlickTokens.background.withValues(alpha: 0.8),
+          FlickTokens.background.withValues(alpha: 0.3),
           FlickTokens.background.withValues(alpha: 0),
         ],
-        stops: const [0, 0.45, 0.68, 1],
+        stops: const [0, 0.78, 0.92, 1],
       ).createShader(bounds);
 
     canvas.save();
@@ -229,12 +254,17 @@ class _SeekGlowPainter extends CustomPainter {
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.butt;
 
+    final off = FlickTokens.outline.withValues(alpha: 0.45);
+    final dim = FlickTokens.accent.withValues(alpha: 0.45);
+    final t = step.value;
     for (var index = 0; index < _segments; index++) {
-      paint.color = index < lit
-          ? FlickTokens.accent.withValues(
-              alpha: index == lit - 1 ? 1 : 0.45,
-            )
-          : FlickTokens.outline.withValues(alpha: 0.45);
+      paint.color = index >= lit
+          ? off
+          : index == lit - 1
+          ? Color.lerp(off, FlickTokens.accent, t)!
+          : index == lit - 2
+          ? Color.lerp(FlickTokens.accent, dim, t)!
+          : dim;
       canvas.drawArc(
         rim,
         -math.pi / 2 + direction * index * (sweep + gap),
@@ -248,6 +278,8 @@ class _SeekGlowPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SeekGlowPainter oldDelegate) {
-    return oldDelegate.left != left || oldDelegate.seconds != seconds;
+    return oldDelegate.left != left ||
+        oldDelegate.seconds != seconds ||
+        oldDelegate.step != step;
   }
 }

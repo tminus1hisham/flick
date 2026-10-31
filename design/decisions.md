@@ -107,3 +107,9 @@ User: Jellyfin and addon/torrent series; Autoplay switch in the player (card + a
   - Codex redesigned the ripple: edge glow, segmented accent rim (the Buffering rail's stepped motif), number-led label, slide-in total, fade-out-then-in side switch.
   - Accepted (Claude, UX): the Up Next card covers most of the forward ripple; the card owns that corner in the last 30 s.
   - Burst logic moved into `SeekBurst` (tested). Logged, not fixed: a stale position event right after a burst seek (seek.md, Known gaps).
+- Review round 2 (2026-10-31; code review PASS-WITH-NITS; QA critic FAIL: distinct 8, hierarchy 8, motion 7, craft 8, states 8, theme 5, a11y 8, space 8, now with headless renders in design/critic/seek/):
+  - Theme 5 was contrast: the label sat half off the scrim (1.8:1 over a white frame). The scrim is now a plateau under the whole label; measured on renders over a near-white frame: text ≥ 5.4:1 (1.3× text, outer corner), icon 6:1 (07, 08). Override of Codex's stops, values from the critic.
+  - Motion 7 was the rim hard-cutting: the newest segment now lights over `stateDuration` (test pins it, also under reduced motion: a colour change).
+  - Raw 48 on the play button, a split doc comment, raw 64 in the Up Next padding: fixed.
+  - Code review nits: double-tap window from the first release to the second press (like Android, tested); the no-seek middle widens by uneven side insets (media_kit's fullscreen pads by a cutout, tested); the 36 dp band is described as a margin. Accepted: a ±10 button press opens a burst (seek.md).
+  - After two failed critic rounds the pipeline hands the next step to the user: a third critic round, or accept.

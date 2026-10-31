@@ -136,8 +136,9 @@ bool stoppedEarly({
   return error && buffer - position < const Duration(seconds: 1);
 }
 
-/// media_kit's top and bottom button bars (`buttonBarHeight`), and its seek bar
-/// (`seekBarContainerHeight`), which it lays over the bottom bar's top edge.
+/// media_kit's top and bottom button bars (`buttonBarHeight`), and a margin the
+/// height of its seek bar (`seekBarContainerHeight`) above the bottom one, so a
+/// tap aimed at the seek bar never seeks by 10 s.
 const _barHeight = 64.0, _seekBarHeight = 36.0;
 
 /// Width of the back 10 s · play/pause · forward 10 s group in the middle of
@@ -146,17 +147,24 @@ const primaryBarWidth = FlickTokens.grid * 60;
 
 /// Half the width of the player's middle, where taps never seek: a third of
 /// the width, and never narrower than the button group plus a margin, so a
-/// double tap on a button can't seek as well.
-double seekMiddle(double width) {
+/// double tap on a button can't seek as well. [skew] is how far uneven side
+/// insets (a display cutout in media_kit's fullscreen) can move the group.
+double seekMiddle(double width, {double skew = 0}) {
   const group = primaryBarWidth + FlickTokens.grid * 8;
-  return (width / 3 > group ? width / 3 : group) / 2;
+  return (width / 3 > group ? width / 3 : group) / 2 + skew;
 }
 
 /// Which way a double tap at [p] seeks (design/seek.md): -1 left, 1 right, 0 in
 /// the middle ([seekMiddle]) or the [top]/[bottom] control bands.
-int seekZone(Offset p, Size s, {required double top, required double bottom}) {
+int seekZone(
+  Offset p,
+  Size s, {
+  required double top,
+  required double bottom,
+  double skew = 0,
+}) {
   if (p.dy < top || p.dy > s.height - bottom) return 0;
-  final half = seekMiddle(s.width);
+  final half = seekMiddle(s.width, skew: skew);
   if (p.dx < s.width / 2 - half) return -1;
   if (p.dx > s.width / 2 + half) return 1;
   return 0;
@@ -265,7 +273,8 @@ class SeekTaps {
     final last = _lastUpAt;
     if (last != null &&
         zone == _lastZone &&
-        t - last <= kDoubleTapTimeout &&
+        // Like Android: from the first release to the second press.
+        _downAt - last <= kDoubleTapTimeout &&
         (p - _lastUp).distance <= kDoubleTapSlop) {
       _lastUpAt = null;
       return zone;
@@ -1154,7 +1163,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               final pad = MediaQuery.paddingOf(context);
               final top = _barHeight + pad.top;
               final bottom = _barHeight + _seekBarHeight + pad.bottom;
-              final side = size.width / 2 - seekMiddle(size.width);
+              final skew = (pad.left - pad.right).abs() / 2;
+              final side = size.width / 2 - seekMiddle(size.width, skew: skew);
               return Listener(
                 behavior: HitTestBehavior.translucent,
                 onPointerDown: (e) =>
@@ -1171,6 +1181,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       size,
                       top: top,
                       bottom: bottom,
+                      skew: skew,
                     ),
                     burst: _seek.value.$1,
                   );
@@ -1281,7 +1292,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _SeekButton(_player, back: true, onPressed: () => _nudge(-10)),
-              const MaterialPlayOrPauseButton(iconSize: 48),
+              const MaterialPlayOrPauseButton(iconSize: FlickTokens.grid * 12),
               _SeekButton(_player, back: false, onPressed: () => _nudge(10)),
             ],
           ),
@@ -1372,7 +1383,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       // media_kit keeps the controls' visibility private.
                       padding: const EdgeInsets.only(
                         right: FlickTokens.railGap,
-                        bottom: 64 + FlickTokens.railGap,
+                        bottom: _barHeight + FlickTokens.railGap,
                       ),
                       child: Align(
                         alignment: Alignment.bottomRight,
@@ -1961,7 +1972,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 }
 
-/// How far the buffer runs ahead of the playhead.
 /// A ±10 s bar button. media_kit fades its middle bar out while buffering but
 /// keeps it tappable, so the button leaves taps and TalkBack alone then. It
 /// listens itself: media_kit never rebuilds its bars.
@@ -1999,6 +2009,7 @@ class _SeekButton extends StatelessWidget {
   );
 }
 
+/// How far the buffer runs ahead of the playhead.
 class _BufferAhead extends StatelessWidget {
   const _BufferAhead(this.player);
   final Player player;
