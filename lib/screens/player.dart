@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show PlatformDispatcher;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -19,6 +20,7 @@ import '../torrent.dart';
 import '../upnext.dart';
 import '../widgets.dart';
 import 'buffering.dart';
+import 'seek.dart';
 import 'upnext.dart';
 import 'tv_player.dart';
 
@@ -135,6 +137,179 @@ bool stoppedEarly({
   return error && buffer - position < const Duration(seconds: 1);
 }
 
+/// media_kit's top and bottom button bars (`buttonBarHeight`), and a margin the
+/// height of its seek bar (`seekBarContainerHeight`) above the bottom one, so a
+/// tap aimed at the seek bar never seeks by 10 s.
+const _barHeight = 64.0, _seekBarHeight = 36.0;
+
+/// Width of the back 10 s · play/pause · forward 10 s group in the middle of
+/// the player.
+const primaryBarWidth = FlickTokens.grid * 60;
+
+/// Half the width of the player's middle, where taps never seek: a third of
+/// the width, and never narrower than the button group plus a margin, so a
+/// double tap on a button can't seek as well. [skew] is how far uneven side
+/// insets (a display cutout in media_kit's fullscreen) can move the group.
+double seekMiddle(double width, {double skew = 0}) {
+  const group = primaryBarWidth + FlickTokens.grid * 8;
+  return (width / 3 > group ? width / 3 : group) / 2 + skew;
+}
+
+/// Which way a double tap at [p] seeks (design/seek.md): -1 left, 1 right, 0 in
+/// the middle ([seekMiddle]) or the [top]/[bottom] control bands.
+int seekZone(
+  Offset p,
+  Size s, {
+  required double top,
+  required double bottom,
+  double skew = 0,
+}) {
+  if (p.dy < top || p.dy > s.height - bottom) return 0;
+  final half = seekMiddle(s.width, skew: skew);
+  if (p.dx < s.width / 2 - half) return -1;
+  if (p.dx > s.width / 2 + half) return 1;
+  return 0;
+}
+
+/// Where a ±[seconds] nudge lands: on from a seek still [pending], within the
+/// video.
+Duration nudgeTarget({
+  required Duration position,
+  Duration? pending,
+  required Duration duration,
+  required int seconds,
+}) {
+  final to = (pending ?? position) + Duration(seconds: seconds);
+  if (to < Duration.zero) return Duration.zero;
+  return to > duration ? duration : to;
+}
+
+/// One burst of ±10 s nudges (design/seek.md): where it will seek, and the
+/// side and running total the ripple shows. The player seeks to [settle] once
+/// the taps stop.
+class SeekBurst {
+  Duration? _target;
+  int side = 0, total = 0;
+
+  /// Adds a nudge; false (nothing to show) while the video has no duration.
+  bool nudge(
+    int seconds, {
+    required Duration position,
+    required Duration duration,
+  }) {
+    if (duration <= Duration.zero) return false;
+    _target = nudgeTarget(
+      position: position,
+      pending: _target,
+      duration: duration,
+      seconds: seconds,
+    );
+    final s = seconds.sign;
+    total = s == side ? total + seconds.abs() : seconds.abs();
+    side = s;
+    return true;
+  }
+
+  /// Ends the burst: where to seek, or null. [total] stays for the fade-out.
+  Duration? settle([DateTime? now]) {
+    final target = _target;
+    _target = null;
+    side = 0;
+    if (target != null) {
+      _landing = target;
+      _settledAt = now ?? DateTime.now();
+    }
+    return target;
+  }
+
+  Duration? _landing;
+  DateTime _settledAt = DateTime(0);
+
+  /// Whether position report [p] is current. For a moment after a seek mpv can
+  /// still report the time from before it, and the next burst must not count
+  /// from that (found on the phone: taps 0.6 s apart lost 10 s on a torrent).
+  /// Until a report lands near the target, or 2 s pass, others are stale.
+  bool current(Duration p, [DateTime? now]) {
+    final landing = _landing;
+    if (landing == null) return true;
+    final near = (p - landing).abs() <= const Duration(milliseconds: 1500);
+    final late =
+        (now ?? DateTime.now()).difference(_settledAt) >
+        const Duration(seconds: 2);
+    if (!near && !late) return false;
+    _landing = null;
+    return true;
+  }
+}
+
+/// Which taps seek (design/seek.md). A tap is one pointer, still and short. A
+/// double tap on a side opens a burst; while it's open every tap on that side
+/// counts. A second pointer, a drag or a cancel voids the tap in progress.
+class SeekTaps {
+  int? _pointer;
+  Offset _down = Offset.zero;
+  Duration _downAt = Duration.zero;
+  bool _void = false;
+  Offset _lastUp = Offset.zero;
+  Duration? _lastUpAt;
+  int _lastZone = 0;
+
+  void down(int pointer, Offset p, Duration t) {
+    if (_pointer != null) {
+      _void = true;
+      return;
+    }
+    _pointer = pointer;
+    _down = p;
+    _downAt = t;
+    _void = false;
+  }
+
+  void move(int pointer, Offset p) {
+    if (pointer == _pointer && (p - _down).distance > kTouchSlop) _void = true;
+  }
+
+  void cancel(int pointer) {
+    if (pointer != _pointer) return;
+    _pointer = null;
+    _lastUpAt = null;
+  }
+
+  /// The side to seek towards for this tap (-1, 1), or 0. [zone] is
+  /// [seekZone] of the tap, [burst] the side of the open burst or 0.
+  int up(
+    int pointer,
+    Offset p,
+    Duration t, {
+    required int zone,
+    required int burst,
+  }) {
+    if (pointer != _pointer) return 0;
+    _pointer = null;
+    if (_void ||
+        zone == 0 ||
+        (p - _down).distance > kTouchSlop ||
+        t - _downAt >= kLongPressTimeout) {
+      _lastUpAt = null;
+      return 0;
+    }
+    if (zone == burst) return zone;
+    final last = _lastUpAt;
+    if (last != null &&
+        zone == _lastZone &&
+        // Like Android: from the first release to the second press.
+        _downAt - last <= kDoubleTapTimeout &&
+        (p - _lastUp).distance <= kDoubleTapSlop) {
+      _lastUpAt = null;
+      return zone;
+    }
+    _lastUp = p;
+    _lastUpAt = t;
+    _lastZone = zone;
+    return 0;
+  }
+}
+
 class PlayerScreen extends StatefulWidget {
   const PlayerScreen({
     required this.title,
@@ -212,6 +387,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final _added = <String, String>{};
   // open() resets state.position to 0 until mpv reports time-pos; Retry and the stop check use this instead.
   Duration _pos = Duration.zero;
+  // ±10 s seek (design/seek.md): taps add up and seek once, 400 ms after the
+  // last, so a torrent clears its piece deadlines once per burst.
+  final _taps = SeekTaps();
+  final _burst = SeekBurst();
+  Timer? _seekTimer;
+  // (side, total) of the open burst. A notifier: the layer also lives in
+  // media_kit's fullscreen route, which this State's setState doesn't reach.
+  final _seek = ValueNotifier<(int, int)>((0, 0));
   // Up Next (design/upnext.md). _token invalidates a commit in flight on dispose.
   NextUp? _next;
   Future<Object?>? _resolved;
@@ -243,7 +426,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // Before the early return: a seek to the start must reset Up Next.
           _upNext(p);
           if (p <= Duration.zero) return;
-          _pos = p;
+          if (_burst.current(p)) _pos = p;
           _pauseWait.position(p, DateTime.now());
           if (!_started) {
             // Errors before playback started weren't fatal after all.
@@ -886,6 +1069,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _endTimers();
     _countdown?.cancel();
+    _seekTimer?.cancel();
+    _seek.dispose();
     _token++;
     _nextBar.dispose();
     _tvRefresh.dispose();
@@ -899,6 +1084,103 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     super.dispose();
   }
+
+  void _nudge(int seconds) {
+    // From _pos, not state.position: open() reports 0 until mpv seeks.
+    final counted = _burst.nudge(
+      seconds,
+      position: _pos,
+      duration: _player.state.duration,
+    );
+    if (!counted) return;
+    HapticFeedback.selectionClick();
+    _seek.value = (_burst.side, _burst.total);
+    _seekTimer?.cancel();
+    _seekTimer = Timer(const Duration(milliseconds: 400), () {
+      final target = _burst.settle();
+      if (target != null) {
+        // The position stream skips 0, so a seek to the start wouldn't
+        // update _pos.
+        _pos = target;
+        _player.seek(target);
+      }
+      _seek.value = (0, _burst.total);
+    });
+  }
+
+  /// media_kit's controls with the double-tap seek layer on top, in the page
+  /// and in media_kit's fullscreen route. While a burst is open its side
+  /// takes the taps itself, so media_kit doesn't flash the controls on each.
+  Widget _controls(VideoState state) => Stack(
+    children: [
+      MaterialVideoControls(state),
+      Positioned.fill(
+        child: IgnorePointer(
+          ignoring: _panel,
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final size = box.biggest;
+              final pad = MediaQuery.paddingOf(context);
+              final top = _barHeight + pad.top;
+              final bottom = _barHeight + _seekBarHeight + pad.bottom;
+              final skew = (pad.left - pad.right).abs() / 2;
+              final side = size.width / 2 - seekMiddle(size.width, skew: skew);
+              return Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (e) =>
+                    _taps.down(e.pointer, e.localPosition, e.timeStamp),
+                onPointerMove: (e) => _taps.move(e.pointer, e.localPosition),
+                onPointerCancel: (e) => _taps.cancel(e.pointer),
+                onPointerUp: (e) {
+                  final side = _taps.up(
+                    e.pointer,
+                    e.localPosition,
+                    e.timeStamp,
+                    zone: seekZone(
+                      e.localPosition,
+                      size,
+                      top: top,
+                      bottom: bottom,
+                      skew: skew,
+                    ),
+                    burst: _seek.value.$1,
+                  );
+                  if (side != 0) _nudge(side * 10);
+                },
+                child: ValueListenableBuilder(
+                  valueListenable: _seek,
+                  builder: (_, seek, _) => Stack(
+                    children: [
+                      // Between the bands: the bars and the time stay readable.
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: top,
+                        bottom: bottom,
+                        child: IgnorePointer(
+                          child: SeekRipple(side: seek.$1, seconds: seek.$2),
+                        ),
+                      ),
+                      if (seek.$1 != 0)
+                        Positioned(
+                          left: seek.$1 < 0 ? 0 : size.width - side,
+                          width: side,
+                          top: top,
+                          bottom: bottom,
+                          child: const Listener(
+                            behavior: HitTestBehavior.opaque,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -930,7 +1212,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final theme = MaterialVideoControlsThemeData(
       topButtonBar: bar,
       topButtonBarMargin: EdgeInsets.zero,
-      buttonBarHeight: 64,
+      buttonBarHeight: _barHeight,
+      // Stateless: media_kit never rebuilds its bars (see _nextBar).
+      // A fixed width, so the group stays inside seekZone's middle.
+      primaryButtonBar: [
+        SizedBox(
+          width: primaryBarWidth,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _SeekButton(_player, back: true, onPressed: () => _nudge(-10)),
+              const MaterialPlayOrPauseButton(iconSize: FlickTokens.grid * 12),
+              _SeekButton(_player, back: false, onPressed: () => _nudge(10)),
+            ],
+          ),
+        ),
+      ],
       bottomButtonBar: [
         const MaterialPositionIndicator(),
         const Spacer(),
@@ -985,6 +1282,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Video(
                     key: _video,
                     controller: _controller,
+                    controls: _controls,
                     // media_kit's default shows the bars and unlocks rotation.
                     onExitFullscreen: _immersive,
                   ),
@@ -1015,7 +1313,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       // media_kit keeps the controls' visibility private.
                       padding: const EdgeInsets.only(
                         right: FlickTokens.railGap,
-                        bottom: 64 + FlickTokens.railGap,
+                        bottom: _barHeight + FlickTokens.railGap,
                       ),
                       child: Align(
                         alignment: Alignment.bottomRight,
@@ -1862,6 +2160,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     );
   }
+}
+
+/// A ±10 s bar button. media_kit fades its middle bar out while buffering, and
+/// mpv buffers briefly after every seek, so the button stays tappable then: a
+/// second press a second after the first must still count (found on the
+/// phone). It leaves TalkBack alone while it can't be seen. It listens itself:
+/// media_kit never rebuilds its bars.
+class _SeekButton extends StatelessWidget {
+  const _SeekButton(this.player, {required this.back, required this.onPressed});
+
+  final Player player;
+  final bool back;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<bool>(
+    stream: player.stream.buffering,
+    initialData: player.state.buffering,
+    builder: (_, buffering) {
+      return ExcludeSemantics(
+        excluding: buffering.data ?? false,
+        child: IconButton(
+          tooltip: back ? 'Back 10 seconds' : 'Forward 10 seconds',
+          onPressed: onPressed,
+          iconSize: FlickTokens.grid * 9,
+          color: FlickTokens.textPrimary,
+          constraints: const BoxConstraints(
+            minWidth: FlickTokens.minTouchTarget,
+            minHeight: FlickTokens.minTouchTarget,
+          ),
+          icon: Icon(back ? Icons.replay_10 : Icons.forward_10),
+        ),
+      );
+    },
+  );
 }
 
 /// How far the buffer runs ahead of the playhead.

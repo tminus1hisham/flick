@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_kit/media_kit.dart';
 
@@ -74,5 +75,209 @@ void main() {
         expect(addedSubtitle(list, '2', {'2'}), isNull);
       },
     );
+  });
+
+  group('seekZone', () {
+    int zone(double x, double y, Size s) =>
+        seekZone(Offset(x, y), s, top: 64, bottom: 100);
+
+    test('thirds of a landscape player', () {
+      const s = Size(800, 360);
+      expect(zone(100, 180, s), -1);
+      expect(zone(400, 180, s), 0);
+      expect(zone(700, 180, s), 1);
+    });
+    test('a narrow player keeps the middle as wide as the buttons', () {
+      const s = Size(360, 640);
+      expect(zone(20, 320, s), -1);
+      expect(zone(60, 320, s), 0);
+      expect(zone(300, 320, s), 0);
+      expect(zone(340, 320, s), 1);
+    });
+    test('a tap on the ±10 buttons never seeks, at any width', () {
+      for (final w in <double>[360, 480, 640, 800, 915, 1200]) {
+        final s = Size(w, 360);
+        // The group's outer edges, and just outside them.
+        for (final dx in [0.0, 8]) {
+          expect(zone(w / 2 - primaryBarWidth / 2 - dx, 180, s), 0, reason: '$w');
+          expect(zone(w / 2 + primaryBarWidth / 2 + dx, 180, s), 0, reason: '$w');
+        }
+      }
+    });
+    test('a cutout on one side shifts the buttons; skew keeps them out', () {
+      // media_kit's fullscreen pads its controls by the insets: a 40 dp cutout
+      // on the left moves the group 20 dp right.
+      const s = Size(760, 360), shift = 20.0;
+      const edge = 760 / 2 + primaryBarWidth / 2 + shift;
+      expect(seekZone(const Offset(edge, 180), s, top: 64, bottom: 100), 1);
+      expect(
+        seekZone(
+          const Offset(edge, 180),
+          s,
+          top: 64,
+          bottom: 100,
+          skew: shift,
+        ),
+        0,
+      );
+    });
+    test('the top bar and the seek bar with the bottom bar never seek', () {
+      const s = Size(800, 360);
+      expect(zone(100, 40, s), 0);
+      expect(zone(700, 40, s), 0);
+      // 360 - 100: the seek bar starts here.
+      expect(zone(100, 270, s), 0);
+      expect(zone(700, 350, s), 0);
+      expect(zone(100, 70, s), -1);
+      expect(zone(700, 250, s), 1);
+    });
+  });
+
+  group('nudgeTarget', () {
+    const duration = Duration(minutes: 40);
+    Duration at(int s, {int? pending, required int by}) => nudgeTarget(
+      position: Duration(seconds: s),
+      pending: pending == null ? null : Duration(seconds: pending),
+      duration: duration,
+      seconds: by,
+    );
+
+    test('moves from the position', () {
+      expect(at(100, by: 10), const Duration(seconds: 110));
+      expect(at(100, by: -10), const Duration(seconds: 90));
+    });
+    test('adds up from a seek still pending, not the stale position', () {
+      expect(at(100, pending: 120, by: 10), const Duration(seconds: 130));
+      expect(at(100, pending: 120, by: -10), const Duration(seconds: 110));
+    });
+    test('stays within the video', () {
+      expect(at(5, by: -10), Duration.zero);
+      expect(at(5, pending: 0, by: -10), Duration.zero);
+      expect(at(2395, by: 10), duration);
+    });
+  });
+
+  group('SeekBurst', () {
+    const duration = Duration(minutes: 40), at = Duration(seconds: 100);
+
+    test('taps add up to one target; settle ends the burst', () {
+      final burst = SeekBurst();
+      for (var i = 0; i < 3; i++) {
+        expect(burst.nudge(10, position: at, duration: duration), isTrue);
+      }
+      expect((burst.side, burst.total), (1, 30));
+      expect(burst.settle(), const Duration(seconds: 130));
+      // Total stays for the fade-out; the next burst starts afresh.
+      expect((burst.side, burst.total), (0, 30));
+      expect(burst.settle(), isNull);
+      burst.nudge(10, position: at, duration: duration);
+      expect(burst.total, 10);
+    });
+    test('switching sides restarts the total, not the target', () {
+      final burst = SeekBurst()
+        ..nudge(10, position: at, duration: duration)
+        ..nudge(10, position: at, duration: duration)
+        ..nudge(-10, position: at, duration: duration);
+      expect((burst.side, burst.total), (-1, 10));
+      expect(burst.settle(), const Duration(seconds: 110));
+    });
+    test('a report from before the seek is stale until one lands', () {
+      final t0 = DateTime(2026);
+      final burst = SeekBurst()..nudge(10, position: at, duration: duration);
+      expect(burst.settle(t0), const Duration(seconds: 110));
+      // mpv still says 100 s just after seeking to 110 s.
+      expect(burst.current(at, t0.add(const Duration(milliseconds: 300))), isFalse);
+      // A report near the target lands it; later reports count again.
+      expect(burst.current(const Duration(milliseconds: 110500), t0), isTrue);
+      expect(burst.current(at, t0), isTrue);
+    });
+    test('a seek that never reports near its target stops holding after 2 s', () {
+      final t0 = DateTime(2026);
+      final burst = SeekBurst()..nudge(10, position: at, duration: duration);
+      burst.settle(t0);
+      expect(burst.current(at, t0.add(const Duration(seconds: 1))), isFalse);
+      expect(burst.current(at, t0.add(const Duration(seconds: 3))), isTrue);
+    });
+    test('nothing before the video has a duration', () {
+      final burst = SeekBurst();
+      expect(burst.nudge(10, position: at, duration: Duration.zero), isFalse);
+      expect((burst.side, burst.total), (0, 0));
+      expect(burst.settle(), isNull);
+    });
+  });
+
+  group('SeekTaps', () {
+    const left = Offset(100, 180), right = Offset(700, 180);
+    late SeekTaps taps;
+    late Duration t;
+    setUp(() {
+      taps = SeekTaps();
+      t = const Duration(seconds: 1);
+    });
+    // One tap of [held] ms at [p], [after] ms after the last one ended.
+    int tap(
+      Offset p, {
+      int zone = 1,
+      int burst = 0,
+      int held = 50,
+      int after = 100,
+      int pointer = 1,
+    }) {
+      t += Duration(milliseconds: after);
+      taps.down(pointer, p, t);
+      t += Duration(milliseconds: held);
+      return taps.up(pointer, p, t, zone: zone, burst: burst);
+    }
+
+    test('a single tap does nothing; a double tap seeks that way', () {
+      expect(tap(right), 0);
+      expect(tap(right), 1);
+      expect(tap(left, zone: -1), 0);
+      expect(tap(left, zone: -1), -1);
+    });
+    test('the second tap must come quickly, on the same side', () {
+      expect(tap(right), 0);
+      expect(tap(right, after: 400), 0);
+      expect(tap(left, zone: -1), 0);
+      expect(tap(right), 0);
+    });
+    test('a slow second tap counts from its press, like Android', () {
+      // Pressed 250 ms after the first release, released 100 ms later.
+      expect(tap(right), 0);
+      expect(tap(right, after: 250, held: 100), 1);
+    });
+    test('the middle third never seeks', () {
+      expect(tap(const Offset(400, 180), zone: 0), 0);
+      expect(tap(const Offset(400, 180), zone: 0), 0);
+    });
+    test('while a burst is open every tap on its side counts', () {
+      expect(tap(right, burst: 1), 1);
+      expect(tap(right, burst: 1, after: 350), 1);
+      expect(tap(left, zone: -1, burst: 1), 0);
+    });
+    test('a long press, a drag, a second finger or a cancel is no tap', () {
+      expect(tap(right), 0);
+      expect(tap(right, held: 600), 0);
+
+      expect(tap(right), 0);
+      t += const Duration(milliseconds: 100);
+      taps.down(1, right, t);
+      taps.move(1, right + const Offset(40, 0));
+      t += const Duration(milliseconds: 50);
+      expect(taps.up(1, right, t, zone: 1, burst: 0), 0);
+
+      expect(tap(right), 0);
+      t += const Duration(milliseconds: 100);
+      taps.down(1, right, t);
+      taps.down(2, left, t);
+      t += const Duration(milliseconds: 50);
+      expect(taps.up(2, left, t, zone: -1, burst: 0), 0);
+      expect(taps.up(1, right, t, zone: 1, burst: 0), 0);
+
+      expect(tap(right), 0);
+      taps.down(1, right, t);
+      taps.cancel(1);
+      expect(tap(right), 0);
+    });
   });
 }
