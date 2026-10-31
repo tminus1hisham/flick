@@ -597,12 +597,16 @@ class _ServiceRow extends StatefulWidget {
 
 class _ServiceRowState extends State<_ServiceRow> {
   var _failed = false;
+  var _noHandler = false;
 
   Future<void> _open() async {
     HapticFeedback.lightImpact();
-    setState(() => _failed = false);
+    setState(() => _failed = _noHandler = false);
     try {
       await play(context, widget.stream, widget.playback, addon: widget.addon);
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      setState(() => e.code == 'noHandler' ? _noHandler = true : _failed = true);
     } catch (_) {
       if (mounted) setState(() => _failed = true);
     }
@@ -646,6 +650,14 @@ class _ServiceRowState extends State<_ServiceRow> {
           ]),
         ),
       ),
+      if (_noHandler)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('No browser on this device. Open on your phone:', style: FlickText.body),
+            SelectableText(widget.stream.externalUrl!, style: streamMonoStyle),
+          ]),
+        ),
       if (_failed)
         _Notice(Icons.report_outlined, "Couldn't open $name",
             live: true, actions: [TextButton(onPressed: _open, child: const Text('Try again'))]),
