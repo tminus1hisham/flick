@@ -59,6 +59,13 @@ class _ShellState extends State<Shell> {
       4, (i) => FocusScopeNode(debugLabel: 'tab $i', directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope));
 
   @override
+  void initState() {
+    super.initState();
+    // Launch is the first entry into Discover.
+    if (device.tv) WidgetsBinding.instance.addPostFrameCallback((_) => _enter());
+  }
+
+  @override
   void dispose() {
     _rail.dispose();
     for (final t in _tabs) {
@@ -67,11 +74,8 @@ class _ShellState extends State<Shell> {
     super.dispose();
   }
 
-  /// Into the selected tab: its remembered item, else its first focusable; with neither, focus stays on the rail.
-  void _enter() {
-    final scope = _tabs[_tab];
-    (scope.focusedChild ?? scope.traversalDescendants.firstOrNull)?.requestFocus();
-  }
+  /// Into the selected tab: its remembered item, else its [InitialFocus]; with neither, focus stays on the rail.
+  void _enter() => enterScope(_tabs[_tab]);
 
   void _select(int i) {
     setState(() => _tab = i);
@@ -79,8 +83,17 @@ class _ShellState extends State<Shell> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _enter());
   }
 
-  /// TV Back at the shell (system Back too): content goes to the rail's selected item; the rail leaves the app.
-  void _back() => _rail.hasFocus ? SystemNavigator.pop() : _rail.requestFocus();
+  /// TV Back at the shell (system Back too): an open search or panel in the content closes first (it handles
+  /// [DismissIntent], like Escape, and answers true); then content goes to the rail's selected item; the rail
+  /// leaves the app.
+  void _back() {
+    final focus = primaryFocus?.context;
+    if (_rail.hasFocus) {
+      SystemNavigator.pop();
+    } else if (focus == null || Actions.maybeInvoke(focus, const DismissIntent()) != true) {
+      _rail.requestFocus();
+    }
+  }
 
   @override
   Widget build(BuildContext context) => context.tv ? _tv() : _phone();
@@ -96,7 +109,7 @@ class _ShellState extends State<Shell> {
               padding: const EdgeInsets.only(left: FlickTv.railColumn + FlickTv.contentGap),
               child: IndexedStack(index: _tab, children: [
                 for (final (i, tab) in [
-                  const DiscoverScreen(),
+                  DiscoverScreen(onAddSources: () => _select(3)),
                   const AnimeTab(),
                   Scaffold(appBar: _downloadsBar(), body: const DownloadsScreen()),
                   const SourcesScreen(),

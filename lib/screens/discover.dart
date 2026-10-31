@@ -32,7 +32,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final _search = TextEditingController();
   final _typeSwitchFocus = FocusNode(debugLabel: 'Discover Movies');
   final _searchActionFocus = FocusNode(debugLabel: 'Discover Search');
-  final _searchFieldFocus = FocusNode(debugLabel: 'Discover search field');
+  // A one-line field keeps Down for its caret; on TV, Down leaves it towards the results.
+  final _searchFieldFocus = FocusNode(
+    debugLabel: 'Discover search field',
+    onKeyEvent: (node, event) {
+      if (event is KeyUpEvent || event.logicalKey != LogicalKeyboardKey.arrowDown) return KeyEventResult.ignored;
+      node.focusInDirection(TraversalDirection.down);
+      return KeyEventResult.handled;
+    },
+  );
 
   // EditableText owns focus while editing. Its non-focusable ancestor paints
   // the same FocusRing as every other TV control, including descendant focus.
@@ -41,6 +49,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     canRequestFocus: false,
     skipTraversal: true,
   );
+  // The TV header moves between feeds (catalog, search, favourites) without a remount, so the control just
+  // used keeps focus.
+  final _header = GlobalKey(debugLabel: 'Discover header');
   bool _searchOpen = false;
   String _type = 'movie', _query = '';
   (String, String, String)? _selected;
@@ -101,7 +112,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   ) => Padding(
         padding: const EdgeInsets.only(top: FlickTv.insetV, bottom: 16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
+          // Header rows sit [FlickTv.gridPad] in, like the chips and the grid: lined up, and no ring is clipped.
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad),
+            child: Row(children: [
             Text('Discover', style: FlickTv.page),
             const SizedBox(width: FlickTv.contentGap),
             if (_searchOpen) ...[
@@ -121,6 +135,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     onChanged: (v) => setState(() {
                       if (v.trim().isEmpty) _query = '';
                     }),
+                    // Focus stays in the field after a search; Down enters the results.
+                    onEditingComplete: () {},
                     onSubmitted: (q) => setState(() => _query = q.trim()),
                     decoration: InputDecoration(
                       hintText: 'Search titles',
@@ -162,15 +178,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ),
               ),
             ],
-          ]),
+          ])),
           const SizedBox(height: 12),
-          Row(mainAxisSize: MainAxisSize.min, children: [
+          // The tab's initial target: entering Discover with nothing remembered lands on Movies.
+          InitialFocus(child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
             for (final (type, label) in [('movie', 'Movies'), ('series', 'Series')])
               _TvChoice(
                 label,
                 selected: _type == type,
                 focusNode: type == 'movie' ? _typeSwitchFocus : null,
-                autofocus: type == 'movie',
                 onActivate: () {
                   if (_type != type) {
                     _pick(() {
@@ -180,7 +198,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   }
                 },
               ),
-          ]),
+          ]))),
           const SizedBox(height: 8),
           // A non-lazy row keeps every catalog reachable by directional focus.
           // Its padding leaves room for the outer ring at the viewport edges.
@@ -224,7 +242,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     bool searching,
     bool heroes,
   ) {
-    final header = _tvHeader(catalogs, selected, hasFavourites, showFavourites);
+    final header = KeyedSubtree(key: _header, child: _tvHeader(catalogs, selected, hasFavourites, showFavourites));
     final Widget body;
     if (searching && searchable == null) {
       body = _TvDiscoverScroll(
@@ -279,12 +297,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       );
     }
 
-    return PopScope(
-      canPop: !_searchOpen,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _searchOpen) _closeSearch();
+    // Back with search open closes it before the shell's Back contract: the shell invokes DismissIntent first.
+    return Actions(
+      actions: {
+        if (_searchOpen)
+          DismissIntent: CallbackAction<DismissIntent>(onInvoke: (_) {
+            _closeSearch();
+            return true;
+          }),
       },
-      child: HeroMode(enabled: heroes, child: body),
+      child: FocusTraversalGroup(
+        policy: ReadingOrderTraversalPolicy(requestFocusCallback: tvReveal),
+        child: HeroMode(enabled: heroes, child: body),
+      ),
     );
   }
 
@@ -453,7 +478,6 @@ class _TvChoice extends StatelessWidget {
     required this.onActivate,
     this.icon,
     this.focusNode,
-    this.autofocus = false,
   });
 
   final String label;
@@ -461,7 +485,6 @@ class _TvChoice extends StatelessWidget {
   final VoidCallback onActivate;
   final IconData? icon;
   final FocusNode? focusNode;
-  final bool autofocus;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -469,7 +492,6 @@ class _TvChoice extends StatelessWidget {
         inMutuallyExclusiveGroup: true,
         child: FocusFrame.button(
           focusNode: focusNode,
-          autofocus: autofocus,
           onActivate: onActivate,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 40),
@@ -499,16 +521,19 @@ class _TvChoice extends StatelessWidget {
 class _TvDiscoverScroll extends StatelessWidget {
   const _TvDiscoverScroll({
     this.header,
+    this.controller,
     required this.slivers,
   });
 
   final Widget? header;
+  final ScrollController? controller;
   final List<Widget> slivers;
 
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(right: FlickTv.insetH),
         child: CustomScrollView(
+          controller: controller,
           cacheExtent: MediaQuery.sizeOf(context).height,
           slivers: [
             if (header != null) SliverToBoxAdapter(child: header),
@@ -554,6 +579,42 @@ class _CatalogFeedState extends State<CatalogFeed> {
   bool _loading = false, _done = false;
   Object? _error;
 
+  // TV: one focus node per title, so a move can focus an index that was not built yet.
+  final _scroll = ScrollController();
+  final _focus = <String, FocusNode>{};
+  double _row = 0;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    for (final n in _focus.values) {
+      n.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Up/Down in the lazy grid: the default policy first; when it finds no built poster, jump the target row
+  /// (one row of [FlickTv.columns]) into view and focus that index in the next frame.
+  Object? _move(DirectionalFocusIntent intent) {
+    final from = primaryFocus;
+    if (from == null || from.focusInDirection(intent.direction)) return null;
+    final down = intent.direction == TraversalDirection.down;
+    if (!down && intent.direction != TraversalDirection.up) return null;
+    final index = _items.indexWhere((m) => _focus[m.id] == from);
+    if (index < 0 || !_scroll.hasClients) return null;
+    final target = (index + (down ? FlickTv.columns : -FlickTv.columns)).clamp(0, _items.length - 1);
+    final rows = target ~/ FlickTv.columns - index ~/ FlickTv.columns;
+    if (rows == 0) return null;
+    final p = _scroll.position;
+    p.jumpTo((p.pixels + rows * (_row + FlickTv.gridGap)).clamp(p.minScrollExtent, p.maxScrollExtent));
+    final id = _items[target].id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final node = _focus[id];
+      if (mounted && node?.context != null) tvReveal(node!);
+    });
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -587,6 +648,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
   // unbuilt target index without changing the artwork or caption widgets.
   Widget _buildTvItem(BuildContext context, int index) => _TvPoster(
         _items[index],
+        focusNode: _focus.putIfAbsent(_items[index].id, () => FocusNode(debugLabel: 'poster $index')),
         key: ValueKey(_items[index].id),
       );
 
@@ -602,7 +664,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
       crossAxisCount: FlickTv.columns,
       crossAxisSpacing: FlickTv.gridGap,
       mainAxisSpacing: FlickTv.gridGap,
-      mainAxisExtent: width / FlickTv.posterAspect + 8 + caption,
+      mainAxisExtent: _row = width / FlickTv.posterAspect + 8 + caption,
     );
     final slivers = <Widget>[];
 
@@ -663,7 +725,10 @@ class _CatalogFeedState extends State<CatalogFeed> {
         }
         return false;
       },
-      child: _TvDiscoverScroll(header: widget.tvHeader, slivers: slivers),
+      child: Actions(
+        actions: {DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(onInvoke: _move)},
+        child: _TvDiscoverScroll(header: widget.tvHeader, controller: _scroll, slivers: slivers),
+      ),
     );
   }
 
@@ -763,8 +828,9 @@ void _openTitle(BuildContext context, MetaPreview m) {
 }
 
 class _TvPoster extends StatelessWidget {
-  const _TvPoster(this.preview, {super.key});
+  const _TvPoster(this.preview, {required this.focusNode, super.key});
   final MetaPreview preview;
+  final FocusNode focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -774,6 +840,7 @@ class _TvPoster extends StatelessWidget {
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       FocusFrame(
+        focusNode: focusNode,
         lift: true,
         semanticLabel: year == null ? m.name : '${m.name}, $year',
         onActivate: open,
@@ -938,7 +1005,9 @@ class _TvNotice extends StatelessWidget {
             Text(text, style: FlickTv.body),
             if (action != null && onAction != null) ...[
               const SizedBox(height: 12),
+              // Becomes the target only when focus was lost: autofocus never takes it from a focused item.
               FocusFrame.button(
+                autofocus: true,
                 onActivate: onAction,
                 child: Container(
                   constraints: const BoxConstraints(minHeight: FlickTokens.minTouchTarget),

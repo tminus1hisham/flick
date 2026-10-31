@@ -182,3 +182,58 @@ class FocusMemory {
 
   Object? recall(String key) => _ids[key];
 }
+
+/// Marks [child]'s focusables as the initial target of the enclosing tab or screen scope: [enterScope] lands
+/// on the first of them when the scope has nothing remembered.
+class InitialFocus extends StatelessWidget {
+  const InitialFocus({required this.child, super.key});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
+}
+
+bool _isText(FocusNode n) => n.context?.findAncestorWidgetOfExactType<EditableText>() != null;
+
+/// Focus into [scope]: its remembered item, else the first focusable under an [InitialFocus], else its first
+/// focusable. Never a text field: entering must not open the on-screen keyboard. With none, focus stays put.
+void enterScope(FocusScopeNode scope) {
+  final nodes = [for (final n in scope.traversalDescendants) if (n is! FocusScopeNode && !_isText(n)) n];
+  final remembered = scope.focusedChild;
+  final target = remembered != null && !_isText(remembered)
+      ? remembered
+      : nodes.where((n) => n.context?.findAncestorWidgetOfExactType<InitialFocus>() != null).firstOrNull ??
+          nodes.firstOrNull;
+  target?.requestFocus();
+}
+
+/// True while the key being handled is an auto-repeat (a held arrow), so moves jump instead of animating.
+bool get keyRepeating => _repeat.on;
+final _repeat = _RepeatWatch();
+
+class _RepeatWatch {
+  _RepeatWatch() {
+    HardwareKeyboard.instance.addHandler((event) {
+      on = event is KeyRepeatEvent;
+      return false;
+    });
+  }
+  bool on = false;
+}
+
+/// The TV [FocusTraversalPolicy.requestFocusCallback]: focus [node], then scroll it into view with
+/// [FlickTv.gridPad] around it, so the ring and the lift are never clipped. [FlickTv.scrollDuration], or a
+/// jump while a key repeats or with reduced motion.
+void tvReveal(FocusNode node,
+    {ScrollPositionAlignmentPolicy? alignmentPolicy, double? alignment, Duration? duration, Curve? curve}) {
+  node.requestFocus();
+  final context = node.context;
+  final box = context?.findRenderObject();
+  if (context == null || box is! RenderBox || !box.hasSize) return;
+  final still = keyRepeating || MediaQuery.disableAnimationsOf(context);
+  box.showOnScreen(
+    rect: (Offset.zero & box.size).inflate(FlickTv.gridPad),
+    duration: still ? Duration.zero : FlickTv.scrollDuration,
+    curve: FlickTokens.curveIn,
+  );
+}
