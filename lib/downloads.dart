@@ -106,7 +106,7 @@ class Downloads extends ChangeNotifier {
       error: const TaskNotification('Download failed', '{displayName}'),
       progressBar: true,
     );
-    // Foreground mode lifts Android's 9-minute limit on non-pausable transcodes.
+    // Foreground mode keeps long downloads alive past Android's background limits.
     await _fd.configure(globalConfig: (Config.runInForeground, true));
     // database.updates fires after the record is stored; _fd.updates fires before.
     _fd.database.updates.listen((r) async {
