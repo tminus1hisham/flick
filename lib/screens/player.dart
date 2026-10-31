@@ -1995,9 +1995,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 }
 
-/// A ±10 s bar button. media_kit fades its middle bar out while buffering but
-/// keeps it tappable, so the button leaves taps and TalkBack alone then. It
-/// listens itself: media_kit never rebuilds its bars.
+/// A ±10 s bar button. media_kit fades its middle bar out while buffering, and
+/// mpv buffers briefly after every seek, so the button stays tappable then: a
+/// second press a second after the first must still count (found on the
+/// phone). It leaves TalkBack alone while it can't be seen. It listens itself:
+/// media_kit never rebuilds its bars.
 class _SeekButton extends StatelessWidget {
   const _SeekButton(this.player, {required this.back, required this.onPressed});
 
@@ -2010,22 +2012,18 @@ class _SeekButton extends StatelessWidget {
     stream: player.stream.buffering,
     initialData: player.state.buffering,
     builder: (_, buffering) {
-      final hidden = buffering.data ?? false;
-      return IgnorePointer(
-        ignoring: hidden,
-        child: ExcludeSemantics(
-          excluding: hidden,
-          child: IconButton(
-            tooltip: back ? 'Back 10 seconds' : 'Forward 10 seconds',
-            onPressed: onPressed,
-            iconSize: FlickTokens.grid * 9,
-            color: FlickTokens.textPrimary,
-            constraints: const BoxConstraints(
-              minWidth: FlickTokens.minTouchTarget,
-              minHeight: FlickTokens.minTouchTarget,
-            ),
-            icon: Icon(back ? Icons.replay_10 : Icons.forward_10),
+      return ExcludeSemantics(
+        excluding: buffering.data ?? false,
+        child: IconButton(
+          tooltip: back ? 'Back 10 seconds' : 'Forward 10 seconds',
+          onPressed: onPressed,
+          iconSize: FlickTokens.grid * 9,
+          color: FlickTokens.textPrimary,
+          constraints: const BoxConstraints(
+            minWidth: FlickTokens.minTouchTarget,
+            minHeight: FlickTokens.minTouchTarget,
           ),
+          icon: Icon(back ? Icons.replay_10 : Icons.forward_10),
         ),
       );
     },

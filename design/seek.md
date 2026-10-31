@@ -22,7 +22,7 @@
 | Playing / paused | Seek; pause state unchanged. |
 | Near the start | Clamp to 0:00; the ripple still shows the taps counted. |
 | Near the end | Clamp to duration. Reaching the end is a normal completion, handled by the existing Up Next / completion path. |
-| Buffering (BufferingPanel shown) | Double tap seeks (it's how people skip a stalled spot); the panel is `IgnorePointer` except "Try another source". media_kit fades the button bar out while buffering but keeps it tappable, so the ±10 buttons ignore taps and leave TalkBack while buffering. |
+| Buffering (BufferingPanel shown) | Double tap seeks (it's how people skip a stalled spot); the panel is `IgnorePointer` except "Try another source". media_kit fades the button bar out while buffering but keeps it tappable. mpv buffers briefly after every seek, so the ±10 buttons stay tappable (a second press a second later must count; found on the phone) and only leave TalkBack while buffering. |
 | Tracks panel open | The tap layer is ignored (`_panel`). |
 | Up Next card shown | The card is above the tap layer and owns the bottom-right; taps on it never seek. The forward ripple sits mostly under the card (accepted: the card is the action there; the seek bar shows the jump). |
 | Offline | Same as buffering. |
@@ -60,7 +60,8 @@ Pure helpers, top level in player.dart, tested in test/player_test.dart:
 TV / D-pad and keyboard arrows, a configurable seek length, swipe-to-seek (media_kit `seekGesture`, left off).
 
 ## Known gaps
-- A position event already in flight when a burst seeks can reset `_pos` to the pre-seek time; a new burst opened in those ~100–200 ms counts from there (code review round 1, low).
+- media_kit 2.0.1 hides its controls 3 s after they appear and a button press doesn't restart that timer, so a press after that only brings the controls back. Double tap works either way.
+- The ±10 buttons blink out during mpv's brief buffering after each seek (media_kit's private fade); presses still count.
 
 ## Ponytail cuts
 - The total under each bar button (planned earlier): it would need a notifier in a frozen bar. A button tap shows the side ripple instead.

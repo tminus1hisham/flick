@@ -6,7 +6,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze`: must print `No issues found!`
-- `flutter test`: 141 tests pass on branch `guest` (201 on `seek`). Kotlin: 22 tests (18 HttpTest + 4 MiruroPolicyTest).
+- `flutter test`: 141 tests pass on branch `guest` (205 on `seek`). Kotlin: 22 tests (18 HttpTest + 4 MiruroPolicyTest).
 - Kotlin unit tests: `cd android && ./gradlew :app:testDebugUnitTest` (results in `build/app/test-results/`). A fresh worktree first needs `flutter pub get` and the gitignored `android/gradlew*` + `android/gradle/wrapper/gradle-wrapper.jar` copied from the main checkout.
 - `flutter build apk --debug`: this is the only check that compiles the Kotlin (`android/app/src/main/kotlin/dev/local/flick/`).
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`. New files must have zero hits. Older files (player.dart, widgets.dart, library.dart) have known hits; that is expected.
@@ -58,11 +58,12 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Status (2026-10-31)
 
-### 10-second seek (branch `seek`, worktree `../stremio-seek`, 2026-10-31, not merged)
+### 10-second seek (branch `seek`, merged into `guest` 2026-10-31)
 Netflix-style seeking for every playback: back 10 s · play/pause · forward 10 s in media_kit's middle bar, and double tap on the left/right side (further taps add up; one seek 400 ms after the last tap). Spec: design/seek.md; decisions: design/decisions.md "10-second seek". Visual (`SeekRipple`, lib/screens/seek.dart) by Codex: edge glow, 6-segment accent rim (one per tap), number-led label.
 - The tap layer is injected via `Video(controls:)` so it also works in media_kit's fullscreen route (state in a `ValueNotifier`); a raw translucent `Listener` keeps media_kit's gestures; during a burst an opaque absorber over that side stops the controls flashing. Logic is pure and tested in test/player_test.dart: `seekZone`/`seekMiddle` (the no-seek middle always covers the button group), `SeekTaps`, `SeekBurst`, `nudgeTarget`.
-- Gates: analyze clean, 201 Flutter tests, debug APK built, gates.py zero hits in new files. Code review: FAIL, then PASS-WITH-NITS (nits fixed). QA critic: FAIL round 1 (distinct 6), FAIL round 2 (theme 5 contrast, motion 7; the rest 8); both round-2 issues fixed with measured renders in design/critic/seek/ (PNGs untracked). A third critic round is the user's call.
-- Not verified on a device. Headless renders cover the ripple only (the player can't render without libmpv). Known gap: a position event in flight when a burst seeks can reset `_pos` (seek.md).
+- Gates: analyze clean, 201 Flutter tests, debug APK built, gates.py zero hits in new files. Code review: FAIL, then PASS-WITH-NITS (nits fixed). QA critic: FAIL round 1 (distinct 6), FAIL round 2 (theme 5 contrast, motion 7; the rest 8); both round-2 issues fixed with measured renders in design/critic/seek/ (PNGs untracked). Round 3 (user's call): PASS (distinct 8, hierarchy 9, motion 8, craft 8, states 8, theme 8, a11y 8, space 8).
+- **Verified on the phone** (Redmi, The Kid torrent): buttons ±10, slow and fast taps add up, double tap with controls hidden (stay hidden), 4-tap burst with ripple, double tap on a button counts two presses only, left side, after the fullscreen button. Two bugs found there and fixed (stale pre-seek position; presses swallowed during post-seek buffering), see decisions.md.
+- Not verified on a device: TalkBack, 1.3× text on the phone, the Up Next card next to the ripple, Jellyfin playback. Known gaps (media_kit's 3 s hide timer ignores button presses; buttons blink during post-seek buffering): seek.md.
 
 ### Accounts hidden (branch `guest`, 2026-10-31)
 At the user's request sign-in is hidden until a later release: `session.accounts = false` (session.dart). Everyone opens on the 3-tab shell (Discover, Anime, Downloads) with no Login, no profile button and no sign-in gates; favourites, likes and downloads are open (`session.unlocked`). Login, the sheet and Jellyfin code are untouched; set `accounts` to true to bring them back. test/accounts_off_test.dart pins it; guest_test.dart switches accounts on.
@@ -127,7 +128,7 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi → LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
-- **10-second seek (branch `seek`):** user decides between a third QA critic round or accepting; then merge into `guest`. Device check (ask first): double tap ×3 → "30 s" and one seek; a button double-tapped seeks only 10 s; controls don't flash during a burst; fullscreen double tap; ±10 hidden and untappable while buffering; torrent stream: one burst = one seek.
+- **10-second seek:** still owed on a device: TalkBack on the ±10 buttons, 1.3× text, Up Next card + forward ripple. Consider a longer `controlsHoverDuration` if the 3 s hide during repeated button presses bothers the user.
 - **Up Next, to close it out (needs the phone):** install the current APK and re-capture `design/critic/upnext/` 01 (countdown, new "6 s"), 02 (1.3× text), 06 (a screen recording of the handoff: player → blank → next episode fading in, no stream list), the "Finding next episode…" card (bar tap right after an episode starts, before the card's prefetch, ideally on slow Wi-Fi), and a failed-thumbnail card. Check E1→E2 in a season pack starts in ~10 s with peers (the seed fix), Autoplay into E2 with Wi-Fi only, Jellyfin Up Next if a server is reachable. Restore the phone afterwards: Autoplay on, font scale 1.0. Ask before driving the phone: it is the user's own phone and was in use during this session.
 - **Torrent start screen redesign (Codex, follow-up from the Up Next critic):** it still has a stock `AppBar` and shows the raw season-pack path in "Opening …"; between episodes it is the only generic moment. Ideas from the critic: no start screen when the torrent is warm and the file is known; push the player with `EpisodeRoute(next: true)` when auto-opened; no system-bar flash between two torrent episodes (the player restores edgeToEdge when the last one disposes, before the next one exists).
 - Check the other media_kit bar items for the frozen-theme problem (the Subtitles label in the top bar, the quality label).
