@@ -221,18 +221,31 @@ class _RepeatWatch {
   bool on = false;
 }
 
-/// The TV [FocusTraversalPolicy.requestFocusCallback]: focus [node], then scroll it into view with
-/// [FlickTv.gridPad] around it, so the ring and the lift are never clipped. [FlickTv.scrollDuration], or a
-/// jump while a key repeats or with reduced motion.
+/// Marks what [tvReveal] scrolls into view for a focusable inside it, such as a poster with its title and
+/// year below.
+class RevealArea extends InheritedWidget {
+  const RevealArea({required super.child, super.key});
+
+  @override
+  bool updateShouldNotify(RevealArea oldWidget) => false;
+}
+
+/// The TV [FocusTraversalPolicy.requestFocusCallback]: focus [node], then scroll it (or its [RevealArea]) into
+/// view with [FlickTv.gridPad] beside it and the [FlickTv.insetV] safe area above and below, so the ring, the
+/// lift and the labels are never clipped. [FlickTv.scrollDuration], or a jump while a key repeats or with
+/// reduced motion.
 void tvReveal(FocusNode node,
     {ScrollPositionAlignmentPolicy? alignmentPolicy, double? alignment, Duration? duration, Curve? curve}) {
   node.requestFocus();
   final context = node.context;
-  final box = context?.findRenderObject();
-  if (context == null || box is! RenderBox || !box.hasSize) return;
+  if (context == null) return;
+  final area = context.getElementForInheritedWidgetOfExactType<RevealArea>()?.findRenderObject();
+  final box = area ?? context.findRenderObject();
+  if (box is! RenderBox || !box.hasSize) return;
   final still = keyRepeating || MediaQuery.disableAnimationsOf(context);
   box.showOnScreen(
-    rect: (Offset.zero & box.size).inflate(FlickTv.gridPad),
+    rect: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad, vertical: FlickTv.insetV)
+        .inflateRect(Offset.zero & box.size),
     duration: still ? Duration.zero : FlickTv.scrollDuration,
     curve: FlickTokens.curveIn,
   );

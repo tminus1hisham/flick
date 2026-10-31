@@ -838,7 +838,8 @@ class _TvPoster extends StatelessWidget {
     final year = RegExp(r'\d{4}').firstMatch(m.releaseInfo ?? '')?.group(0);
     void open() => _openTitle(context, m);
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return RevealArea(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       FocusFrame(
         focusNode: focusNode,
         lift: true,
@@ -877,7 +878,7 @@ class _TvPoster extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: FlickTv.meta.copyWith(color: FlickTokens.textSecondary)),
       ),
-    ]);
+    ]));
   }
 }
 

@@ -225,6 +225,16 @@ void main() {
     expect(focused(), 'top 35, 2019', reason: 'row 8 (index 35), the last row');
   });
 
+  testWidgets('6b: moving down reveals the whole cell, labels included, inside the safe area', (tester) async {
+    await pumpApp(tester);
+    for (var i = 0; i < 5; i++) {
+      await key(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(focused(), 'top 15, 2019');
+    final label = tester.getRect(find.text('top 15'));
+    expect(label.bottom, lessThanOrEqualTo(540 - FlickTv.insetV));
+  });
+
   testWidgets('7: Search focuses the field; Back closes it and returns to Search', (tester) async {
     await pumpApp(tester);
     await key(tester, LogicalKeyboardKey.arrowUp);
