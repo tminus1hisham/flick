@@ -101,3 +101,9 @@ User: Jellyfin and addon/torrent series; Autoplay switch in the player (card + a
 - Override of Codex: the ripple's total uses the button font with tabular figures, not `monoStyle` (same reason as the Up Next countdown).
 - Ponytail cut: no running total under the bar buttons (it would need a notifier in a frozen bar); a button tap shows the side ripple instead.
 - Out of scope: TV / D-pad and keyboard arrows, a configurable length, swipe-to-seek.
+- Review round 1 (2026-10-31; code review FAIL, QA critic FAIL: distinct 6, hierarchy 7, motion 7, craft 7, states 7, theme 8, a11y 8, space 7, from code only):
+  - Both found the ±10 buttons inside the side thirds (media_kit's Spacers stretch the middle row to full width), so a double tap on a button seeked twice. The group now has a fixed width and the no-seek middle is never narrower than it (`seekMiddle`, pinned by a test that fails with plain thirds). The absorber uses the same geometry.
+  - The ripple sits between the control bands, so the bars and the time stay readable. Buttons ignore taps and TalkBack while buffering (media_kit fades them out but keeps them tappable).
+  - Codex redesigned the ripple: edge glow, segmented accent rim (the Buffering rail's stepped motif), number-led label, slide-in total, fade-out-then-in side switch.
+  - Accepted (Claude, UX): the Up Next card covers most of the forward ripple; the card owns that corner in the last 30 s.
+  - Burst logic moved into `SeekBurst` (tested). Logged, not fixed: a stale position event right after a burst seek (seek.md, Known gaps).

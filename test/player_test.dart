@@ -107,11 +107,22 @@ void main() {
       expect(zone(400, 180, s), 0);
       expect(zone(700, 180, s), 1);
     });
-    test('thirds of a portrait player', () {
+    test('a narrow player keeps the middle as wide as the buttons', () {
       const s = Size(360, 640);
-      expect(zone(60, 320, s), -1);
-      expect(zone(180, 320, s), 0);
-      expect(zone(300, 320, s), 1);
+      expect(zone(20, 320, s), -1);
+      expect(zone(60, 320, s), 0);
+      expect(zone(300, 320, s), 0);
+      expect(zone(340, 320, s), 1);
+    });
+    test('a tap on the ±10 buttons never seeks, at any width', () {
+      for (final w in <double>[360, 480, 640, 800, 915, 1200]) {
+        final s = Size(w, 360);
+        // The group's outer edges, and just outside them.
+        for (final dx in [0.0, 8]) {
+          expect(zone(w / 2 - primaryBarWidth / 2 - dx, 180, s), 0, reason: '$w');
+          expect(zone(w / 2 + primaryBarWidth / 2 + dx, 180, s), 0, reason: '$w');
+        }
+      }
     });
     test('the top bar and the seek bar with the bottom bar never seek', () {
       const s = Size(800, 360);
@@ -146,6 +157,38 @@ void main() {
       expect(at(5, by: -10), Duration.zero);
       expect(at(5, pending: 0, by: -10), Duration.zero);
       expect(at(2395, by: 10), duration);
+    });
+  });
+
+  group('SeekBurst', () {
+    const duration = Duration(minutes: 40), at = Duration(seconds: 100);
+
+    test('taps add up to one target; settle ends the burst', () {
+      final burst = SeekBurst();
+      for (var i = 0; i < 3; i++) {
+        expect(burst.nudge(10, position: at, duration: duration), isTrue);
+      }
+      expect((burst.side, burst.total), (1, 30));
+      expect(burst.settle(), const Duration(seconds: 130));
+      // Total stays for the fade-out; the next burst starts afresh.
+      expect((burst.side, burst.total), (0, 30));
+      expect(burst.settle(), isNull);
+      burst.nudge(10, position: at, duration: duration);
+      expect(burst.total, 10);
+    });
+    test('switching sides restarts the total, not the target', () {
+      final burst = SeekBurst()
+        ..nudge(10, position: at, duration: duration)
+        ..nudge(10, position: at, duration: duration)
+        ..nudge(-10, position: at, duration: duration);
+      expect((burst.side, burst.total), (-1, 10));
+      expect(burst.settle(), const Duration(seconds: 110));
+    });
+    test('nothing before the video has a duration', () {
+      final burst = SeekBurst();
+      expect(burst.nudge(10, position: at, duration: Duration.zero), isFalse);
+      expect((burst.side, burst.total), (0, 0));
+      expect(burst.settle(), isNull);
     });
   });
 
