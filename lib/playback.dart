@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'addons.dart';
-import 'jellyfin.dart';
 import 'kit/route.dart';
 import 'screens/player.dart';
 import 'screens/title.dart';
@@ -67,8 +66,7 @@ Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon
     final Widget screen;
     if (url != null) {
       screen = PlayerScreen(
-          item: Item({'Id': p.videoId, 'Name': title, 'Type': 'Video'}),
-          source: url, report: false, headers: s.headers, subtitles: s.subtitles,
+          title: title, source: url, headers: s.headers, subtitles: s.subtitles,
           playback: p, filename: s.filename, size: s.videoSize, hash: s.videoHash, next: next);
     } else if (s.infoHash != null) {
       screen = TorrentScreen(magnetFor(s), fileIdx: s.fileIdx,

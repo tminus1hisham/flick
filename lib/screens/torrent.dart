@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart' show Subtitle;
-import '../jellyfin.dart';
 import '../kit/route.dart';
 import '../kit/sheet.dart';
 import '../playback.dart';
@@ -279,9 +278,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
             context,
             EpisodeRoute(
                 builder: (_) => PlayerScreen(
-                    item: Item({'Id': widget.playback?.videoId ?? 'torrent', 'Name': widget.title ?? f.name}),
+                    title: widget.title ?? f.name,
                     source: url,
-                    report: false,
                     playback: widget.playback,
                     subtitles: widget.subtitles,
                     hash: widget.hash,

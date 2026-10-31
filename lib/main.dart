@@ -4,9 +4,6 @@ import 'package:media_kit/media_kit.dart';
 import 'screens/discover.dart';
 import 'screens/anime.dart';
 import 'screens/downloads.dart';
-import 'screens/home.dart';
-import 'screens/library.dart';
-import 'screens/login.dart';
 import 'screens/sources.dart';
 import 'screens/torrent.dart';
 import 'state.dart';
@@ -16,7 +13,7 @@ import 'widgets.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  await session.load();
+  await settings.load();
   await downloads.init();
   await addons.load();
   await saved.load();
@@ -33,22 +30,13 @@ class FlickApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: flickTheme(),
         builder: (_, child) => SplashHandoff(child: child!),
-        home: ListenableBuilder(
-          listenable: session,
-          builder: (_, _) => session.loggedIn
-              ? (session.online ? const Shell() : const OfflineShell())
-              : session.onboarded
-                  ? const Shell(guest: true)
-                  : const LoginScreen(),
-        ),
+        home: const Shell(),
       );
 }
 
+/// Discover, Anime and Downloads.
 class Shell extends StatefulWidget {
-  const Shell({this.guest = false, super.key});
-
-  /// No server: Discover, Anime and Downloads.
-  final bool guest;
+  const Shell({super.key});
 
   @override
   State<Shell> createState() => _ShellState();
@@ -56,90 +44,23 @@ class Shell extends StatefulWidget {
 
 class _ShellState extends State<Shell> {
   int _tab = 0;
-  static const _home = (HomeScreen(), 'Home',
-      NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'));
-  static const _discover = (DiscoverScreen(), 'Discover',
-      NavigationDestination(icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'));
-  static const _browse = (BrowseScreen(), 'Browse',
-      NavigationDestination(
-          icon: Icon(Icons.video_library_outlined), selectedIcon: Icon(Icons.video_library), label: 'Browse'));
-  static const _anime = (AnimeTab(), 'Anime',
-      NavigationDestination(
-          icon: Icon(Icons.animation_outlined), selectedIcon: Icon(Icons.animation), label: 'Anime'));
-  static const _downloads = (DownloadsScreen(), 'Downloads',
-      NavigationDestination(
-          icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'));
-
-  // Global, not ValueKeys: IndexedStack wraps each child in an unkeyed Visibility, so only a
-  // GlobalKey moves Discover's state from guest position 0 to member position 1.
-  final _keys = <String, GlobalKey>{};
-
-  static List<(Widget, String, NavigationDestination)> _tabsFor(bool guest) =>
-      guest ? const [_discover, _anime, _downloads] : const [_home, _discover, _browse, _anime, _downloads];
-
-  /// Signing in or out keeps the current tab where both shells have it, so a guest who signs in
-  /// from a Discover title comes back to Discover, not Home.
-  @override
-  void didUpdateWidget(Shell old) {
-    super.didUpdateWidget(old);
-    if (old.guest == widget.guest) return;
-    final (_, name, _) = _tabsFor(old.guest)[_tab];
-    final tabs = _tabsFor(widget.guest);
-    _tab = tabs.indexWhere((t) => t.$2 == name).clamp(0, tabs.length - 1);
-  }
 
   @override
-  Widget build(BuildContext context) {
-    final tabs = _tabsFor(widget.guest);
-    final (_, name, _) = tabs[_tab];
-    return Scaffold(
-      // Home, Discover, Browse and Anime draw their own headers.
-      appBar: name == 'Home' || name == 'Discover' || name == 'Browse' || name == 'Anime'
-          ? null
-          : AppBar(
-              title: Text(name),
-              actions: const [MagnetButton(), ProfileButton()],
-            ),
-      // Shared tabs keep their state across sign-in and sign-out.
-      body: IndexedStack(index: _tab, children: [
-        for (final (screen, name, _) in tabs) KeyedSubtree(key: _keys.putIfAbsent(name, GlobalKey.new), child: screen),
-      ]),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: [for (final (_, _, destination) in tabs) destination],
-      ),
-    );
-  }
-}
-
-class OfflineShell extends StatelessWidget {
-  const OfflineShell({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Downloads'), actions: const [MagnetButton()]),
-      body: Column(children: [
-        ColoredBox(
-          color: FlickTokens.surface1,
-          child: Padding(
-            padding: const EdgeInsets.all(FlickTokens.pageGutter),
-            child: Row(children: [
-              Icon(Icons.wifi_off, color: cs.onSurfaceVariant),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text("You're offline. Downloaded videos still play.",
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton(onPressed: session.recheck, child: const Text('Reconnect')),
-            ]),
-          ),
+  Widget build(BuildContext context) => Scaffold(
+        // Discover and Anime draw their own headers.
+        appBar: _tab == 2 ? AppBar(title: const Text('Downloads'), actions: const [MagnetButton()]) : null,
+        body: IndexedStack(index: _tab, children: const [DiscoverScreen(), AnimeTab(), DownloadsScreen()]),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tab,
+          onDestinationSelected: (i) => setState(() => _tab = i),
+          destinations: const [
+            NavigationDestination(
+                icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'),
+            NavigationDestination(
+                icon: Icon(Icons.animation_outlined), selectedIcon: Icon(Icons.animation), label: 'Anime'),
+            NavigationDestination(
+                icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'),
+          ],
         ),
-        const Expanded(child: DownloadsScreen()),
-      ]),
-    );
-  }
+      );
 }

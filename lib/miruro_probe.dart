@@ -15,7 +15,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  await session.load();
+  await settings.load();
   await addons.load();
   runApp(MaterialApp(theme: flickTheme(), home: const MiruroProbe()));
 }

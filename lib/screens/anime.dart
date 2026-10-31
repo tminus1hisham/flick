@@ -107,8 +107,6 @@ class _AnimeTabState extends State<AnimeTab> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    const ProfileButton(),
                   ],
                 ),
               ),

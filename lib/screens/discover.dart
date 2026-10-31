@@ -46,12 +46,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([addons, saved, session]),
+        listenable: Listenable.merge([addons, saved]),
         builder: (context, _) {
           final catalogs = addons.catalogs.where((c) => c.type == _type).toList();
           final selected = catalogs.where((c) => _key(c) == _selected).firstOrNull ?? catalogs.firstOrNull;
-          final favourites =
-              session.loggedIn ? [for (final f in saved.favourites) if (f.type == _type) f] : <MetaPreview>[];
+          final favourites = [for (final f in saved.favourites) if (f.type == _type) f];
           final showFavourites = _selected == _favourites && favourites.isNotEmpty;
           final searchable = catalogs.where((c) => c.searchable).firstOrNull;
           final searching = _query.isNotEmpty;
@@ -82,8 +81,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const ProfileButton(),
                 ]),
               ),
               const SizedBox(height: 8),

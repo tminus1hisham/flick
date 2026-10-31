@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart';
+import '../kit/toggle.dart';
 import '../playback.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../upnext.dart';
 import '../widgets.dart';
-import 'account.dart';
 import 'torrent.dart';
 
 /// Row text for a stream. Tests swap it, since describe() belongs to the addons contract.
@@ -196,45 +196,36 @@ class _TitleScreenState extends State<TitleScreen> {
   }
 }
 
-/// Favourite + like for a Discover title, saved on this device. A guest's tap opens the sign-in
-/// gate, and the action completes after signing in.
+/// Favourite + like for a Discover title, saved on this device.
 class _Saving extends StatelessWidget {
   const _Saving(this.preview);
   final MetaPreview preview;
 
-  /// A member's tap toggles. After the sign-in detour it sets instead: a guest always sees "off" but the
-  /// device list survives sign-out, so a toggle there could remove what the guest meant to add.
-  Future<bool> _tap(BuildContext context, Gate gate, bool Function() isOn, VoidCallback toggle) async {
-    if (session.loggedIn) {
-      toggle();
-      return true;
-    }
-    if (!await requireSignIn(context, gate, poster: preview.poster)) return false;
-    if (!isOn()) toggle();
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) => ListenableBuilder(
-        listenable: Listenable.merge([saved, session]),
+        listenable: saved,
         builder: (context, _) => Wrap(spacing: FlickTokens.grid * 2, runSpacing: FlickTokens.grid * 2, children: [
           ToggleAction(
-            on: session.loggedIn && saved.isFavourite(preview.id),
+            on: saved.isFavourite(preview.id),
             icon: Icons.favorite_border_rounded,
             onIcon: Icons.favorite_rounded,
             label: 'Add to favourites',
             onLabel: 'Remove from favourites',
-            onPressed: () => _tap(context, Gate.favourite, () => saved.isFavourite(preview.id),
-                () => saved.toggleFavourite(preview)),
+            onPressed: () async {
+              saved.toggleFavourite(preview);
+              return true;
+            },
           ),
           ToggleAction(
-            on: session.loggedIn && saved.isLiked(preview.id),
+            on: saved.isLiked(preview.id),
             icon: Icons.thumb_up_outlined,
             onIcon: Icons.thumb_up_rounded,
             label: 'Like title',
             onLabel: 'Unlike title',
-            onPressed: () =>
-                _tap(context, Gate.like, () => saved.isLiked(preview.id), () => saved.toggleLike(preview.id)),
+            onPressed: () async {
+              saved.toggleLike(preview.id);
+              return true;
+            },
           ),
         ]),
       );
