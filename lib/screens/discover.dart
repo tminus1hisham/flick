@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart';
+import '../kit/focus.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -17,7 +18,11 @@ bool _offline(Object? e) => e is AddonException && e.kind == AddonError.unreacha
 
 /// D1: addon catalogs as a poster wall, with search over the current type.
 class DiscoverScreen extends StatefulWidget {
-  const DiscoverScreen({super.key});
+  const DiscoverScreen({this.onAddSources, super.key});
+
+  /// The shell can select its Sources destination without opening another route.
+  /// Otherwise the app's named Sources route is used.
+  final VoidCallback? onAddSources;
 
   @override
   State<DiscoverScreen> createState() => _DiscoverScreenState();
@@ -25,12 +30,28 @@ class DiscoverScreen extends StatefulWidget {
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final _search = TextEditingController();
+  final _typeSwitchFocus = FocusNode(debugLabel: 'Discover Movies');
+  final _searchActionFocus = FocusNode(debugLabel: 'Discover Search');
+  final _searchFieldFocus = FocusNode(debugLabel: 'Discover search field');
+
+  // EditableText owns focus while editing. Its non-focusable ancestor paints
+  // the same FocusRing as every other TV control, including descendant focus.
+  final _searchFrameFocus = FocusNode(
+    debugLabel: 'Discover search ring',
+    canRequestFocus: false,
+    skipTraversal: true,
+  );
+  bool _searchOpen = false;
   String _type = 'movie', _query = '';
   (String, String, String)? _selected;
 
   @override
   void dispose() {
     _search.dispose();
+    _typeSwitchFocus.dispose();
+    _searchActionFocus.dispose();
+    _searchFieldFocus.dispose();
+    _searchFrameFocus.dispose();
     super.dispose();
   }
 
@@ -44,6 +65,229 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     setState(change);
   }
 
+  void _openSearch() {
+    setState(() => _searchOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _searchOpen) _searchFieldFocus.requestFocus();
+    });
+  }
+
+  void _closeSearch() {
+    _searchFieldFocus.unfocus();
+    _search.clear();
+    setState(() {
+      _query = '';
+      _searchOpen = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_searchOpen) _searchActionFocus.requestFocus();
+    });
+  }
+
+  void _addSources() {
+    final onAddSources = widget.onAddSources;
+    if (onAddSources != null) {
+      onAddSources();
+    } else {
+      Navigator.of(context).pushNamed('/sources');
+    }
+  }
+
+  Widget _tvHeader(
+    List<Catalog> catalogs,
+    Catalog? selected,
+    bool hasFavourites,
+    bool showFavourites,
+  ) => Padding(
+        padding: const EdgeInsets.only(top: FlickTv.insetV, bottom: 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text('Discover', style: FlickTv.page),
+            const SizedBox(width: FlickTv.contentGap),
+            if (_searchOpen) ...[
+              Expanded(
+                child: FocusFrame(
+                  focusNode: _searchFrameFocus,
+                  radius: FlickTokens.controlRadius,
+                  onActivate: () {
+                    _searchFieldFocus.requestFocus();
+                    SystemChannels.textInput.invokeMethod<void>('TextInput.show');
+                  },
+                  child: TextField(
+                    controller: _search,
+                    focusNode: _searchFieldFocus,
+                    style: FlickTv.body,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (v) => setState(() {
+                      if (v.trim().isEmpty) _query = '';
+                    }),
+                    onSubmitted: (q) => setState(() => _query = q.trim()),
+                    decoration: InputDecoration(
+                      hintText: 'Search titles',
+                      hintStyle: FlickTv.body.copyWith(color: FlickTokens.textSecondary),
+                      prefixIcon: const Icon(Icons.search),
+                      constraints: const BoxConstraints(minHeight: FlickTokens.minTouchTarget),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      focusedBorder: const OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(FlickTokens.controlRadius)),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: FlickTv.gridGap),
+              FocusFrame.button(
+                semanticLabel: 'Close search',
+                onActivate: _closeSearch,
+                child: const SizedBox(
+                  width: FlickTokens.minTouchTarget,
+                  height: FlickTokens.minTouchTarget,
+                  child: Icon(Icons.close),
+                ),
+              ),
+            ] else ...[
+              const Spacer(),
+              FocusFrame.button(
+                focusNode: _searchActionFocus,
+                semanticLabel: 'Search titles',
+                onActivate: _openSearch,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.search, size: 22),
+                    const SizedBox(width: 8),
+                    Text('Search', style: FlickTv.body),
+                  ]),
+                ),
+              ),
+            ],
+          ]),
+          const SizedBox(height: 12),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            for (final (type, label) in [('movie', 'Movies'), ('series', 'Series')])
+              _TvChoice(
+                label,
+                selected: _type == type,
+                focusNode: type == 'movie' ? _typeSwitchFocus : null,
+                autofocus: type == 'movie',
+                onActivate: () {
+                  if (_type != type) {
+                    _pick(() {
+                      _type = type;
+                      _selected = null;
+                    });
+                  }
+                },
+              ),
+          ]),
+          const SizedBox(height: 8),
+          // A non-lazy row keeps every catalog reachable by directional focus.
+          // Its padding leaves room for the outer ring at the viewport edges.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(FlickTv.gridPad),
+            child: Row(children: [
+              if (hasFavourites) ...[
+                _TvChoice(
+                  'Favourites',
+                  icon: Icons.favorite_border,
+                  selected: showFavourites,
+                  onActivate: () {
+                    if (!showFavourites) _pick(() => _selected = _favourites);
+                  },
+                ),
+                const SizedBox(width: 8),
+              ],
+              for (final c in catalogs) ...[
+                if (c != catalogs.first) const SizedBox(width: 8),
+                _TvChoice(
+                  c.name,
+                  selected: !showFavourites && c == selected,
+                  onActivate: () {
+                    if (showFavourites || c != selected) _pick(() => _selected = _key(c));
+                  },
+                ),
+              ],
+            ]),
+          ),
+        ]),
+      );
+
+  Widget _buildTv(
+    List<Catalog> catalogs,
+    Catalog? selected,
+    bool hasFavourites,
+    bool showFavourites,
+    List<MetaPreview> favourites,
+    Catalog? searchable,
+    bool searching,
+    bool heroes,
+  ) {
+    final header = _tvHeader(catalogs, selected, hasFavourites, showFavourites);
+    final Widget body;
+    if (searching && searchable == null) {
+      body = _TvDiscoverScroll(
+        header: header,
+        slivers: [
+          SliverToBoxAdapter(
+            child: _TvNotice(
+              Icons.search,
+              "Your sources can't search these titles.",
+              action: 'Clear search',
+              onAction: _clear,
+            ),
+          ),
+        ],
+      );
+    } else if (searching) {
+      body = CatalogFeed(
+        searchable!,
+        query: _query,
+        onClear: _clear,
+        tvHeader: header,
+        onAddSources: _addSources,
+        key: ValueKey(('tv-search', _key(searchable), _query)),
+      );
+    } else if (showFavourites) {
+      body = CatalogFeed.saved(
+        favourites,
+        tvHeader: header,
+        onAddSources: _addSources,
+        key: ValueKey(('tv-saved', favourites.map((f) => f.id).join(','))),
+      );
+    } else if (selected == null) {
+      body = _TvDiscoverScroll(
+        header: header,
+        slivers: [
+          SliverToBoxAdapter(
+            child: _TvNotice(
+              Icons.video_library_outlined,
+              'No catalogs for this type yet.',
+              action: 'Add sources',
+              onAction: _addSources,
+            ),
+          ),
+        ],
+      );
+    } else {
+      body = CatalogFeed(
+        selected,
+        tvHeader: header,
+        onAddSources: _addSources,
+        key: ValueKey(('tv-catalog', _key(selected))),
+      );
+    }
+
+    return PopScope(
+      canPop: !_searchOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _searchOpen) _closeSearch();
+      },
+      child: HeroMode(enabled: heroes, child: body),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: Listenable.merge([addons, saved]),
@@ -55,6 +299,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           final searchable = catalogs.where((c) => c.searchable).firstOrNull;
           final searching = _query.isNotEmpty;
           final heroes = !MediaQuery.disableAnimationsOf(context);
+          if (context.tv) {
+            return _buildTv(catalogs, selected, favourites.isNotEmpty, showFavourites,
+                favourites, searchable, searching, heroes);
+          }
           return SafeArea(
             bottom: false,
             child: Column(children: [
@@ -197,19 +445,104 @@ class _Segment extends StatelessWidget {
       );
 }
 
+/// Selection stays distinct from focus: the slash marks selection; the frame
+/// supplies the only focus owner, activation action and ring.
+class _TvChoice extends StatelessWidget {
+  const _TvChoice(this.label, {
+    required this.selected,
+    required this.onActivate,
+    this.icon,
+    this.focusNode,
+    this.autofocus = false,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onActivate;
+  final IconData? icon;
+  final FocusNode? focusNode;
+  final bool autofocus;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        selected: selected,
+        inMutuallyExclusiveGroup: true,
+        child: FocusFrame.button(
+          focusNode: focusNode,
+          autofocus: autofocus,
+          onActivate: onActivate,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (selected) ...[
+                  const SlashMarker(),
+                  const SizedBox(width: 8),
+                ],
+                if (icon != null) ...[
+                  Icon(icon, size: 20, color: FlickTokens.textSecondary),
+                  const SizedBox(width: 8),
+                ],
+                Text(label, style: FlickTv.body.copyWith(
+                  color: selected ? FlickTokens.textPrimary : FlickTokens.textSecondary,
+                )),
+              ]),
+            ),
+          ),
+        ),
+      );
+}
+
+/// One viewport for header, filters, results and feedback. The shell already
+/// places the content's left edge at x 144; only the right inset is added here.
+class _TvDiscoverScroll extends StatelessWidget {
+  const _TvDiscoverScroll({
+    this.header,
+    required this.slivers,
+  });
+
+  final Widget? header;
+  final List<Widget> slivers;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(right: FlickTv.insetH),
+        child: CustomScrollView(
+          cacheExtent: MediaQuery.sizeOf(context).height,
+          slivers: [
+            if (header != null) SliverToBoxAdapter(child: header),
+            ...slivers,
+            const SliverToBoxAdapter(child: SizedBox(height: FlickTv.insetV)),
+          ],
+        ),
+      );
+}
+
 /// One catalog (or one search) paged in as the viewer nears the end.
 class CatalogFeed extends StatefulWidget {
-  const CatalogFeed(Catalog this.catalog, {this.query, this.onClear, super.key}) : saved = null;
+  const CatalogFeed(Catalog this.catalog, {
+    this.query,
+    this.onClear,
+    this.tvHeader,
+    this.onAddSources,
+    super.key,
+  }) : saved = null;
 
   /// The device favourites: one fixed page, no paging.
-  const CatalogFeed.saved(List<MetaPreview> this.saved, {super.key})
-      : catalog = null,
+  const CatalogFeed.saved(List<MetaPreview> this.saved, {
+    this.tvHeader,
+    this.onAddSources,
+    super.key,
+  })  : catalog = null,
         query = null,
         onClear = null;
   final Catalog? catalog;
   final List<MetaPreview>? saved;
   final String? query;
   final VoidCallback? onClear;
+  final Widget? tvHeader;
+  final VoidCallback? onAddSources;
 
   @override
   State<CatalogFeed> createState() => _CatalogFeedState();
@@ -250,8 +583,93 @@ class _CatalogFeedState extends State<CatalogFeed> {
     if (mounted) setState(() => _loading = false);
   }
 
+  // Keep builders indexable so directional traversal can later materialize an
+  // unbuilt target index without changing the artwork or caption widgets.
+  Widget _buildTvItem(BuildContext context, int index) => _TvPoster(
+        _items[index],
+        key: ValueKey(_items[index].id),
+      );
+
+  Widget _buildTvSkeleton(BuildContext context, int index) => const _TvPosterSkeleton();
+
+  Widget _buildTv(BuildContext context, BoxConstraints box) {
+    final width = (box.maxWidth - FlickTv.insetH - FlickTv.gridPad * 2 -
+        FlickTv.gridGap * (FlickTv.columns - 1)) / FlickTv.columns;
+    final scaler = MediaQuery.textScalerOf(context);
+    final caption = scaler.scale(FlickTv.card.fontSize!) * FlickTv.card.height! +
+        scaler.scale(FlickTv.meta.fontSize!) * FlickTv.meta.height!;
+    final grid = SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: FlickTv.columns,
+      crossAxisSpacing: FlickTv.gridGap,
+      mainAxisSpacing: FlickTv.gridGap,
+      mainAxisExtent: width / FlickTv.posterAspect + 8 + caption,
+    );
+    final slivers = <Widget>[];
+
+    if (_items.isEmpty && _error != null) {
+      slivers.add(SliverToBoxAdapter(
+        child: _TvNotice(
+          _offline(_error) ? Icons.wifi_off : Icons.report_outlined,
+          _offline(_error) ? "You're offline. Check your connection and try again." : "Couldn't load these titles.",
+          action: 'Retry',
+          onAction: _more,
+        ),
+      ));
+    } else if (_items.isEmpty && _done) {
+      slivers.add(SliverToBoxAdapter(
+        child: _TvNotice(
+          widget.query == null ? Icons.video_library_outlined : Icons.search,
+          widget.query == null ? 'No titles in this catalog yet.' : 'Nothing found for “${widget.query}”',
+          action: widget.query == null ? 'Add sources' : 'Clear search',
+          onAction: widget.query == null ? widget.onAddSources : widget.onClear,
+        ),
+      ));
+    } else {
+      slivers.add(SliverPadding(
+        padding: const EdgeInsets.all(FlickTv.gridPad),
+        sliver: SliverGrid.builder(
+          gridDelegate: grid,
+          itemCount: _items.isEmpty ? FlickTv.columns * 2 : _items.length,
+          itemBuilder: _items.isEmpty ? _buildTvSkeleton : _buildTvItem,
+        ),
+      ));
+      if (_items.isNotEmpty && _loading) {
+        slivers.add(SliverPadding(
+          padding: const EdgeInsets.all(FlickTv.gridPad),
+          sliver: SliverGrid.builder(
+            gridDelegate: grid,
+            itemCount: FlickTv.columns,
+            itemBuilder: _buildTvSkeleton,
+          ),
+        ));
+      }
+      if (_items.isNotEmpty && _error != null) {
+        slivers.add(SliverToBoxAdapter(
+          child: _TvNotice(
+            _offline(_error) ? Icons.wifi_off : Icons.report_outlined,
+            _offline(_error) ? "You're offline. Check your connection." : "Couldn't load more titles.",
+            action: 'Retry',
+            onAction: _more,
+          ),
+        ));
+      }
+    }
+
+    return NotificationListener<ScrollNotification>(
+      onNotification: (n) {
+        if (n.depth == 0 && n.metrics.axis == Axis.vertical &&
+            _error == null && n.metrics.extentAfter < MediaQuery.sizeOf(context).height) {
+          _more();
+        }
+        return false;
+      },
+      child: _TvDiscoverScroll(header: widget.tvHeader, slivers: slivers),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        if (context.tv) return _buildTv(context, box);
         // Three columns: 98.7×148 art + two caption lines = 188dp cells at 360dp and 1× text.
         final caption = MediaQuery.textScalerOf(context).scale(16) * 2;
         final width = (box.maxWidth - FlickTokens.pageGutter * 2 - FlickTokens.railGap * 2) / 3;
@@ -322,6 +740,119 @@ class _CatalogFeedState extends State<CatalogFeed> {
       });
 }
 
+/// Phone and TV share the existing Hero tag, preview and fade route.
+void _openTitle(BuildContext context, MetaPreview m) {
+  final d = MediaQuery.disableAnimationsOf(context) ? Duration.zero : FlickTokens.sheetDuration;
+  final preview = (
+    id: m.id,
+    type: m.type == 'anime' ? 'series' : m.type,
+    name: m.name,
+    poster: m.poster,
+    releaseInfo: m.releaseInfo,
+  );
+  Navigator.push(
+    context,
+    PageRouteBuilder<void>(
+      transitionDuration: d,
+      reverseTransitionDuration: d,
+      pageBuilder: (_, _, _) => TitleScreen(preview),
+      transitionsBuilder: (_, a, _, child) =>
+          FadeTransition(opacity: a.drive(CurveTween(curve: FlickTokens.curveIn)), child: child),
+    ),
+  );
+}
+
+class _TvPoster extends StatelessWidget {
+  const _TvPoster(this.preview, {super.key});
+  final MetaPreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final m = preview;
+    final year = RegExp(r'\d{4}').firstMatch(m.releaseInfo ?? '')?.group(0);
+    void open() => _openTitle(context, m);
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      FocusFrame(
+        lift: true,
+        semanticLabel: year == null ? m.name : '${m.name}, $year',
+        onActivate: open,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            canRequestFocus: false,
+            excludeFromSemantics: true,
+            borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
+            onTap: open,
+            child: AspectRatio(
+              aspectRatio: FlickTv.posterAspect,
+              child: Hero(
+                tag: m.id,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
+                  child: NetImage(m.poster ?? ''),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      ExcludeSemantics(
+        child: Text(m.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FlickTv.card.copyWith(color: FlickTokens.textPrimary)),
+      ),
+      ExcludeSemantics(
+        child: Text(year ?? '',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: FlickTv.meta.copyWith(color: FlickTokens.textSecondary)),
+      ),
+    ]);
+  }
+}
+
+/// The same art, title and year geometry as a real TV cell; loading never
+/// requests focus or transfers it away from the switch.
+class _TvPosterSkeleton extends StatelessWidget {
+  const _TvPosterSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final titleHeight = scaler.scale(FlickTv.card.fontSize!) * FlickTv.card.height!;
+    final yearHeight = scaler.scale(FlickTv.meta.fontSize!) * FlickTv.meta.height!;
+    return ExcludeSemantics(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const AspectRatio(
+          aspectRatio: FlickTv.posterAspect,
+          child: Skeleton(radius: FlickTokens.artworkRadius),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: titleHeight,
+          child: const Align(
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: 0.8,
+              child: Skeleton(height: 14, radius: FlickTokens.grid),
+            ),
+          ),
+        ),
+        SizedBox(
+          height: yearHeight,
+          child: const Align(
+            alignment: Alignment.centerLeft,
+            child: Skeleton(width: 40, height: 10, radius: FlickTokens.grid),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
 class _Poster extends StatefulWidget {
   const _Poster(this.preview, {required this.caption});
   final MetaPreview preview;
@@ -338,27 +869,7 @@ class _PosterState extends State<_Poster> {
     if (_pressed != down) setState(() => _pressed = down);
   }
 
-  void _open() {
-    final d = MediaQuery.disableAnimationsOf(context) ? Duration.zero : FlickTokens.sheetDuration;
-    final m = widget.preview;
-    final preview = (
-      id: m.id,
-      type: m.type == 'anime' ? 'series' : m.type,
-      name: m.name,
-      poster: m.poster,
-      releaseInfo: m.releaseInfo,
-    );
-    Navigator.push(
-      context,
-      PageRouteBuilder<void>(
-        transitionDuration: d,
-        reverseTransitionDuration: d,
-        pageBuilder: (_, _, _) => TitleScreen(preview),
-        transitionsBuilder: (_, a, _, child) =>
-            FadeTransition(opacity: a.drive(CurveTween(curve: FlickTokens.curveIn)), child: child),
-      ),
-    );
-  }
+  void _open() => _openTitle(context, widget.preview);
 
   @override
   Widget build(BuildContext context) {
@@ -406,6 +917,43 @@ class _PosterState extends State<_Poster> {
       ),
     );
   }
+}
+
+/// TV feedback is a sliver child, so it scrolls with the header and grid.
+class _TvNotice extends StatelessWidget {
+  const _TvNotice(this.icon, this.text, {this.action, this.onAction});
+  final IconData icon;
+  final String text;
+  final String? action;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        liveRegion: true,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(FlickTv.gridPad, 16, FlickTv.gridPad, 24),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, size: 32, color: FlickTokens.textSecondary),
+            const SizedBox(height: 12),
+            Text(text, style: FlickTv.body),
+            if (action != null && onAction != null) ...[
+              const SizedBox(height: 12),
+              FocusFrame.button(
+                onActivate: onAction,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: FlickTokens.minTouchTarget),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: FlickTokens.outline),
+                    borderRadius: BorderRadius.circular(FlickTokens.controlRadius),
+                  ),
+                  child: Text(action!, style: FlickTv.body),
+                ),
+              ),
+            ],
+          ]),
+        ),
+      );
 }
 
 /// A state that starts in the grid area: icon, sentence, optional action.
