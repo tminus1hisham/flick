@@ -87,16 +87,19 @@ void main() {
     await a.refresh();
     final d = a.items.single;
     expect((d.state, d.bytes, d.total, d.rate, d.peers), (DownloadState.downloading, 50, 200, 9, 4));
+    expect(await a.bytesUsed(), 50);
 
     e.progressOf = (_) => (bytes: 200, total: 200, rate: 0, peers: 0, state: 'done', error: null, path: file.path);
     await a.refresh();
     expect((d.state, d.path), (DownloadState.done, file.path));
+    expect(await a.bytesUsed(), 200);
 
     final again = _Engine();
     final b = _downloads(again);
     await b.load();
     expect(again.calls, isEmpty);
     expect((b.items.single.state, b.items.single.path), (DownloadState.done, file.path));
+    expect(await b.bytesUsed(), 200);
   });
 
   test('delete removes the download and deletes it in the engine', () async {

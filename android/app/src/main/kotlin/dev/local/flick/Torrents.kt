@@ -50,6 +50,7 @@ class Entry(val th: TorrentHandle, var dir: String, val hash: String, val magnet
     var gen = 0
     var activeFile: Int? = null
     var pinned: Int? = null
+    var pinConfigured = false
     var paused = false
     var keptFile: Int? = null
     var titleJson = ""
@@ -538,17 +539,22 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
     private fun want(e: Entry) {
         val ti = e.th.torrentFile() ?: return
         val fs = ti.files()
+        val selected = listOfNotNull(e.activeFile, e.pinned)
+        require(selected.all { validDownloadFile(it, fs.numFiles()) && !fs.padFileAt(it) }) { "invalid download file" }
         e.th.prioritizeFiles(Array(fs.numFiles()) { Priority.DEFAULT })
-        val wanted = listOfNotNull(e.activeFile, e.pinned).map { pieceRange(fs.fileOffset(it), fs.fileSize(it), ti.pieceLength()) }
+        val wanted = selected.map { pieceRange(fs.fileOffset(it), fs.fileSize(it), ti.pieceLength()) }
         e.th.prioritizePieces(Array(ti.numPieces()) { p -> if (wanted.any { p in it }) Priority.DEFAULT else Priority.IGNORE })
+        e.pinConfigured = true
     }
 
     private fun download(e: Entry, id: Int, file: Int) {
         releases.remove(id)?.cancel(false)
         synchronized(e) {
             check(e.alive) { "torrent was removed" }
-            val ti = e.th.torrentFile() ?: error("metadata not ready")
-            require(file in 0 until ti.files().numFiles() && !ti.files().padFileAt(file)) { "no file $file" }
+            // A restored magnet has no metadata yet; pin now and configure its pieces when metadata arrives.
+            val ti = e.th.torrentFile()
+            require(validDownloadFile(file, ti?.files()?.numFiles())) { "no file $file" }
+            require(ti == null || !ti.files().padFileAt(file)) { "no file $file" }
             require(e.keptFile == null) { "This torrent is already saved in Downloads" }
             require(e.pinned == null || e.pinned == file) { "Delete the existing download before choosing another file from this torrent" }
             // A hash already live from streaming sits in the cache, which Android may clear.
@@ -560,6 +566,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
             }
             if (e.pinned != file) e.done = false
             e.pinned = file
+            e.pinConfigured = false
             want(e)
         }
         tick()
@@ -575,6 +582,11 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         var path: String? = null
         if (ti != null && file != null) {
             val fs = ti.files()
+            if (!validDownloadFile(file, fs.numFiles()) || fs.padFileAt(file)) {
+                return mapOf("bytes" to 0L, "total" to 0L, "rate" to 0, "peers" to 0,
+                    "state" to "error", "error" to "Downloaded file is not in this torrent", "path" to null)
+            }
+            if (!e.pinConfigured) want(e)
             total = fs.fileSize(file)
             bytes = e.th.fileProgress()[file]
             path = fs.filePath(file, e.dir)
@@ -617,7 +629,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
     private fun downloadTick() {
         val running = entries.values.mapNotNull { e ->
             synchronized(e) { if (e.alive && e.pinned != null) progress(e) else null }
-        }.filter { it["state"] != "done" && it["state"] != "paused" }
+        }.filter { it["state"] == "downloading" }
         val intent = Intent(context, DownloadService::class.java)
         if (running.isEmpty()) {
             if (serviceOn) context.stopService(intent)
@@ -691,3 +703,5 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         const val NOTIFY_REQUEST = 7301
     }
 }
+
+internal fun validDownloadFile(file: Int, count: Int?): Boolean = file >= 0 && (count == null || file < count)

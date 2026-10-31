@@ -541,6 +541,9 @@ class Downloads extends ChangeNotifier {
     for (final r in torrentRecords) {
       total += r.info?.downloaded ?? 0;
     }
+    for (final d in items) {
+      total += d.state == DownloadState.done ? d.total : d.bytes;
+    }
     return total;
   }
 

@@ -7,7 +7,7 @@ This file is the shared source for continuing the work in a new session. Read it
 ## Gates (run before calling anything done)
 - `flutter analyze lib test`: no issues. Scope to app/test rather than the nested worktree in `.claude`.
 - `flutter test`: 263 tests pass after the integration.
-- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 24 tests pass (18 HttpTest, 4 MiruroPolicyTest, 2 DownloadsTest).
+- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 25 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest).
 - `flutter build apk --debug`: verify Android packaging and native compilation.
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: 27 existing hits (26 color uses, one legacy progress bar); no new files have hits.
 - `PlayerScreen` cannot be pumped in widget tests without native libmpv. Test pure helpers and the independent TvPlayerControls instead.
@@ -68,7 +68,10 @@ All important work branches are integrated into `main`, including TV Title/Playe
 - The existing Downloads controller now supports both the native shared-preferences registry and older direct/kept downloads. New torrent selections use the native registry and redesigned rows; older downloaded files remain listed and playable. Native and legacy progress types have distinct names.
 - The phone keeps the Naruto-inspired AnimeGlyph, Miruro and direct downloads. TV keeps Kitsu-only Anime, its focus shell, two-pane Title and remote Player. Expanded playback artwork is passed to both buffering surfaces.
 - One native selected file per torrent hash; choosing a different file requires deleting its existing download. This preserves data instead of silently replacing a download.
-- Validation: static analysis clean, 263 Flutter tests pass, 24 Kotlin tests pass, diff whitespace clean. Debug APK built successfully (`build/app/outputs/flutter-apk/app-debug.apk`). No physical-device interaction was performed for this merge.
+- Validation: static analysis clean, 263 Flutter tests pass, 25 Kotlin tests pass, diff whitespace clean. Debug APK built successfully (`build/app/outputs/flutter-apk/app-debug.apk`). No physical-device interaction was performed for this merge.
+
+### Emulator integration acceptance (2026-11-01)
+Phone Pixel_9a and Android TV Television_1080p_64 tested with the merged APK and local emulator-created media. Fixed two integration bugs: native torrent restore no longer fails before metadata arrives; the mixed Downloads storage counter now includes native records. All 263 Flutter and 25 Kotlin tests pass, static analysis is clean. Native saved torrent verified byte-for-byte; pause/restart/resume/completion/delete, direct offline playback, subtitles, phone touch/fullscreen seek, TV D-pad/Back, manual next and autoplay passed. Details and limits: `design/critic/integration-2026-11-01.md`. Video decoding remains unverified because of emulator graphics limitations; control acceptance used audio-only fixtures. TV Downloads/Sources/Torrent start still use generic layouts.
 
 ## Historical status (2026-10-31)
 

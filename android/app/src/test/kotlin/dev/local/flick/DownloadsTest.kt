@@ -26,6 +26,14 @@ class DownloadsTest {
         }
     }
 
+    @Test fun restoredSelectionWaitsForMetadataAndIsValidatedWhenItArrives() {
+        assertTrue(validDownloadFile(3, null))
+        assertTrue(validDownloadFile(3, 4))
+        assertFalse(validDownloadFile(3, 3))
+        assertFalse(validDownloadFile(-1, null))
+        assertFalse(validDownloadFile(0, 0))
+    }
+
     @Test fun isUnderIsStrict() {
         val root = File("/data/files/downloads")
         assertTrue(isUnder(File(root, "abc"), root))
