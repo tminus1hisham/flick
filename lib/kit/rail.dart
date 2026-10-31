@@ -1,3 +1,5 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
@@ -157,7 +159,15 @@ class _FlickRailState extends State<FlickRail> with SingleTickerProviderStateMix
             left: left,
             top: FlickTv.insetV,
             bottom: FlickTv.insetV,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Clipped to the sliding panel's right edge, so the focused item's ring (its width is already full)
+            // never paints over the content beyond the panel while it slides in or out.
+            child: AnimatedBuilder(
+              animation: _curve,
+              builder: (_, child) => ClipRect(
+                clipper: _RailClip(lerpDouble(FlickTv.railColumn, FlickTv.railExpanded, _curve.value)! - left),
+                child: child,
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const SizedBox.square(dimension: target, child: Center(child: FlickMark())),
               const SizedBox(height: FlickTokens.sectionGap),
               for (var i = 0; i < widget.destinations.length; i++) ...[
@@ -167,9 +177,25 @@ class _FlickRailState extends State<FlickRail> with SingleTickerProviderStateMix
               const Spacer(),
               item(widget.destinations.length),
             ]),
+            ),
           ),
         ]),
       ),
     );
   }
+}
+
+/// Everything left of [right], with room for a ring on the other three sides.
+class _RailClip extends CustomClipper<Rect> {
+  const _RailClip(this.right);
+  final double right;
+
+  @override
+  Rect getClip(Size size) {
+    const ring = FlickTv.ringGap + FlickTv.ringWidth;
+    return Rect.fromLTRB(-ring, -ring, right, size.height + ring);
+  }
+
+  @override
+  bool shouldReclip(_RailClip oldClipper) => oldClipper.right != right;
 }

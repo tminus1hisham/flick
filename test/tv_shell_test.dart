@@ -9,6 +9,7 @@ import 'package:flick/screens/sources.dart';
 import 'package:flick/state.dart';
 import 'package:flick/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -250,6 +251,34 @@ void main() {
       expect(ring('Discover'), isTrue);
       expect(ring('Anime'), isFalse);
     }
+  });
+
+  testWidgets('j: while the rail slides open, the items are clipped to the panel; at rest the ring is whole', (tester) async {
+    await pumpApp(tester);
+    leftmost(tester, DiscoverScreen).requestFocus();
+    await tester.pumpAndSettle();
+    final item = find.descendant(
+        of: find.byType(FlickRail), matching: find.byWidgetPredicate((w) => w is FocusFrame && w.semanticLabel == 'Discover'));
+    final clip = find.descendant(of: find.byKey(const ValueKey('rail-items')), matching: find.byType(ClipRect)).first;
+    Rect clipRect() {
+      final box = tester.renderObject<RenderClipRect>(clip);
+      return MatrixUtils.transformRect(box.getTransformTo(null), box.clipper!.getClip(box.size));
+    }
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump(FlickTv.railIn ~/ 3);
+    final panel = tester.getRect(find.byKey(const ValueKey('rail-panel')));
+    expect(panel.right, lessThan(FlickTv.railExpanded), reason: 'mid-slide');
+    expect(tester.getRect(item).right, greaterThan(panel.right), reason: 'the item is already full width');
+    expect(clipRect().right, moreOrLessEquals(panel.right, epsilon: 0.01));
+
+    await tester.pumpAndSettle();
+    const ring = FlickTv.ringGap + FlickTv.ringWidth;
+    final rest = tester.getRect(item).inflate(ring);
+    final clipped = clipRect();
+    expect(clipped.left <= rest.left && clipped.top <= rest.top && clipped.right >= rest.right && clipped.bottom >= rest.bottom,
+        isTrue, reason: 'ring $rest inside clip $clipped');
   });
 
   testWidgets('h: with reduced motion the rail expands in one frame', (tester) async {

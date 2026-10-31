@@ -39,6 +39,52 @@ void main() {
     expect(ring, findsNothing);
   });
 
+  testWidgets('a frame handed another node shows that node\'s state, not the old ring', (tester) async {
+    highlight(FocusHighlightStrategy.alwaysTraditional);
+    final a = FocusNode(debugLabel: 'a'), b = FocusNode(debugLabel: 'b'), c = FocusNode(debugLabel: 'c');
+    addTearDown(a.dispose);
+    addTearDown(b.dispose);
+    addTearDown(c.dispose);
+    // The same element is reused for each pump: only the node changes.
+    Future<void> frame(FocusNode node, {bool other = false}) => pump(
+        tester,
+        Column(children: [
+          Expanded(child: FocusFrame(focusNode: node, child: const SizedBox.expand())),
+          if (other) Focus(focusNode: c, child: const SizedBox(height: 10)),
+        ]));
+
+    await frame(a);
+    a.requestFocus();
+    await tester.pump();
+    expect(ring, findsOneWidget);
+
+    await frame(b);
+    await tester.pump();
+    expect(b.hasFocus, isFalse);
+    expect(ring, findsNothing, reason: 'b is not focused');
+    await tester.pump(const Duration(seconds: 2));
+    expect(ring, findsNothing, reason: 'still no stale ring');
+
+    b.requestFocus();
+    await tester.pump();
+    await tester.pump();
+    expect(ring, findsOneWidget, reason: 'b focused');
+    b.unfocus();
+    await tester.pump();
+    await tester.pump();
+    expect(ring, findsNothing, reason: 'b unfocused');
+
+    // Handed a node that already has focus: the ring shows at once.
+    await frame(b, other: true);
+    c.requestFocus();
+    await tester.pump();
+    expect(ring, findsNothing);
+    await frame(c);
+    await tester.pump();
+    expect(c.hasFocus, isTrue);
+    expect(ring, findsOneWidget, reason: 'c is focused');
+  });
+
   testWidgets('Select and Enter activate once per press', (tester) async {
     var activations = 0;
     await pump(tester, FocusFrame(autofocus: true, onActivate: () => activations++, child: const SizedBox.expand()),

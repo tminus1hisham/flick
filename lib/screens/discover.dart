@@ -110,12 +110,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     bool hasFavourites,
     bool showFavourites,
   ) => Padding(
-        padding: const EdgeInsets.only(top: FlickTv.insetV, bottom: 16),
+        padding: const EdgeInsets.only(top: FlickTv.insetV),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // Header rows sit [FlickTv.gridPad] in, like the chips and the grid: lined up, and no ring is clipped.
+          // One height open or closed: the 48 dp field replaces the Search action without moving anything below.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad),
-            child: Row(children: [
+            child: SizedBox(height: FlickTokens.minTouchTarget, child: Row(children: [
             Text('Discover', style: FlickTv.page),
             const SizedBox(width: FlickTv.contentGap),
             if (_searchOpen) ...[
@@ -153,7 +154,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ),
               ),
               const SizedBox(width: FlickTv.gridGap),
+              // Keyed with the Search action below, so neither frame's element (and state) is reused for the other.
               FocusFrame.button(
+                key: const ValueKey('search-close'),
                 semanticLabel: 'Close search',
                 onActivate: _closeSearch,
                 child: const SizedBox(
@@ -165,6 +168,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ] else ...[
               const Spacer(),
               FocusFrame.button(
+                key: const ValueKey('search-open'),
                 focusNode: _searchActionFocus,
                 semanticLabel: 'Search titles',
                 onActivate: _openSearch,
@@ -178,15 +182,23 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 ),
               ),
             ],
-          ])),
-          const SizedBox(height: 12),
+          ]))),
+          // 6: the field's ring clears the switch's track.
+          const SizedBox(height: 6),
           // The tab's initial target: entering Discover with nothing remembered lands on Movies.
+          // A segmented track, unlike the bare filter chips below: the switch changes what the whole page lists.
           InitialFocus(child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: FlickTokens.surface1,
+                borderRadius: BorderRadius.circular(FlickTv.segmentRadius),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
             for (final (type, label) in [('movie', 'Movies'), ('series', 'Series')])
               _TvChoice(
                 label,
+                segment: true,
                 selected: _type == type,
                 focusNode: type == 'movie' ? _typeSwitchFocus : null,
                 onActivate: () {
@@ -198,13 +210,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   }
                 },
               ),
-          ]))),
-          const SizedBox(height: 8),
+          ])))),
+          const SizedBox(height: 2),
           // A non-lazy row keeps every catalog reachable by directional focus.
           // Its padding leaves room for the outer ring at the viewport edges.
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(FlickTv.gridPad),
+            padding: const EdgeInsets.symmetric(horizontal: FlickTv.gridPad, vertical: 6),
             child: Row(children: [
               if (hasFavourites) ...[
                 _TvChoice(
@@ -478,6 +490,7 @@ class _TvChoice extends StatelessWidget {
     required this.onActivate,
     this.icon,
     this.focusNode,
+    this.segment = false,
   });
 
   final String label;
@@ -486,6 +499,9 @@ class _TvChoice extends StatelessWidget {
   final IconData? icon;
   final FocusNode? focusNode;
 
+  /// A Movies / Series segment: the phone's segmented look, the selected one filled surface2 on the track.
+  final bool segment;
+
   @override
   Widget build(BuildContext context) => Semantics(
         selected: selected,
@@ -493,8 +509,13 @@ class _TvChoice extends StatelessWidget {
         child: FocusFrame.button(
           focusNode: focusNode,
           onActivate: onActivate,
-          child: ConstrainedBox(
+          radius: segment ? FlickTv.segmentRadius : FlickTokens.controlRadius,
+          child: Container(
             constraints: const BoxConstraints(minHeight: 40),
+            decoration: BoxDecoration(
+              color: segment && selected ? FlickTokens.surface2 : null,
+              borderRadius: BorderRadius.circular(FlickTv.segmentRadius),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -664,7 +685,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
       crossAxisCount: FlickTv.columns,
       crossAxisSpacing: FlickTv.gridGap,
       mainAxisSpacing: FlickTv.gridGap,
-      mainAxisExtent: _row = width / FlickTv.posterAspect + 8 + caption,
+      mainAxisExtent: _row = width / FlickTv.posterAspect + FlickTv.captionGap + caption,
     );
     final slivers = <Widget>[];
 
@@ -687,8 +708,9 @@ class _CatalogFeedState extends State<CatalogFeed> {
         ),
       ));
     } else {
+      // 4 on top: with the chip row's 6 below its chips, the first row's ring and lift (about 9 dp) still clear them.
       slivers.add(SliverPadding(
-        padding: const EdgeInsets.all(FlickTv.gridPad),
+        padding: const EdgeInsets.fromLTRB(FlickTv.gridPad, 4, FlickTv.gridPad, FlickTv.gridPad),
         sliver: SliverGrid.builder(
           gridDelegate: grid,
           itemCount: _items.isEmpty ? FlickTv.columns * 2 : _items.length,
@@ -858,14 +880,15 @@ class _TvPoster extends StatelessWidget {
                 tag: m.id,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
-                  child: NetImage(m.poster ?? ''),
+                  // A poster still loading reads as a card, not a hole.
+                  child: ColoredBox(color: FlickTokens.surface1, child: NetImage(m.poster ?? '')),
                 ),
               ),
             ),
           ),
         ),
       ),
-      const SizedBox(height: 8),
+      const SizedBox(height: FlickTv.captionGap),
       ExcludeSemantics(
         child: Text(m.name,
             maxLines: 1,
@@ -898,7 +921,7 @@ class _TvPosterSkeleton extends StatelessWidget {
           aspectRatio: FlickTv.posterAspect,
           child: Skeleton(radius: FlickTokens.artworkRadius),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: FlickTv.captionGap),
         SizedBox(
           height: titleHeight,
           child: const Align(

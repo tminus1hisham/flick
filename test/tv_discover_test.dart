@@ -10,6 +10,7 @@ import 'package:flick/screens/sources.dart';
 import 'package:flick/screens/title.dart';
 import 'package:flick/state.dart';
 import 'package:flick/theme.dart';
+import 'package:flick/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -306,5 +307,80 @@ void main() {
     }
     expect(focused(), 'top 9, 2019');
     inside('last column, row 2');
+  });
+
+  final rings = find.byWidgetPredicate((w) => w is CustomPaint && w.foregroundPainter is FocusRing);
+
+  testWidgets('10: with search open exactly one ring shows, and the page below does not move', (tester) async {
+    await pumpApp(tester);
+    final movies = tester.getRect(find.text('Movies'));
+    final poster = tester.getRect(find.byType(NetImage).first);
+    await key(tester, LogicalKeyboardKey.arrowUp);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(focused(), 'Search titles');
+    expect(rings, findsOneWidget);
+
+    await key(tester, LogicalKeyboardKey.select);
+    expect(textFocused(), isTrue);
+    expect(rings, findsOneWidget, reason: 'the field only, no stale ring on Close');
+    await tester.pump(const Duration(seconds: 2));
+    expect(rings, findsOneWidget);
+    expect(tester.getRect(find.text('Movies')), movies, reason: 'the 48 dp header row keeps its height');
+    expect(tester.getRect(find.byType(NetImage).first), poster);
+
+    final close = find.byWidgetPredicate((w) => w is FocusFrame && w.semanticLabel == 'Close search');
+    tester.widget<Focus>(find.descendant(of: close, matching: find.byType(Focus)).first).focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    expect(focused(), 'Close search');
+    expect(rings, findsOneWidget, reason: 'Close shows its own ring');
+  });
+
+  testWidgets('11: the grid starts at y 175 (±6), and captions clear the ring and lift', (tester) async {
+    await pumpApp(tester);
+    final poster = tester.getRect(find.byType(NetImage).first);
+    expect(poster.top, closeTo(175, 6));
+
+    final caption = tester.getRect(find.text('top 0'));
+    expect(caption.top - poster.bottom, FlickTv.captionGap);
+    final lift = poster.height * (FlickTv.lift - 1) / 2;
+    expect(FlickTv.captionGap, greaterThanOrEqualTo(FlickTv.ringGap + FlickTv.ringWidth + lift));
+
+    final chip = tester.getRect(find.ancestor(of: find.text('Popular'), matching: find.byType(FocusFrame)).first);
+    expect(poster.top - chip.bottom, greaterThanOrEqualTo(FlickTv.ringGap + FlickTv.ringWidth + lift),
+        reason: 'the first row\'s ring and lift clear the chips');
+  });
+
+  testWidgets('12: a loading poster is a surface1 card, not a hole', (tester) async {
+    await pumpApp(tester);
+    expect(
+      find.ancestor(
+        of: find.byType(NetImage).first,
+        matching: find.byWidgetPredicate((w) => w is ColoredBox && w.color == FlickTokens.surface1),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('13: Movies / Series sit on a 40 dp surface1 track; the chips stay bare', (tester) async {
+    await pumpApp(tester);
+    Finder track(String label) => find.ancestor(
+          of: find.text(label),
+          matching: find.byWidgetPredicate(
+              (w) => w is DecoratedBox && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).color == FlickTokens.surface1),
+        );
+    expect(track('Movies'), findsOneWidget);
+    expect(tester.element(track('Series')), same(tester.element(track('Movies'))), reason: 'one track holds both segments');
+    expect(tester.getSize(track('Movies')).height, 40);
+    expect(track('Popular'), findsNothing);
+    expect(
+      find.ancestor(
+        of: find.text('Movies'),
+        matching: find.byWidgetPredicate(
+            (w) => w is Container && w.decoration is BoxDecoration && (w.decoration as BoxDecoration).color == FlickTokens.surface2),
+      ),
+      findsOneWidget,
+      reason: 'the selected segment is filled',
+    );
+    expect(find.descendant(of: track('Movies'), matching: find.byType(SlashMarker)), findsOneWidget);
   });
 }

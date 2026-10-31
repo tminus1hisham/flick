@@ -103,7 +103,46 @@ class FocusFrame extends StatefulWidget {
 }
 
 class _FocusFrameState extends State<FocusFrame> {
+  FocusNode? _own;
   bool _ring = false;
+
+  FocusNode get _node => widget.focusNode ?? (_own ??= FocusNode(debugLabel: 'FocusFrame'));
+
+  // Read from the node itself, not FocusableActionDetector.onShowFocusHighlight: the detector keeps its own
+  // focused flag, which goes stale when a reused frame is handed another node.
+  bool get _showRing => _node.hasFocus && FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+
+  void _changed([Object? _]) {
+    if (mounted && _showRing != _ring) setState(() => _ring = _showRing);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _node.addListener(_changed);
+    FocusManager.instance.addHighlightModeListener(_changed);
+    _ring = _showRing;
+  }
+
+  @override
+  void didUpdateWidget(FocusFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final old = oldWidget.focusNode ?? _own;
+    if (old != _node) {
+      old?.removeListener(_changed);
+      _node.addListener(_changed);
+      // A frame re-pointed at another node shows that node's state, never the last node's ring.
+      _ring = _showRing;
+    }
+  }
+
+  @override
+  void dispose() {
+    _node.removeListener(_changed);
+    FocusManager.instance.removeHighlightModeListener(_changed);
+    _own?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -116,9 +155,8 @@ class _FocusFrameState extends State<FocusFrame> {
       label: widget.semanticLabel,
       onTap: onActivate,
       child: FocusableActionDetector(
-        focusNode: widget.focusNode,
+        focusNode: _node,
         autofocus: widget.autofocus,
-        onShowFocusHighlight: (on) => setState(() => _ring = on),
         actions: {
           if (onActivate != null) ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => onActivate()),
         },

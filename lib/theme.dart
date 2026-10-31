@@ -146,6 +146,11 @@ abstract final class FlickTv {
   static const gridGap = 12.0;
   static const columns = 5;
   static const posterAspect = 2 / 3;
+  // Poster to caption: clears the ring (ringGap + ringWidth) plus the lift's growth below the poster.
+  static const captionGap = 12.0;
+
+  // The Movies / Series switch: a surface1 track, the selected segment surface2.
+  static const segmentRadius = 8.0;
 
   // Title: art and facts | streams or episodes.
   static const artPane = 264.0;
