@@ -57,6 +57,7 @@ This file is the shared source for continuing the work in a new session. Read it
 - **Parallel building:** one git worktree per maker (`git worktree add ../stremio-<name> -b <branch> discover`). Another session (`stremio-99`) worked on this repo the same day, so check `git worktree list` and ListAgents before you start.
 - **Don't run `dart format` on files other than player.dart.** The repo is hand-formatted and a format reflows whole files.
 - On Windows, a worktree whose `build/` paths are too long won't delete with `git worktree remove`. Use `git worktree prune`, then PowerShell `Remove-Item -LiteralPath '\\?\C:\...\stremio-<name>' -Recurse -Force`.
+- In a `Stack`, `Row` or `Column`, an `if (...)` child placed before stateful siblings needs a `key` on those siblings, or they are rebuilt from scratch when the condition flips (lost focus/ring state; the TV rail ring bug of 2026-10-31).
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
 ## Status (2026-10-31)
