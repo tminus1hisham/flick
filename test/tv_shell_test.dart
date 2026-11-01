@@ -28,7 +28,7 @@ class _Addon implements Addon {
   @override
   bool serves(String resource, String type, String id) => true;
   @override
-  List<Catalog> get catalogs => [(addon: this, type: 'movie', id: 'top', name: 'Popular', searchable: true)];
+  List<Catalog> get catalogs => [(addon: this, type: 'movie', id: 'top', name: 'Popular', searchable: true, genres: const [])];
   @override
   String get capability => 'Catalogs';
 }
@@ -38,7 +38,7 @@ class _Addons extends Addons {
   @override
   List<Catalog> get catalogs => _addon.catalogs;
   @override
-  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) async =>
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, String? genre, int skip = 0}) async =>
       [(id: 'tt1', type: 'movie', name: 'The Kid', poster: null, releaseInfo: '1921')];
 }
 

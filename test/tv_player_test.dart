@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,22 +7,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flick/kit/focus.dart';
 import 'package:flick/player_keys.dart';
 import 'package:flick/screens/tv_player.dart';
+import 'package:flick/screens/volume.dart';
 import 'package:flick/screens/upnext.dart';
 import 'package:flick/state.dart';
 import 'package:flick/theme.dart';
 import 'package:flick/stall.dart';
 
 class _Harness extends StatefulWidget {
-  const _Harness({super.key, this.duration = const Duration(minutes: 10), this.waiting = false, this.live = false});
+  const _Harness({super.key, this.duration = const Duration(minutes: 10), this.waiting = false, this.live = false, this.liveRange});
   final Duration duration;
   final bool waiting;
   final bool live;
+  final LiveSeekRange? liveRange;
   @override
   State<_Harness> createState() => _HarnessState();
 }
 
 class _HarnessState extends State<_Harness> {
   bool playing = true, panel = false, next = false, languages = false;
+  double volume = 100, unmutedVolume = 100;
+  bool speed = false;
+  int speedCalls = 0;
+  void enableSpeed() => setState(() => speed = true);
+  bool get muted => volume == 0;
+  final volumeChanges = StreamController<double>.broadcast();
+  void setVolume(double value) {
+    if (value == 0 && volume > 0) unmutedVolume = volume;
+    setState(() => volume = value);
+    volumeChanges.add(value);
+  }
+  @override
+  void dispose() {
+    volumeChanges.close();
+    super.dispose();
+  }
   late bool waiting = widget.waiting;
   String? error;
   int toggles = 0, exits = 0, retry = 0, nextCalls = 0, closes = 0;
@@ -32,9 +52,19 @@ class _HarnessState extends State<_Harness> {
   @override
   Widget build(BuildContext context) => Scaffold(body: TvPlayerControls(
     live: widget.live,
+    onSpeed: speed ? () async { speedCalls++; } : null,
+    liveRange: widget.liveRange,
     title: 'Flash Gordon', subtitle: 'S1 E2 · The Tunnel of Terror',
     position: const Duration(minutes: 2), duration: widget.duration, buffer: const Duration(minutes: 3),
     playing: playing, panel: panel, error: error,
+    muted: muted, onVolume: () async {
+      await showDialog<void>(context: context, builder: (_) => VolumePanel(
+        stream: volumeChanges.stream, readVolume: () => volume, onChanged: setVolume,
+        onMute: () {
+          setVolume(muted ? unmutedVolume : 0);
+        },
+      ));
+    },
     buffering: (phase: waiting ? BufferPhase.offline : BufferPhase.hidden, progress: null, stats: null, offerSwitch: waiting),
     onToggle: () => setState(() { playing = !playing; toggles++; }),
     onSeek: seeks.add, onExit: () => exits++, onRetry: () => retry++,
@@ -85,7 +115,7 @@ void main() {
   });
 
   Future<GlobalKey<_HarnessState>> pump(WidgetTester tester, {Duration duration = const Duration(minutes: 10),
-      Size size = const Size(960, 540), double scale = 1, bool waiting = false, bool live = false}) async {
+      Size size = const Size(960, 540), double scale = 1, bool waiting = false, bool live = false, LiveSeekRange? liveRange}) async {
     device.tv = true;
     FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
     tester.view.physicalSize = size;
@@ -95,7 +125,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final harness = GlobalKey<_HarnessState>();
     await tester.pumpWidget(MaterialApp(theme: flickTheme(tv: true), shortcuts: tvShortcuts,
-      home: _Harness(key: harness, duration: duration, waiting: waiting, live: live)));
+      home: _Harness(key: harness, duration: duration, waiting: waiting, live: live, liveRange: liveRange)));
     await tester.pumpAndSettle();
     return harness;
   }
@@ -110,12 +140,36 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('live controls hide duration and ignore seeking even when duration is known', (tester) async {
+  testWidgets('live controls refuse seeking without a cache range even when duration is known', (tester) async {
     final h = await pump(tester, live: true);
     await key(tester, LogicalKeyboardKey.arrowRight);
     expect(h.currentState!.seeks, isEmpty);
     expect(find.text('Live'), findsOneWidget);
     expect(find.text('2:00 / 10:00'), findsNothing);
+  });
+
+  testWidgets('live Left/Right seeks with unknown duration and stays within the cached range', (tester) async {
+    final h = await pump(tester, live: true, duration: Duration.zero,
+      liveRange: (start: const Duration(seconds: 115), end: const Duration(seconds: 125)));
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    expect(h.currentState!.seeks.last, const Duration(seconds: 115));
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(h.currentState!.seeks.last, const Duration(seconds: 124));
+    expect(find.text('Seeking 2:04'), findsOneWidget);
+    await key(tester, LogicalKeyboardKey.arrowUp);
+    expect(find.text('Live'), findsOneWidget);
+  });
+
+  test('cache ranges use real timestamps and reject missing, malformed or disconnected regions', () {
+    const cache = '{"seekable-ranges":[{"start":10.5,"end":30.25},{"start":100,"end":200}]}';
+    expect(liveSeekRange(cache, const Duration(seconds: 20)),
+      (start: const Duration(milliseconds: 10500), end: const Duration(milliseconds: 30250)));
+    expect(liveSeekRange(cache, const Duration(seconds: 50)), isNull);
+    for (final invalid in ['', 'null', '{}', '{"seekable-ranges":[]}',
+      '{"seekable-ranges":[{"start":"0","end":200}]}',
+      '{"seekable-ranges":[{"start":30,"end":10}]}']) {
+      expect(liveSeekRange(invalid, const Duration(seconds: 20)), isNull);
+    }
   });
 
   testWidgets('hidden Select toggles once and focuses Play; bar arrows traverse without seeking', (tester) async {
@@ -135,6 +189,39 @@ void main() {
     await key(tester, LogicalKeyboardKey.arrowDown);
     expect(FocusManager.instance.primaryFocus?.debugLabel, 'Player keys');
   });
+
+  for (final live in [false, true]) {
+    testWidgets('remote activates volume without pausing (live: $live)', (tester) async {
+      final h = await pump(tester, live: live);
+      await key(tester, LogicalKeyboardKey.arrowUp);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      await key(tester, LogicalKeyboardKey.arrowRight);
+      expect(focused(), 'Volume');
+      await key(tester, LogicalKeyboardKey.select);
+      expect(find.byType(Slider), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      await tester.tap(find.text('Mute'));
+      await tester.pumpAndSettle();
+      expect(h.currentState!.muted, isTrue);
+      expect(find.text('Unmute'), findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(focused(), 'Volume (muted)');
+      await key(tester, LogicalKeyboardKey.select);
+      expect(find.text('Unmute'), findsOneWidget);
+      await tester.tap(find.text('Unmute'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(h.currentState!.muted, isFalse);
+      expect(focused(), 'Volume');
+      expect(find.byIcon(Icons.volume_up), findsOneWidget);
+      expect(h.currentState!.toggles, 0);
+      expect(h.currentState!.playing, isTrue);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('hidden Left/Right seeks with immediate position feedback, unknown duration shows bar', (tester) async {
     final h = await pump(tester);
@@ -228,6 +315,20 @@ void main() {
     expect(tester.getSize(played).width, closeTo(tester.getSize(rail).width * .2, .1));
     expect(tester.getSize(buffered).height, greaterThan(0));
     expect(tester.getSize(buffered).width, greaterThan(tester.getSize(played).width));
+  });
+
+  testWidgets('remote opens speed without pausing and controls fit with larger text', (tester) async {
+    final h = await pump(tester, size: const Size(900, 500), scale: 1.3);
+    h.currentState!.enableSpeed();
+    await tester.pumpAndSettle();
+    await key(tester, LogicalKeyboardKey.arrowUp);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(focused(), 'Speed');
+    await key(tester, LogicalKeyboardKey.select);
+    expect(h.currentState!.speedCalls, 1);
+    expect(h.currentState!.toggles, 0);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('offered recovery on entry focuses and activates source action without toggling playback', (tester) async {

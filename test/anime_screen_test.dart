@@ -81,11 +81,12 @@ class _Catalogs extends Addons {
     'types': ['anime', 'movie', 'series'],
     'catalogs': [
       {'type': 'anime', 'id': 'trending', 'name': 'Trending'},
-      {'type': 'anime', 'id': 'airing', 'name': 'Airing'},
+      {'type': 'anime', 'id': 'airing', 'name': 'Airing', 'extra': [{'name': 'genre', 'options': ['Action', 'Romance']}]},
       {'type': 'series', 'id': 'latest', 'name': 'Latest episodes'},
     ],
   }, 'https://anime-kitsu.strem.fun');
   final requests = <(String, String, String?, int)>[];
+  final genres = <String?>[];
   final metaRequests = <(String, String)>[];
   bool enabled = true;
   String itemType = 'series';
@@ -100,8 +101,9 @@ class _Catalogs extends Addons {
   List<Catalog> get catalogs => enabled ? _addon.catalogs : [];
 
   @override
-  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) {
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, String? genre, int skip = 0}) {
     requests.add((c.type, c.id, search, skip));
+    genres.add(genre);
     return page ?? Future.value([
       if (skip == 0)
         (id: 'kitsu:11', type: itemType, name: 'Kitsu ${c.id}', poster: null, releaseInfo: '2002'),
@@ -177,6 +179,20 @@ void main() {
     expect(_catalogs.requests.last, ('anime', 'airing', null, 0));
     expect(find.text('Kitsu airing'), findsOneWidget);
     expect(tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Airing')).selected, isTrue);
+  });
+
+  testWidgets('anime genre tabs filter the catalog and All genres clears it', (tester) async {
+    await pump(tester, const AnimeTab());
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Airing'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Action'));
+    await tester.pumpAndSettle();
+    expect(_catalogs.genres.last, 'Action');
+    expect(_catalogs.requests.last, ('anime', 'airing', null, 0));
+    await tester.tap(find.text('All genres'));
+    await tester.pumpAndSettle();
+    expect(_catalogs.genres.last, isNull);
   });
 
   testWidgets('catalog loading uses the shared skeleton and clearing Miruro search restores the feed', (tester) async {

@@ -162,6 +162,15 @@ void main() {
   });
 
   group('SeekBurst', () {
+    test('live nudges clamp to the moving cache boundaries', () {
+      final burst = SeekBurst();
+      expect(burst.nudge(-10, position: const Duration(seconds: 100),
+        duration: const Duration(seconds: 110), start: const Duration(seconds: 95)), isTrue);
+      expect(burst.settle(), const Duration(seconds: 95));
+      burst.nudge(30, position: const Duration(seconds: 100),
+        duration: const Duration(seconds: 110), start: const Duration(seconds: 95));
+      expect(burst.settle(), const Duration(seconds: 110));
+    });
     const duration = Duration(minutes: 40), at = Duration(seconds: 100);
 
     test('taps add up to one target; settle ends the burst', () {

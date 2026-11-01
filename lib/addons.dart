@@ -23,7 +23,7 @@ typedef Meta = ({
   List<String> genres,
   List<Video> videos,
 });
-typedef Catalog = ({Addon addon, String type, String id, String name, bool searchable});
+typedef Catalog = ({Addon addon, String type, String id, String name, bool searchable, List<String> genres});
 typedef AddonStream = ({
   String? name,
   String? title,
@@ -89,6 +89,12 @@ class Addon {
               type: c['type'] as String,
               id: c['id'] as String,
               name: c['name'] as String? ?? name,
+              genres: [
+                for (final e in (c['extra'] as List?) ?? const [])
+                  if (e is Map && e['name'] == 'genre' && e['options'] is List)
+                    for (final g in e['options'] as List)
+                      if (g is String && g.isNotEmpty) g,
+              ],
               searchable: ((c['extra'] as List?) ?? const []).any((e) => e is Map && e['name'] == 'search') ||
                   (_list(c['extraSupported']) ?? const []).contains('search'),
             ),
@@ -244,9 +250,10 @@ class Addons extends ChangeNotifier {
   List<Catalog> get catalogs => [for (final a in active) ...a.catalogs];
   List<Catalog> get animeCatalogs => catalogs.where((c) => c.type == 'anime').toList();
 
-  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) async {
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, String? genre, int skip = 0}) async {
     final extra = [
       if (search != null) 'search=${Uri.encodeComponent(search)}',
+      if (genre != null) 'genre=${Uri.encodeComponent(genre)}',
       if (skip > 0) 'skip=$skip',
     ].join('&');
     final body = await _get(
@@ -423,12 +430,12 @@ const _bundledManifests = <({String base, bool locked, Map<String, dynamic> mani
       'types': ['movie', 'series'],
       'idPrefixes': ['tt'],
       'catalogs': [
-        {'type': 'movie', 'id': 'top', 'name': 'Popular', 'extra': [{'name': 'genre'}, {'name': 'search'}, {'name': 'skip'}]},
-        {'type': 'series', 'id': 'top', 'name': 'Popular', 'extra': [{'name': 'genre'}, {'name': 'search'}, {'name': 'skip'}]},
+        {'type': 'movie', 'id': 'top', 'name': 'Popular', 'extra': [{'name': 'genre', 'options': _cinemetaGenres}, {'name': 'search'}, {'name': 'skip'}]},
+        {'type': 'series', 'id': 'top', 'name': 'Popular', 'extra': [{'name': 'genre', 'options': [..._cinemetaGenres, 'Reality-TV', 'Talk-Show', 'Game-Show']}, {'name': 'search'}, {'name': 'skip'}]},
         {'type': 'movie', 'id': 'year', 'name': 'New', 'extra': [{'name': 'genre', 'isRequired': true}, {'name': 'skip'}]},
         {'type': 'series', 'id': 'year', 'name': 'New', 'extra': [{'name': 'genre', 'isRequired': true}, {'name': 'skip'}]},
-        {'type': 'movie', 'id': 'imdbRating', 'name': 'Featured', 'extra': [{'name': 'genre'}, {'name': 'skip'}]},
-        {'type': 'series', 'id': 'imdbRating', 'name': 'Featured', 'extra': [{'name': 'genre'}, {'name': 'skip'}]},
+        {'type': 'movie', 'id': 'imdbRating', 'name': 'Featured', 'extra': [{'name': 'genre', 'options': _cinemetaGenres}, {'name': 'skip'}]},
+        {'type': 'series', 'id': 'imdbRating', 'name': 'Featured', 'extra': [{'name': 'genre', 'options': [..._cinemetaGenres, 'Reality-TV', 'Talk-Show', 'Game-Show']}, {'name': 'skip'}]},
         {'type': 'series', 'id': 'last-videos', 'name': 'Last videos', 'extra': [{'name': 'lastVideosIds', 'isRequired': true}]},
         {'type': 'series', 'id': 'calendar-videos', 'name': 'Calendar videos', 'extra': [{'name': 'calendarVideosIds', 'isRequired': true}]},
       ],
@@ -503,12 +510,31 @@ const _bundledManifests = <({String base, bool locked, Map<String, dynamic> mani
       'idPrefixes': ['kitsu', 'mal', 'anilist', 'anidb'],
       'catalogs': [
         {'type': 'anime', 'id': 'kitsu-anime-trending', 'name': 'Trending', 'extra': [{'name': 'skip'}]},
-        {'type': 'anime', 'id': 'kitsu-anime-airing', 'name': 'Airing', 'extra': [{'name': 'skip'}]},
-        {'type': 'anime', 'id': 'kitsu-anime-popular', 'name': 'Popular', 'extra': [{'name': 'skip'}]},
-        {'type': 'anime', 'id': 'kitsu-anime-rating', 'name': 'Top rated', 'extra': [{'name': 'skip'}]},
+        {'type': 'anime', 'id': 'kitsu-anime-airing', 'name': 'Airing', 'extra': [{'name': 'genre', 'options': _animeGenres}, {'name': 'skip'}]},
+        {'type': 'anime', 'id': 'kitsu-anime-popular', 'name': 'Popular', 'extra': [{'name': 'genre', 'options': _animeGenres}, {'name': 'skip'}]},
+        {'type': 'anime', 'id': 'kitsu-anime-rating', 'name': 'Top rated', 'extra': [{'name': 'genre', 'options': _animeGenres}, {'name': 'skip'}]},
         {'type': 'anime', 'id': 'kitsu-anime-list', 'name': 'Kitsu', 'extra': [{'name': 'search', 'isRequired': true}]},
         {'type': 'series', 'id': 'kitsu-anime-last-videos', 'name': 'Latest episodes', 'extra': [{'name': 'skip'}]},
       ],
     },
   ),
+];
+
+const _cinemetaGenres = [
+  'Action', 'Adventure', 'Animation', 'Biography', 'Comedy', 'Crime',
+  'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror',
+  'Mystery', 'Romance', 'Sci-Fi', 'Sport', 'Thriller', 'War', 'Western',
+];
+
+const _animeGenres = [
+  'Action', 'Adventure', 'Comedy', 'Drama', 'Sci-Fi', 'Space', 'Mystery',
+  'Magic', 'Supernatural', 'Police', 'Fantasy', 'Sports', 'Romance', 'Cars',
+  'Slice of Life', 'Racing', 'Horror', 'Psychological', 'Thriller',
+  'Martial Arts', 'Super Power', 'School', 'Ecchi', 'Vampire', 'Historical',
+  'Military', 'Dementia', 'Mecha', 'Demons', 'Samurai', 'Harem', 'Music',
+  'Parody', 'Shoujo Ai', 'Game', 'Shounen Ai', 'Kids', 'Hentai', 'Yuri',
+  'Yaoi', 'Anime Influenced', 'Gender Bender', 'Doujinshi', 'Mahou Shoujo',
+  'Mahou Shounen', 'Gore', 'Law', 'Cooking', 'Mature', 'Medical', 'Political',
+  'Tokusatsu', 'Youth', 'Workplace', 'Crime', 'Zombies', 'Documentary',
+  'Family', 'Food', 'Friendship', 'Tragedy',
 ];

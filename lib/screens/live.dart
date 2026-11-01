@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../kit/focus.dart';
 import '../live.dart';
@@ -17,6 +18,14 @@ class LiveTab extends StatefulWidget {
 
 class _LiveTabState extends State<LiveTab> {
   late final _client = widget.client ?? LiveClient();
+  final _search = TextEditingController();
+  late final _searchFocus = FocusNode(onKeyEvent: (node, event) {
+    if (context.tv && event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      node.focusInDirection(TraversalDirection.down);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  });
   int _sport = 1, _generation = 0;
   bool _loaded = false, _busy = false;
   List<LiveEvent> _events = [];
@@ -34,6 +43,18 @@ class _LiveTabState extends State<LiveTab> {
     if (widget.active && !_loaded) _load();
   }
 
+  @override
+  void dispose() {
+    _search.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _clearSearch() {
+    _search.clear();
+    setState(() {});
+  }
+
   Future<void> _load() async {
     final token = ++_generation;
     setState(() { _loaded = true; _busy = true; _error = null; _events = []; });
@@ -49,6 +70,9 @@ class _LiveTabState extends State<LiveTab> {
 
   @override
   Widget build(BuildContext context) {
+    final query = _search.text.trim().toLowerCase();
+    final events = _events.where((event) =>
+      event.name.toLowerCase().contains(query) || event.league.toLowerCase().contains(query)).toList();
     final header = Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         Expanded(child: Text('Live', style: context.tv ? FlickTv.page : FlickText.detailTitle)),
@@ -66,6 +90,22 @@ class _LiveTabState extends State<LiveTab> {
         )]),
       ),
       const SizedBox(height: 12),
+      TextField(
+        controller: _search,
+        focusNode: _searchFocus,
+        style: context.tv ? FlickTv.body : FlickText.body,
+        textInputAction: TextInputAction.search,
+        onChanged: (_) => setState(() {}),
+        onSubmitted: (_) { if (context.tv) _searchFocus.focusInDirection(TraversalDirection.down); },
+        decoration: InputDecoration(
+          labelText: 'Search games',
+          hintText: 'Team, game or league',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _search.text.isEmpty ? null : IconButton(
+            tooltip: 'Clear search', onPressed: _clearSearch, icon: const Icon(Icons.close)),
+        ),
+      ),
+      const SizedBox(height: 12),
     ]);
     return Material(color: FlickTokens.background, child: SafeArea(bottom: false,
       child: FocusTraversalGroup(policy: ReadingOrderTraversalPolicy(requestFocusCallback: tvReveal),
@@ -78,11 +118,12 @@ class _LiveTabState extends State<LiveTab> {
               const Padding(padding: EdgeInsets.only(bottom: 12), child: Skeleton(width: double.infinity, height: 76))])
               : _error != null ? _LiveNotice(_error!, retry: _load)
               : _events.isEmpty ? _LiveNotice('No events for ${liveSports[_sport]}.', retry: _load)
+              : events.isEmpty ? _LiveNotice('No games match your search.', retry: _clearSearch, actionLabel: 'Clear search')
               : ListView.separated(
-                itemCount: _events.length, separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemCount: events.length, separatorBuilder: (_, _) => const SizedBox(height: 8),
                 padding: EdgeInsets.fromLTRB(context.tv ? 6 : 0, 6, context.tv ? 6 : 0, 24),
                 itemBuilder: (_, i) {
-                  final event = _events[i];
+                  final event = events[i];
                   return _LiveRow(title: event.name, detail: [event.league, _eventTime(event)].where((s) => s.isNotEmpty).join(' · '),
                     onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => _Channels(event, _client))));
                 },
@@ -192,15 +233,15 @@ class _LiveRow extends StatelessWidget {
 }
 
 class _LiveNotice extends StatelessWidget {
-  const _LiveNotice(this.message, {required this.retry});
-  final String message;
+  const _LiveNotice(this.message, {required this.retry, this.actionLabel = 'Try again'});
+  final String message, actionLabel;
   final VoidCallback retry;
   @override
   Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(24),
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       Semantics(liveRegion: true, child: Text(message, style: context.tv ? FlickTv.body : FlickText.body)),
       const SizedBox(height: 16),
-      InitialFocus(child: TextButton(onPressed: retry, child: const Text('Try again'))),
+      InitialFocus(child: TextButton(onPressed: retry, child: Text(actionLabel))),
     ]),
   ));
 }

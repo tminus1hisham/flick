@@ -189,12 +189,15 @@ void main() {
       });
     });
     final c = a.catalogs.firstWhere((c) => c.addon.id == 'com.linvo.cinemeta' && c.type == 'movie');
+    expect(c.genres, contains('Action'));
+    expect(a.animeCatalogs.firstWhere((c) => c.name == 'Popular').genres, contains('Romance'));
+    expect(a.animeCatalogs.first.genres, isEmpty);
     final metas = await a.catalog(c, search: 'rick & morty');
-    await a.catalog(c, skip: 100);
+    await a.catalog(c, genre: 'Action & Adventure', skip: 100);
     await a.catalog(c);
     expect(seen, [
       'https://v3-cinemeta.strem.io/catalog/movie/top/search=rick%20%26%20morty.json',
-      'https://v3-cinemeta.strem.io/catalog/movie/top/skip=100.json',
+      'https://v3-cinemeta.strem.io/catalog/movie/top/genre=Action%20%26%20Adventure&skip=100.json',
       'https://v3-cinemeta.strem.io/catalog/movie/top.json',
     ]);
     expect(metas.single, (id: 'tt1', type: 'movie', name: 'One', poster: 'p', releaseInfo: '1999'));

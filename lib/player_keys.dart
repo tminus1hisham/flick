@@ -1,4 +1,31 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
+
+typedef LiveSeekRange = ({Duration start, Duration end});
+
+/// Only the cached region containing the playhead is safe to seek within.
+LiveSeekRange? liveSeekRange(String cache, Duration position) {
+  try {
+    final state = jsonDecode(cache);
+    final ranges = state is Map ? state['seekable-ranges'] : null;
+    if (ranges is! List) return null;
+    for (final range in ranges) {
+      if (range is! Map) continue;
+      final start = range['start'], end = range['end'];
+      if (start is! num || end is! num || !start.isFinite || !end.isFinite ||
+          start < 0 || end <= start) continue;
+      final bounds = (
+        start: Duration(microseconds: (start * 1000000).round()),
+        end: Duration(microseconds: (end * 1000000).round()),
+      );
+      if (position >= bounds.start && position <= bounds.end) return bounds;
+    }
+  } on FormatException {
+    return null;
+  }
+  return null;
+}
 
 /// A TV remote changes meaning with the controls visible; panel arrows stay with its focus scope.
 enum TvPlayerCommand { none, toggle, play, pause, backward, forward, show, hide, closeTracks, exit }

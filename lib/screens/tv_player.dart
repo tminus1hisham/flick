@@ -15,18 +15,22 @@ class TvPlayerControls extends StatefulWidget {
   const TvPlayerControls({required this.title, this.subtitle, required this.position, required this.duration,
     required this.buffer, required this.playing, required this.panel, required this.tracks,
     required this.buffering, required this.onToggle, required this.onSeek, required this.onExit,
+    required this.muted, required this.onVolume, this.onSpeed,
     required this.onTracks, required this.onCloseTracks, required this.onRetry,
-    this.logo, this.poster, this.waiting = false, this.live = false, this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.upNext, this.upNextVisible = false, super.key});
+    this.logo, this.poster, this.waiting = false, this.live = false, this.liveRange, this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.upNext, this.upNextVisible = false, super.key});
   final String title;
   final String? subtitle, error, logo, poster;
   final bool waiting;
   final bool live;
+  final LiveSeekRange? liveRange;
   final Duration position, duration, buffer;
-  final bool playing, panel, retrying, upNextVisible, subtitlesOn;
+  final bool playing, panel, retrying, upNextVisible, subtitlesOn, muted;
   final Widget tracks;
   final Widget? upNext;
   final BufferView buffering;
   final VoidCallback onToggle, onExit, onTracks, onCloseTracks, onRetry;
+  final Future<void> Function() onVolume;
+  final Future<void> Function()? onSpeed;
   final VoidCallback? onNext;
   final ValueChanged<Duration> onSeek;
   @override
@@ -77,14 +81,18 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   void _cardFocus() => _arm();
 
   void _seek(bool forward, KeyEvent event) {
-    if (widget.live) { _show(); return; }
+    final range = widget.liveRange;
+    if (widget.live && range == null) { _show(); return; }
     if (event is! KeyRepeatEvent || _heldKey != event.logicalKey) {
       _heldAt = event.timeStamp;
       _heldKey = event.logicalKey;
     }
-    final target = tvSeek(_hint ?? widget.position, widget.duration, forward: forward,
+    final start = widget.live ? range!.start : Duration.zero;
+    final end = widget.live ? range!.end : widget.duration;
+    final offset = tvSeek((_hint ?? widget.position) - start, end - start, forward: forward,
       held: event.timeStamp - (_heldAt ?? event.timeStamp));
-    if (target == null) { _show(); return; }
+    if (offset == null) { _show(); return; }
+    final target = offset + start;
     setState(() => _hint = target);
     widget.onSeek(target);
     _hintTimer?.cancel();
@@ -223,9 +231,24 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       Expanded(child: Text(widget.live ? 'Live' : '${playerTime(widget.position)} / ${playerTime(widget.duration)}',
         style: monoStyle.copyWith(fontSize: 16, height: 22 / 16))),
       _button(Icons.closed_caption_outlined, 'Subtitles', widget.onTracks, node: _tracks, selected: widget.subtitlesOn),
-      if (widget.onNext != null) ...[
-        const SizedBox(width: 16), _button(Icons.skip_next, 'Next episode', widget.onNext, node: _next),
+      if (widget.onSpeed != null) ...[
+        const SizedBox(width: 16),
+        _button(Icons.speed, 'Speed', () async {
+          _timer?.cancel();
+          await widget.onSpeed!();
+          if (mounted) _arm();
+        }, disc: true),
       ],
+      if (widget.onNext != null) ...[
+        const SizedBox(width: 16), _button(Icons.skip_next, 'Next episode', widget.onNext, node: _next, disc: widget.onSpeed != null),
+      ],
+      const SizedBox(width: 16),
+      _button(widget.muted ? Icons.volume_off : Icons.volume_up,
+        widget.muted ? 'Volume (muted)' : 'Volume', () async {
+          _timer?.cancel();
+          await widget.onVolume();
+          if (mounted) _arm();
+        }, disc: true),
     ]),
   ]);
 

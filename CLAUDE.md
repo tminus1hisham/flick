@@ -65,6 +65,9 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Status (2026-11-01)
 
+Live seeking: phone ±10-second buttons/double-taps and hidden TV Left/Right now use mpv's cached seekable range, including unknown-duration streams. Targets clamp to the current cache boundaries; no range disables seeking. No server recording or persistent timeshift is added.
+Validation: analysis clean; all 281 Flutter tests pass, including cached-range parsing and phone/TV seek boundary regressions; Android unit tests pass; debug APK built. Design gates retain the documented 27 existing hits.
+
 ### FCTV Live adapter
 Playback repair: empty region fields returned placeholder streams; the APK's bundled AS/ID fallback returns real signed relays without a location lookup. Their CDN metadata requires per-segment URL construction and `_s2` signing. `FctvMedia.kt` now handles that HTTP/CDN path through a bounded loopback HLS proxy. The provider's public bootstrap supplies the current API origin and runtime configuration. Diagnosis, implementation scope and evidence: `design/live-diagnosis.md`.
 
@@ -194,6 +197,7 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
+- Verify live rewind/forward on phone and TV with the new APK, including pause/resume, cache eviction and a stream with no seekable range.
 - FCTV: verify visible video/audio on the user's physical phone and Android TV using the repaired APK; the local phone emulator reports advancing 720p playback but cannot render the picture because of its EGL failure. Actual-country routing and other source strategies remain outside the proven fallback/CDN path. See `design/live-diagnosis.md` and `design/live.md`.
 - TV-specific Downloads, Sources and Torrent start layouts remain future work; the existing implementations are available through the TV shell. TV Discover, Anime, Title and Player are merged.
 - Verify the integrated APK on a phone/TV emulator, including resumed native downloads, streaming while downloading and the artwork buffering transition. Prior TV video decoding remained unverified because of emulator EGL errors.

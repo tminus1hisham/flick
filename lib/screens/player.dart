@@ -14,6 +14,7 @@ import '../kit/focus.dart';
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
 import '../live.dart';
+import '../player_keys.dart' show LiveSeekRange, liveSeekRange;
 import '../stall.dart';
 import '../state.dart';
 import '../theme.dart';
@@ -22,8 +23,10 @@ import '../upnext.dart';
 import '../widgets.dart';
 import 'buffering.dart';
 import 'seek.dart';
+import 'speed.dart';
 import 'upnext.dart';
 import 'tv_player.dart';
+import 'volume.dart';
 
 typedef _Caption = ({
   SubtitleTrack track,
@@ -181,9 +184,10 @@ Duration nudgeTarget({
   Duration? pending,
   required Duration duration,
   required int seconds,
+  Duration start = Duration.zero,
 }) {
   final to = (pending ?? position) + Duration(seconds: seconds);
-  if (to < Duration.zero) return Duration.zero;
+  if (to < start) return start;
   return to > duration ? duration : to;
 }
 
@@ -194,18 +198,20 @@ class SeekBurst {
   Duration? _target;
   int side = 0, total = 0;
 
-  /// Adds a nudge; false (nothing to show) while the video has no duration.
+  /// Adds a nudge; false (nothing to show) without a seekable interval.
   bool nudge(
     int seconds, {
     required Duration position,
     required Duration duration,
+    Duration start = Duration.zero,
   }) {
-    if (duration <= Duration.zero) return false;
+    if (duration <= start) return false;
     _target = nudgeTarget(
       position: position,
       pending: _target,
       duration: duration,
       seconds: seconds,
+      start: start,
     );
     final s = seconds.sign;
     total = s == side ? total + seconds.abs() : seconds.abs();
@@ -364,6 +370,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _started = false;
   String? _error;
   bool _retrying = false;
+  double _unmutedVolume = 100;
   // Buffering panel (addon playback). An episode runs from open() to the first
   // frame or the error screen (_opening), or from a stall's start to its end.
   DateTime? _since;
@@ -416,6 +423,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // (its updateShouldNotify is inverted), so the Next button listens itself.
   final _nextBar = ValueNotifier(0);
   final _tvRefresh = ValueNotifier(0);
+  final _liveRange = ValueNotifier<LiveSeekRange?>(null);
   final _video = GlobalKey<VideoState>();
 
   // Up Next pushes the next player before this one is disposed: only the last
@@ -474,6 +482,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (!playing && _lastPlaybackError != null) _checkStopped();
         }),
       )
+      ..add(_player.stream.volume.listen((_) {
+        if (device.tv) _tvRefresh.value++;
+      }))
       ..add(
         _player.stream.duration.listen((d) {
           if (device.tv) _tvRefresh.value++;
@@ -1034,6 +1045,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _init() async {
     final mpv = _player.platform as NativePlayer;
+    if (widget.live) {
+      await mpv.observeProperty('demuxer-cache-state', (cache) async {
+        if (!mounted) return;
+        _liveRange.value = liveSeekRange(cache, _player.state.position);
+        if (device.tv) _tvRefresh.value++;
+      });
+    }
     // Buffer hard up front and after a stall instead of stuttering.
     for (final (k, v) in [
       ('demuxer-max-bytes', '${128 * 1024 * 1024}'),
@@ -1057,6 +1075,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _open(Duration start) {
+    _liveRange.value = null;
     _openedAt = start;
     _beginEpisode(opening: true);
     return _player.open(
@@ -1090,6 +1109,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _countdown?.cancel();
     _seekTimer?.cancel();
     _seek.dispose();
+    _liveRange.dispose();
     _token++;
     _nextBar.dispose();
     _tvRefresh.dispose();
@@ -1104,13 +1124,58 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.dispose();
   }
 
+  Future<void> _toggleMute() =>
+      _setVolume(_player.state.volume > 0 ? 0 : _unmutedVolume);
+
+  Future<void> _setVolume(double volume) async {
+    if (volume == 0 && _player.state.volume > 0) {
+      _unmutedVolume = _player.state.volume;
+    }
+    try {
+      await _player.setVolume(volume);
+    } catch (e) {
+      debugPrint('volume: $e');
+    }
+  }
+
+  Future<void> _showVolume(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => VolumePanel(
+        stream: _player.stream.volume,
+        readVolume: () => _player.state.volume,
+        onChanged: _setVolume,
+        onMute: _toggleMute,
+      ),
+    );
+  }
+
+  Future<void> _showSpeed(BuildContext context) async {
+    final rate = await showDialog<double>(
+      context: context,
+      builder: (_) => SpeedPanel(rate: _player.state.rate),
+    );
+    if (rate == null || !mounted) return;
+    try {
+      await _player.setRate(rate);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          const SnackBar(content: Text('Could not change playback speed. Try again.')),
+        );
+      }
+    }
+  }
+
   void _nudge(int seconds) {
-    if (widget.live) return;
+    final range = _liveRange.value;
+    if (widget.live && range == null) return;
     // From _pos, not state.position: open() reports 0 until mpv seeks.
     final counted = _burst.nudge(
       seconds,
       position: _pos,
-      duration: _player.state.duration,
+      duration: widget.live ? range!.end : _player.state.duration,
+      start: widget.live ? range!.start : Duration.zero,
     );
     if (!counted) return;
     HapticFeedback.selectionClick();
@@ -1121,11 +1186,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (target != null) {
         // The position stream skips 0, so a seek to the start wouldn't
         // update _pos.
-        _pos = target;
-        _player.seek(target);
+        _seekTo(target);
       }
       _seek.value = (0, _burst.total);
     });
+  }
+
+  Future<void> _seekTo(Duration target) async {
+    if (widget.live) {
+      final range = _liveRange.value;
+      if (range == null) return;
+      target = target < range.start ? range.start
+          : target > range.end ? range.end : target;
+    }
+    _pos = target;
+    await _player.seek(target).catchError(_showError);
   }
 
   /// media_kit's controls with the double-tap seek layer on top, in the page
@@ -1134,7 +1209,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _controls(VideoState state) => Stack(
     children: [
       MaterialVideoControls(state),
-      if (!widget.live) Positioned.fill(
+      Positioned.fill(
         child: IgnorePointer(
           ignoring: _panel,
           child: LayoutBuilder(
@@ -1239,19 +1314,52 @@ class _PlayerScreenState extends State<PlayerScreen> {
       primaryButtonBar: [
         SizedBox(
           width: primaryBarWidth,
-          child: Row(
-            mainAxisAlignment: widget.live ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
-            children: [
-              if (!widget.live) _SeekButton(_player, back: true, onPressed: () => _nudge(-10)),
-              const MaterialPlayOrPauseButton(iconSize: FlickTokens.grid * 12),
-              if (!widget.live) _SeekButton(_player, back: false, onPressed: () => _nudge(10)),
-            ],
+          child: ValueListenableBuilder(
+            valueListenable: _liveRange,
+            builder: (_, range, _) => Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _SeekButton(_player, back: true,
+                  onPressed: !widget.live || range != null ? () => _nudge(-10) : null),
+                const MaterialPlayOrPauseButton(iconSize: FlickTokens.grid * 12),
+                _SeekButton(_player, back: false,
+                  onPressed: !widget.live || range != null ? () => _nudge(10) : null),
+              ],
+            ),
           ),
         ),
       ],
       bottomButtonBar: [
         if (widget.live) const Text('Live', style: FlickText.button) else const MaterialPositionIndicator(),
         const Spacer(),
+        if (!widget.live)
+          StreamBuilder<double>(
+            stream: _player.stream.rate,
+            builder: (context, _) => TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.white,
+                minimumSize: const Size(48, 48),
+              ),
+              onPressed: () => _showSpeed(context),
+              child: Tooltip(
+                message: 'Playback speed',
+                child: Text(speedLabel(_player.state.rate)),
+              ),
+            ),
+          ),
+        StreamBuilder<double>(
+          stream: _player.stream.volume,
+          builder: (context, _) {
+            // The controls reuse this widget after hiding, so read live state.
+            final muted = _player.state.volume == 0;
+            return IconButton(
+              tooltip: muted ? 'Volume (muted)' : 'Volume',
+              onPressed: () => _showVolume(context),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              icon: Icon(muted ? Icons.volume_off : Icons.volume_up),
+            );
+          },
+        ),
         IconButton(
           tooltip: 'Subtitles',
           onPressed: _togglePanel,
@@ -1468,13 +1576,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ? null
                   : _upNextView(next, _player.state.position);
               return TvPlayerControls(
+                onSpeed: widget.live ? null : () => _showSpeed(context),
                 live: widget.live,
+                liveRange: _liveRange.value,
                 title: widget.playback?.title ?? widget.title,
                 subtitle: widget.playback?.subtitle,
                 position: _player.state.position,
                 duration: _player.state.duration,
                 buffer: _player.state.buffer,
                 playing: _player.state.playing,
+                muted: _player.state.volume == 0,
+                onVolume: () => _showVolume(context),
                 panel: _panel,
                 tracks: _panel ? _tracksPanelTv() : const SizedBox(),
                 buffering: _bufferView,
@@ -1485,7 +1597,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 retrying: _retrying,
                 subtitlesOn: _activeSubtitle != 'Off',
                 onToggle: () => _player.playOrPause().catchError(_showError),
-                onSeek: (at) => _player.seek(at).catchError(_showError),
+                onSeek: _seekTo,
                 onExit: () => Navigator.pop(context),
                 onRetry: _retry,
                 onTracks: () => _togglePanel(true),
@@ -2197,7 +2309,7 @@ class _SeekButton extends StatelessWidget {
 
   final Player player;
   final bool back;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) => StreamBuilder<bool>(

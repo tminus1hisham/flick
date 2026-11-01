@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Addon implements Addon {
+  bool filterable = false;
   @override
   String get id => 'cinemeta';
   @override
@@ -23,10 +24,10 @@ class _Addon implements Addon {
   bool serves(String resource, String type, String id) => true;
   @override
   List<Catalog> get catalogs => [
-        (addon: this, type: 'movie', id: 'top', name: 'Popular', searchable: true),
-        (addon: this, type: 'movie', id: 'year', name: 'New', searchable: false),
-        (addon: this, type: 'series', id: 'top', name: 'Popular', searchable: true),
-        (addon: this, type: 'anime', id: 'anime', name: 'Anime catalog', searchable: true),
+        (addon: this, type: 'movie', id: 'top', name: 'Popular', searchable: true, genres: filterable ? const ['Action', 'Sci-Fi'] : const []),
+        (addon: this, type: 'movie', id: 'year', name: 'New', searchable: false, genres: const []),
+        (addon: this, type: 'series', id: 'top', name: 'Popular', searchable: true, genres: filterable ? const ['Action', 'Sci-Fi'] : const []),
+        (addon: this, type: 'anime', id: 'anime', name: 'Anime catalog', searchable: true, genres: const []),
       ];
   @override
   String get capability => 'Catalogs';
@@ -35,6 +36,7 @@ class _Addon implements Addon {
 /// 30 titles per catalog page; [respond] overrides a request.
 class _Addons extends Addons {
   final _addon = _Addon();
+  final genres = <String?>[];
   final requests = <(String, String, String?, int)>[];
   Future<List<MetaPreview>>? Function(Catalog c, String? search, int skip) respond = (_, _, _) => null;
 
@@ -42,8 +44,9 @@ class _Addons extends Addons {
   List<Catalog> get catalogs => _addon.catalogs;
 
   @override
-  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) {
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, String? genre, int skip = 0}) {
     requests.add((c.type, c.id, search, skip));
+    genres.add(genre);
     return respond(c, search, skip) ??
         Future.value([
           if (search == null && skip < 60)
@@ -64,6 +67,42 @@ Future<void> _pump(WidgetTester tester) async {
 
 void main() {
   setUp(() => addons = _fake = _Addons());
+
+  testWidgets('genre tabs reset paging, survive empty results, and ignore stale pages', (tester) async {
+    _fake._addon.filterable = true;
+    final stale = Completer<List<MetaPreview>>();
+    await _pump(tester);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Action'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+    expect(_fake.requests.last.$4, greaterThan(0));
+    expect(_fake.genres.last, 'Action');
+    await tester.tap(find.text('All genres'));
+    await tester.pumpAndSettle();
+    _fake.respond = (_, _, _) => _fake.genres.last == 'Action' ? stale.future : Future.value([]);
+    await tester.tap(find.text('Action'));
+    await tester.pump();
+    expect(_fake.genres.last, 'Action');
+    expect(_fake.requests.last.$4, 0);
+    await tester.tap(find.text('Sci-Fi'));
+    await tester.pumpAndSettle();
+    expect(_fake.genres.last, 'Sci-Fi');
+    expect(find.text('No titles in this catalog yet.'), findsOneWidget);
+    stale.complete([(id: 'stale', type: 'movie', name: 'Stale action', poster: null, releaseInfo: null)]);
+    await tester.pumpAndSettle();
+    expect(find.text('Stale action'), findsNothing);
+    _fake.respond = (_, _, _) => null;
+    await tester.tap(find.text('All genres'));
+    await tester.pumpAndSettle();
+    expect(_fake.genres.last, isNull);
+    expect(find.text('movie top 0'), findsOneWidget);
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+    expect(_fake.requests.last.$4, greaterThan(0));
+    expect(_fake.genres.last, isNull);
+  });
 
   testWidgets('a skeleton grid stands in until the first page arrives', (tester) async {
     final page = Completer<List<MetaPreview>>();

@@ -10,8 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-LiveEvent event(String name, {int sport = 1}) => (
-  id: 41, sport: sport, name: name, league: 'Premier League',
+LiveEvent event(String name, {int sport = 1, String league = 'Premier League'}) => (
+  id: 41, sport: sport, name: name, league: league,
   start: DateTime(2026, 11, 1, 18), status: 100,
 );
 
@@ -114,6 +114,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No events for Football.'), findsOneWidget);
   });
+
+  for (final tv in [false, true]) {
+    testWidgets('search filters games and leagues and clears on ${tv ? 'TV' : 'phone'}', (tester) async {
+      final client = _Client();
+      await pump(tester, client, tv: tv);
+      client.pending[1]!.complete([
+        event('Arsenal vs Chelsea'),
+        event('Barcelona vs Madrid', league: 'La Liga'),
+      ]);
+      await tester.pumpAndSettle();
+      final search = find.byType(TextField);
+      await tester.enterText(search, '  mAdRiD  ');
+      await tester.pumpAndSettle();
+      expect(find.text('Arsenal vs Chelsea'), findsNothing);
+      expect(find.text('Barcelona vs Madrid'), findsOneWidget);
+      if (tv) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.select);
+      } else {
+        await tester.tap(find.text('Barcelona vs Madrid'));
+      }
+      await tester.pumpAndSettle();
+      expect(find.text('Barcelona vs Madrid'), findsOneWidget);
+      expect(find.text('English'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.enterText(search, 'PREMIER');
+      await tester.pumpAndSettle();
+      expect(find.text('Arsenal vs Chelsea'), findsOneWidget);
+      expect(find.text('Barcelona vs Madrid'), findsNothing);
+      await tester.enterText(search, 'missing');
+      await tester.pumpAndSettle();
+      expect(find.text('No games match your search.'), findsOneWidget);
+      await tester.tap(find.text('Clear search'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(search).controller!.text, isEmpty);
+      expect(find.text('Arsenal vs Chelsea'), findsOneWidget);
+      expect(find.text('Barcelona vs Madrid'), findsOneWidget);
+      await tester.enterText(search, 'Arsenal');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Clear search'));
+      await tester.pumpAndSettle();
+      expect(find.text('Barcelona vs Madrid'), findsOneWidget);
+      expect(client.requests, [1]);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('phone events fit at 1.3x text with long names', (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 1.3;

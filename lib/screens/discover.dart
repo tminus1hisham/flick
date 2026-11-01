@@ -610,8 +610,52 @@ class CatalogFeed extends StatefulWidget {
 class _CatalogFeedState extends State<CatalogFeed> {
   final _items = <MetaPreview>[];
   final _ids = <String>{};
+  String? _genre;
+  int _generation = 0;
   bool _loading = false, _done = false;
   Object? _error;
+
+  Widget _genres() => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: EdgeInsets.symmetric(
+          horizontal: context.tv ? FlickTv.gridPad : FlickTokens.pageGutter,
+          vertical: 6,
+        ),
+        child: Row(children: [
+          for (final genre in <String?>[null, ...widget.catalog!.genres]) ...[
+            if (genre != null) const SizedBox(width: 8),
+            if (context.tv)
+              TvChoice(
+                genre ?? 'All genres',
+                selected: _genre == genre,
+                onActivate: () => _pickGenre(genre),
+              )
+            else
+              ChoiceChip(
+                label: Text(genre ?? 'All genres'),
+                selected: _genre == genre,
+                showCheckmark: false,
+                materialTapTargetSize: MaterialTapTargetSize.padded,
+                onSelected: (_) => _pickGenre(genre),
+              ),
+          ],
+        ]),
+      );
+
+  void _pickGenre(String? genre) {
+    if (_genre == genre) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _genre = genre;
+      _generation++;
+      _items.clear();
+      _ids.clear();
+      _loading = _done = false;
+      _error = null;
+    });
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+    _more();
+  }
 
   // TV: one focus node per title, so a move can focus an index that was not built yet.
   final _scroll = ScrollController();
@@ -671,18 +715,21 @@ class _CatalogFeedState extends State<CatalogFeed> {
 
   Future<void> _more() async {
     if (_loading || _done) return;
+    final generation = _generation;
     final catalog = widget.catalog!;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final page = await addons.catalog(catalog, search: widget.query, skip: _items.length);
+      final page = await addons.catalog(catalog, search: widget.query, genre: _genre, skip: _items.length);
+      if (!mounted || generation != _generation) return;
       // Pages can overlap; a page with nothing new ends the feed, and Hero tags stay unique.
       final fresh = page.where((m) => _ids.add(m.id)).toList();
       _items.addAll(fresh);
       _done = fresh.isEmpty;
     } catch (e) {
+      if (!mounted || generation != _generation) return;
       _error = e;
     }
     if (mounted) setState(() => _loading = false);
@@ -772,13 +819,23 @@ class _CatalogFeedState extends State<CatalogFeed> {
       },
       child: Actions(
         actions: {DirectionalFocusIntent: CallbackAction<DirectionalFocusIntent>(onInvoke: _move)},
-        child: TvDiscoverScroll(header: widget.tvHeader, controller: _scroll, slivers: slivers),
+        child: TvDiscoverScroll(header: widget.tvHeader, controller: _scroll, slivers: [
+          if (widget.query == null && (widget.catalog?.genres.isNotEmpty ?? false))
+            SliverToBoxAdapter(child: _genres()),
+          ...slivers,
+        ]),
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+  Widget build(BuildContext context) {
+    final feed = _feed();
+    if (context.tv || widget.query != null || (widget.catalog?.genres.isEmpty ?? true)) return feed;
+    return Column(children: [_genres(), Expanded(child: feed)]);
+  }
+
+  Widget _feed() => LayoutBuilder(builder: (context, box) {
         if (context.tv) return _buildTv(context, box);
         // Three columns: 98.7×148 art + two caption lines = 188dp cells at 360dp and 1× text.
         final caption = MediaQuery.textScalerOf(context).scale(16) * 2;

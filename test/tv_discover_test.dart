@@ -41,26 +41,29 @@ class _Addons extends Addons {
   _Addons({bool empty = false}) {
     if (!empty) {
       _addon.catalogs = [
-        (addon: _addon, type: 'movie', id: 'top', name: 'Popular', searchable: true),
-        (addon: _addon, type: 'movie', id: 'year', name: 'New', searchable: false),
-        (addon: _addon, type: 'series', id: 'top', name: 'Popular', searchable: true),
+        (addon: _addon, type: 'movie', id: 'top', name: 'Popular', searchable: true, genres: const []),
+        (addon: _addon, type: 'movie', id: 'year', name: 'New', searchable: false, genres: const []),
+        (addon: _addon, type: 'series', id: 'top', name: 'Popular', searchable: true, genres: const []),
       ];
     }
   }
   final _addon = _Addon();
+  final genres = <String?>[];
   Future<List<MetaPreview>>? Function(Catalog c, String? search, int skip) respond = (_, _, _) => null;
 
   @override
   List<Catalog> get catalogs => _addon.catalogs;
 
   @override
-  Future<List<MetaPreview>> catalog(Catalog c, {String? search, int skip = 0}) =>
-      respond(c, search, skip) ??
+  Future<List<MetaPreview>> catalog(Catalog c, {String? search, String? genre, int skip = 0}) {
+    genres.add(genre);
+    return respond(c, search, skip) ??
       Future.value([
         if (skip == 0)
           for (var i = 0; i < (search == null ? 40 : 3); i++)
             (id: '${c.id}-$search-$i', type: c.type, name: '${c.id} $i', poster: null, releaseInfo: '2019'),
       ]);
+  }
 
   @override
   Future<Meta> meta(String type, String id) => Completer<Meta>().future;
@@ -129,6 +132,28 @@ void main() {
   bool textFocused() =>
       FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<EditableText>() != null;
   bool railFocused() => FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<FlickRail>() != null;
+
+  testWidgets('TV genre tabs support remote activation and preserve focus after filtering', (tester) async {
+    final fake = _Addons();
+    fake._addon.catalogs = [
+      (addon: fake._addon, type: 'movie', id: 'top', name: 'Popular', searchable: true, genres: const ['Action']),
+    ];
+    await pumpApp(tester, with_: fake);
+    final choice = find.widgetWithText(TvChoice, 'Action');
+    final frame = find.descendant(of: choice, matching: find.byType(FocusFrame));
+    tester.widget<FocusableActionDetector>(
+      find.descendant(of: frame, matching: find.byType(FocusableActionDetector)),
+    ).focusNode!.requestFocus();
+    await tester.pumpAndSettle();
+    await key(tester, LogicalKeyboardKey.select);
+    expect(fake.genres.last, 'Action');
+    expect(focusedText(), 'Action');
+    expect(tester.widget<TvChoice>(choice).selected, isTrue);
+    await key(tester, LogicalKeyboardKey.arrowLeft);
+    await key(tester, LogicalKeyboardKey.select);
+    expect(fake.genres.last, isNull);
+    expect(focusedText(), 'All genres');
+  });
 
   testWidgets('1: entering Discover with nothing remembered focuses Movies, never a text field', (tester) async {
     await pumpApp(tester);
@@ -422,8 +447,8 @@ void main() {
     final fake = _Addons();
     fake._addon.catalogs = [
       ...fake._addon.catalogs,
-      (addon: fake._addon, type: 'anime', id: 'kitsu-anime-trending', name: 'Trending', searchable: false),
-      (addon: fake._addon, type: 'anime', id: 'kitsu-anime-airing', name: 'Airing', searchable: false),
+      (addon: fake._addon, type: 'anime', id: 'kitsu-anime-trending', name: 'Trending', searchable: false, genres: const []),
+      (addon: fake._addon, type: 'anime', id: 'kitsu-anime-airing', name: 'Airing', searchable: false, genres: const []),
     ];
     return fake;
   }
