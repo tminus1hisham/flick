@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_ota_update/flutter_ota_update.dart';
 
 import '../addons.dart';
 import '../state.dart';
@@ -136,6 +137,9 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 ),
               const SizedBox(height: 12),
               _form(),
+              const SizedBox(height: 24),
+              const _Label('App updates'),
+              const _UpdateRow(),
             ],
           );
         },
@@ -369,4 +373,94 @@ class _FadeIn extends StatelessWidget {
     builder: (_, t, child) => Opacity(opacity: t, child: child),
     child: child,
   );
+}
+
+/// Checks GitHub Releases for a newer Flick, then downloads, verifies and opens the installer.
+class _UpdateRow extends StatefulWidget {
+  const _UpdateRow();
+
+  @override
+  State<_UpdateRow> createState() => _UpdateRowState();
+}
+
+class _UpdateRowState extends State<_UpdateRow> {
+  final _ota = FlutterOtaUpdate(owner: 'tminus1hisham', repo: 'flick');
+  bool _busy = false;
+  OtaRelease? _release;
+  double? _progress;
+  String? _status;
+  bool _failed = false;
+
+  Future<void> _run(Future<void> Function() job) async {
+    setState(() {
+      _busy = true;
+      _failed = false;
+    });
+    try {
+      await job();
+    } on OtaException catch (e) {
+      _failed = true;
+      _status = switch (e.code) {
+        'HTTP_ERROR' => "Couldn't reach GitHub, or there is no release yet.",
+        'NO_ASSET' => 'The latest release has no APK.',
+        'NO_CHECKSUM' => "The release can't be verified, so it was not installed.",
+        'CHECKSUM_MISMATCH' => 'The download was corrupt. Try again.',
+        'DOWNLOAD_FAILED' => 'The download failed. Check your connection.',
+        _ => "Couldn't update. Try again.",
+      };
+    } catch (_) {
+      _failed = true;
+      _status = "Couldn't update. Try again.";
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _progress = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _check() => _run(() async {
+    final r = await _ota.checkForUpdate();
+    _release = r;
+    _status = r == null ? "You're on the latest version." : null;
+  });
+
+  Future<void> _install() => _run(() async {
+    await _ota.downloadAndInstall(
+      _release!,
+      onProgress: (got, total) {
+        if (mounted && total > 0) setState(() => _progress = got / total);
+      },
+    );
+    _status = 'Opening the installer…';
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final r = _release;
+    final subtitle = _busy && _progress != null
+        ? 'Downloading ${(_progress! * 100).round()}%'
+        : _busy
+        ? (r == null ? 'Checking…' : 'Starting…')
+        : r != null && _status == null
+        ? 'Flick ${r.version} is available'
+        : _status ?? 'Get new versions from GitHub';
+    return Semantics(
+      liveRegion: true,
+      child: Column(
+        children: [
+          _Row(
+            title: r == null ? 'Check for updates' : 'Update to ${r.version}',
+            subtitle: subtitle,
+            trailing: TextButton(
+              onPressed: _busy ? null : (r == null ? _check : _install),
+              child: Text(r == null ? 'Check' : (_failed ? 'Retry' : 'Install')),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

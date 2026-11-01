@@ -150,6 +150,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.0.0"
+  flutter_ota_update:
+    dependency: "direct main"
+    description:
+      name: flutter_ota_update
+      sha256: "0df75cb014bdcd5854305007cff1b2e39d1113fb4f5b4e1b3e6fae376a169ac2"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.1"
   flutter_test:
     dependency: "direct dev"
     description: flutter

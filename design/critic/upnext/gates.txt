@@ -1,0 +1,46 @@
+GATE stock (flutter): FAIL 12 violation(s), 0 allowed with reason
+  lib/widgets.dart:91: stock progress bar: use the kit
+  lib/widgets.dart:400: spinner: use a kit skeleton or the kit loader
+  lib/screens/detail.dart:54: raw bottom sheet: use the kit sheet
+  lib/screens/detail.dart:87: stock SnackBar: use the kit toast
+  lib/screens/downloads.dart:149: stock progress bar: use the kit
+  lib/screens/library.dart:135: spinner: use a kit skeleton or the kit loader
+  lib/screens/login.dart:261: spinner: use a kit skeleton or the kit loader
+  lib/screens/player.dart:596: stock SnackBar: use the kit toast
+  lib/screens/player.dart:916: stock SnackBar: use the kit toast
+  lib/screens/torrent.dart:27: raw dialog route: use the kit dialog (themed route + motion)
+  lib/screens/torrent.dart:80: stock AlertDialog: use the kit dialog or sheet
+  lib/screens/torrent.dart:441: spinner: use a kit skeleton or the kit loader
+GATE colors (flutter): FAIL 32 violation(s), 0 allowed with reason
+  lib/theme.dart:4: raw Color(0x..): use a theme token
+  lib/theme.dart:5: raw Color(0x..): use a theme token
+  lib/theme.dart:6: raw Color(0x..): use a theme token
+  lib/theme.dart:7: raw Color(0x..): use a theme token
+  lib/theme.dart:8: raw Color(0x..): use a theme token
+  lib/theme.dart:9: raw Color(0x..): use a theme token
+  lib/theme.dart:10: raw Color(0x..): use a theme token
+  lib/theme.dart:11: raw Color(0x..): use a theme token
+  lib/theme.dart:12: raw Color(0x..): use a theme token
+  lib/theme.dart:15: raw Color(0x..): use a theme token
+  lib/theme.dart:16: raw Color(0x..): use a theme token
+  lib/theme.dart:17: raw Color(0x..): use a theme token
+  lib/theme.dart:37: Material Colors.*: use a theme token
+  lib/theme.dart:174: Material Colors.*: use a theme token
+  lib/theme.dart:175: Material Colors.*: use a theme token
+  lib/theme.dart:291: Material Colors.*: use a theme token
+  lib/theme.dart:292: Material Colors.*: use a theme token
+  lib/widgets.dart:95: Material Colors.*: use a theme token
+  lib/screens/home.dart:169: Material Colors.*: use a theme token
+  lib/screens/home.dart:170: Material Colors.*: use a theme token
+  lib/screens/login.dart:508: raw Color(0x..): use a theme token
+  lib/screens/player.dart:1002: Material Colors.*: use a theme token
+  lib/screens/player.dart:1008: Material Colors.*: use a theme token
+  lib/screens/player.dart:1044: Material Colors.*: use a theme token
+  lib/screens/player.dart:1045: Material Colors.*: use a theme token
+  lib/screens/player.dart:1067: Material Colors.*: use a theme token
+  lib/screens/player.dart:1703: Material Colors.*: use a theme token
+  lib/screens/player.dart:1709: Material Colors.*: use a theme token
+  lib/screens/player.dart:1742: raw Color(0x..): use a theme token
+  lib/screens/player.dart:1751: Material Colors.*: use a theme token
+  lib/screens/player.dart:1764: Material Colors.*: use a theme token
+  lib/screens/player.dart:1771: Material Colors.*: use a theme token
