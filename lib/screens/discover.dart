@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'title.dart';
 import 'history.dart';
+import 'continue_watching.dart';
 
 (String, String, String) _key(Catalog c) => (c.addon.base, c.type, c.id);
 const _favourites = ('', '', 'favourites');
@@ -261,6 +262,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ],
             ]),
           ),
+          if (_query.isEmpty && !showFavourites) const ContinueWatching(),
         ]),
       );
 
@@ -440,7 +442,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
               const SizedBox(height: 8),
               // The catalog stays mounted under search results so clearing returns to its scroll position.
+              if (!searching && !showFavourites) const ContinueWatching(),
               Expanded(
+                key: const ValueKey('discover-results'),
                 child: IndexedStack(index: searching ? 1 : 0, children: [
                   HeroMode(
                     enabled: heroes && !searching,

@@ -6,7 +6,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze lib test`: target no issues. Current committed baseline has one missing-braces lint at `lib/player_keys.dart:17`; viewing-history files analyze clean. Scope to app/test rather than the nested worktree in `.claude`.
-- `flutter test`: 315 tests after viewing-history controls (full 314-test suite plus the final persistence-retry regression verified with the history suite).
+- `flutter test`: 332 tests pass after Continue Watching and addon Resume/Start Over choices.
 - Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 39 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest, 7 FctvTest, 7 FctvMediaTest).
 - `flutter build apk --debug`: verify Android packaging and native compilation.
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: current baseline is 34 existing hits (27 colour uses, 7 stock controls), confirmed against committed source on 2026-11-01; viewing-history changes add none. The older 27-total baseline is superseded. See `improvements.md` for cleanup.
@@ -66,13 +66,25 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Status (2026-11-01)
 
+### Continue Watching
+
+Discover now shows a horizontal row of unfinished videos on phone/TV, hidden during search and Favourites. Selecting a checkpoint opens the exact saved movie/episode through fresh addon metadata/streams or a fresh Miruro episode lookup and source picker. Missing episodes never fall through to another episode. Failed lookups offer Retry without changing progress; 95%-complete entries disappear through the existing history notifier. No saved stream URLs, headers or new dependencies are introduced. TV uses the existing focus/reveal kit; the phone catalog retains its state when the row appears/disappears.
+
+Validation: the full 332-test Flutter suite passes; all eight new regressions also pass after adding screen-reader activation coverage. They cover phone/TV Discover routing, IMDb/Kitsu identity, fresh Miruro episode identity, failed/missing episode retries, completion removal, late lookup disposal and horizontal remote scrolling at 1.3× text. All 39 Android unit tests pass and the final debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Changed-file analysis is clean; full analysis retains only the existing `player_keys.dart:17` lint, and design gates retain the existing 34 hits with none in the new file. Native playback, real-addon/Miruro resolution, screenshots and physical-device accessibility remain unverified. Miruro/offline explicit playback choices and custom addon identity scoping remain in backlog item 1.
+
+### Explicit addon resume choices
+
+Movie and episode stream pages on phone/TV offer Resume with the saved time and Start Over when an unfinished checkpoint exists. Users choose the playback mode, then a source from the existing fresh stream results. Start Over passes a one-open position override through direct/torrent routing; it leaves history intact until successful playback checkpoints, Retry uses current player progress, and Up Next clears the override for the next video. History notifications update the choices when a video completes. Miruro/offline choices remain in `improvements.md` item 1; Continue Watching is implemented above. No dependencies or persisted URL/credential fields were added.
+
+Validation: all 324 Flutter tests pass; the nine new route/widget regressions also pass after strengthening TV Right/Select navigation and next-video coverage. Changed-file analysis is clean; project analysis retains the existing `player_keys.dart:17` lint and design checks retain 7 stock-control/27 colour hits. All 39 Android unit tests pass and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Tests inspect native player configuration without mounting mpv; native seeks, physical-device accessibility and visual acceptance remain unverified.
+
 ### Viewing-history controls
 
 Discover's history icon opens an offline-capable list of unfinished videos on phone and TV. It shows title/episode and saved position/duration, removes individual checkpoints and confirms clear-all inline. Failed persistence exposes Retry even when the last row has disappeared. Retrying removal now always persists the current registry. On TV, Back stays mounted above the scrolling list and receives focus after mutations; the history action preserves existing Search navigation. Design delta: `design/history.md`.
 
 Validation: the full 314-test Flutter suite passed; all 17 history tests then passed with the final persistence-retry regression. Android unit-test gate passed and the debug APK built at `build/app/outputs/flutter-apk/app-debug.apk`. Analysis retains only the existing `player_keys.dart:17` missing-braces lint; design gates retain the existing 7 stock-control and 27 colour hits. Independent code review caught the lazy Back focus issue, now fixed, and found no remaining concrete issue. No screenshot/visual-critic scores, physical-device acceptance or performance claims are made.
 
-Continue Watching, explicit Resume/Start Over, safe custom addon identity scoping and native phone/TV acceptance remain in backlog item 1; removal/clear UI is implemented.
+Miruro/offline Resume/Start Over choices, safe custom addon identity scoping and native phone/TV acceptance remain in backlog item 1; Continue Watching, removal/clear UI and addon playback choices are implemented.
 
 ### Multi-catalog Discover search
 
@@ -84,7 +96,7 @@ Validation: all 308 Flutter tests pass, the 39-test Android unit gate passes, an
 
 `lib/history.dart` persists the 100 most recently watched unfinished videos by content type and canonical IMDb/Kitsu/AniList episode ID. The shared player restores that position on open and checkpoints every five seconds, on pause, on backgrounding and on dispose. Videos at 95% completion leave resume history; failed opens/retry resets do not erase a checkpoint. Live broadcasts and unsupported/custom addon IDs are excluded. Existing addon, Miruro and offline-download callers already carry the supported identities, so stream URLs/headers are never saved in history. Actual seeks to zero clear the checkpoint while temporary mpv open/close zeroes are ignored.
 
-Continue Watching, explicit Resume/Start Over, custom addon identity scoping and native phone/TV acceptance remain unfinished in backlog item 1. Removal/clear-history UI is implemented in the later controls slice above. No physical device was controlled.
+Continue Watching, addon Resume/Start Over and removal/clear-history UI are implemented in the later slices above. Miruro/offline playback choices, custom addon identity scoping and native phone/TV acceptance remain unfinished in backlog item 1. No physical device was controlled.
 
 Validation: all 303 Flutter tests pass (10 history regressions), all 39 Android unit tests pass, and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Project-wide analysis reports only the pre-existing missing-braces lint in `lib/player_keys.dart:17`; scoped analysis of the changed files was clean. Design checks match committed source exactly: 7 stock-control and 27 colour hits, no additions. Persistence tests establish reload/identity/completion/removal/corruption behavior; the native player cannot be pumped headlessly, so actual restart/resume and offline playback still require phone/TV acceptance.
 
@@ -220,7 +232,7 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
-- Next backlog implementation: finish viewing-history playback UI and acceptance from `improvements.md` item 1: Continue Watching with fresh source resolution, explicit Resume/Start Over, safe scoping for custom addon IDs, and physical phone/TV restart/offline/accessibility tests. Progress persistence and removal/clear controls are implemented; do not rebuild them.
+- Next backlog implementation: finish `improvements.md` item 1: Miruro/offline Resume/Start Over choices, safe scoping for custom addon IDs, and real-provider/physical phone/TV restart/offline/accessibility checks. Continue Watching, progress persistence, history controls and addon playback choices are implemented; do not rebuild them.
 - Maintain `improvements.md` as the current improvement backlog: remove completed/already implemented items after verification, retain unfinished portions, and add concrete useful ideas discovered during work. See `AGENTS.md` for the shared agent rule.
 - Verify live rewind/forward on phone and TV with the new APK, including pause/resume, cache eviction and a stream with no seekable range.
 - FCTV: verify visible video/audio on the user's physical phone and Android TV using the repaired APK; the local phone emulator reports advancing 720p playback but cannot render the picture because of its EGL failure. Actual-country routing and other source strategies remain outside the proven fallback/CDN path. See `design/live-diagnosis.md` and `design/live.md`.

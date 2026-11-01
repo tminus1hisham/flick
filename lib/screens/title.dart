@@ -8,6 +8,7 @@ import '../kit/download_button.dart';
 import '../kit/toggle.dart';
 import '../kit/focus.dart';
 import '../playback.dart';
+import '../player_keys.dart' show playerTime;
 import '../state.dart';
 import '../theme.dart';
 import '../upnext.dart';
@@ -507,6 +508,7 @@ class _StreamListState extends State<_StreamList> {
   /// Addon id → the request whose answer is still wanted; a stale answer is dropped.
   final _asking = <String, Object>{};
   String? _filter;
+  bool _startOver = false;
 
   @override
   void initState() {
@@ -551,7 +553,10 @@ class _StreamListState extends State<_StreamList> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ListenableBuilder(listenable: history,
+    builder: (context, _) => _build(context));
+
+  Widget _build(BuildContext context) {
     final children = _children();
     if (!context.tv) { return SliverList.list(children: children); }
     return SliverMainAxisGroup(slivers: [for (final child in children)
@@ -586,7 +591,15 @@ class _StreamListState extends State<_StreamList> {
           _ => false,
         });
     final noun = widget.playback.type == 'series' ? 'episode' : 'movie';
+    final position = history.position(widget.playback.type, widget.playback.videoId);
     return [
+      if (position > Duration.zero && !noStreams) ...[
+        _Chips([(false, 'Resume · ${playerTime(position)}'), (true, 'Start over')], _startOver,
+          (value) => setState(() => _startOver = value)),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Text(_startOver ? 'Choose a source to play from the beginning.' : 'Choose a source to resume.',
+            style: context.tv ? FlickTv.meta : FlickText.metadata)),
+      ],
       if (_sources.length >= 2)
         _Chips([(null, 'All'), for (final a in _sources) (a.id, a.name)], _filter,
             (id) => setState(() => _filter = id)),
@@ -624,7 +637,8 @@ class _StreamListState extends State<_StreamList> {
       final rows = [
         for (final s in r)
           if (s.externalUrl == null)
-            _StreamRow(s, widget.playback, a, poster: widget.poster, key: ValueKey((a.id, s))),
+            _StreamRow(s, widget.playback, a, start: _startOver ? Duration.zero : null,
+              poster: widget.poster, key: ValueKey((a.id, s))),
       ];
       // A services-only answer lives under "Where to watch" and must not read as streams found.
       if (rows.isEmpty && r.isNotEmpty) { return const []; }
@@ -666,11 +680,12 @@ class _StreamListState extends State<_StreamList> {
 }
 
 class _StreamRow extends StatefulWidget {
-  const _StreamRow(this.stream, this.playback, this.addon, {this.poster, super.key});
+  const _StreamRow(this.stream, this.playback, this.addon, {this.poster, this.start, super.key});
   final AddonStream stream;
   final Playback playback;
   final Addon addon;
   final String? poster;
+  final Duration? start;
 
   @override
   State<_StreamRow> createState() => _StreamRowState();
@@ -752,7 +767,7 @@ class _StreamRowState extends State<_StreamRow> {
     if (context.tv) { return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Expanded(child: _Press(
         label: [i.quality, release, if (seeders != null) '$seeders seeders', ?i.size].join(', '),
-        onTap: () async => play(context, stream, playback, addon: addon),
+        onTap: () async => play(context, stream, playback, addon: addon, start: widget.start),
         child: Container(
           constraints: const BoxConstraints(minHeight: 72),
           padding: const EdgeInsets.all(14),
@@ -796,7 +811,7 @@ class _StreamRowState extends State<_StreamRow> {
               ].join(', '),
               onTap: () async {
                 HapticFeedback.lightImpact();
-                await play(context, stream, playback, addon: addon);
+                await play(context, stream, playback, addon: addon, start: widget.start);
               },
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
