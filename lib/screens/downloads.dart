@@ -8,6 +8,7 @@ import '../kit/sheet.dart';
 import '../state.dart';
 import '../theme.dart';
 import 'player.dart';
+import 'resume.dart';
 import 'native_downloads.dart' as native;
 
 class DownloadsScreen extends StatelessWidget {
@@ -103,9 +104,11 @@ class _DownloadRowState extends State<DownloadRow> {
       setState(() => _error = null);
       final stream = _stream;
       final p = stream.playback;
+      final over = await chooseStartOver(context, p);
+      if (!mounted || over == null) return;
       final title = p.subtitle == null ? stream.title : '${stream.title} · ${p.subtitle}';
       await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
-        title: title, source: path, headers: const {}, playback: p,
+        title: title, source: path, headers: const {}, playback: p, start: over ? Duration.zero : null,
       )));
     } catch (_) {
       if (mounted) setState(() => _error = "Couldn't open this download. Try again.");
@@ -262,7 +265,7 @@ class _DownloadRowState extends State<DownloadRow> {
   }
 }
 
-void _playNative(BuildContext context, Download d) {
+Future<void> _playNative(BuildContext context, Download d) async {
   if (!File(d.path).existsSync()) {
     showFlickSheet<void>(context, (_) => const Padding(
       padding: EdgeInsets.all(FlickTokens.pageGutter),
@@ -270,7 +273,9 @@ void _playNative(BuildContext context, Download d) {
     ));
     return;
   }
-  Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
-    title: d.playback.title, source: d.path, playback: d.playback,
+  final over = await chooseStartOver(context, d.playback);
+  if (!context.mounted || over == null) return;
+  await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+    title: d.playback.title, source: d.path, playback: d.playback, start: over ? Duration.zero : null,
   )));
 }

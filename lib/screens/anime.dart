@@ -13,6 +13,7 @@ import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'discover.dart';
+import 'resume.dart';
 
 String _message(Object error) => error is AnimeException
     ? error.toString()
@@ -473,6 +474,12 @@ class _AnimeSourcesScreenState extends State<AnimeSourcesScreen> {
     String? copy,
     bool download = false,
   }) async {
+    final Playback playback = (
+      title: widget.card.title, subtitle: widget.episode.title, logo: null,
+      poster: widget.card.poster, type: 'anime',
+      videoId: 'anilist:${widget.card.id}:${widget.episode.number}',
+      season: null, episode: widget.episode.number, meta: null,
+    );
     final token = ++_generation;
     setState(() {
       _busy = true;
@@ -480,6 +487,11 @@ class _AnimeSourcesScreenState extends State<AnimeSourcesScreen> {
       _notice = null;
     });
     try {
+      bool? over = false;
+      if (copy == null) {
+        over = await chooseStartOver(context, playback);
+        if (!mounted || token != _generation || over == null) return;
+      }
       final result = await widget.anime.resolve(widget.episode);
       if (!mounted || token != _generation) return;
       final fresh = result.variants
@@ -513,17 +525,7 @@ class _AnimeSourcesScreenState extends State<AnimeSourcesScreen> {
           setState(() => _notice = 'Copied. Links may expire.');
         }
       } else {
-        await play(context, animeStream(fresh, target), (
-          title: widget.card.title,
-          subtitle: widget.episode.title,
-          logo: null,
-          poster: widget.card.poster,
-          type: 'anime',
-          videoId: 'anilist:${widget.card.id}:${widget.episode.number}',
-          season: null,
-          episode: widget.episode.number,
-          meta: null,
-        ));
+        await play(context, animeStream(fresh, target), playback, start: over ? Duration.zero : null);
       }
     } catch (e) {
       if (mounted && token == _generation) setState(() => _error = _message(e));

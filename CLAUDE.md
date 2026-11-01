@@ -6,7 +6,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze lib test`: target no issues. Current committed baseline has one missing-braces lint at `lib/player_keys.dart:17`; viewing-history files analyze clean. Scope to app/test rather than the nested worktree in `.claude`.
-- `flutter test`: 332 tests pass after Continue Watching and addon Resume/Start Over choices.
+- `flutter test`: 348 tests pass in the shared working tree after language preferences and Miruro/offline resume choices.
 - Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 39 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest, 7 FctvTest, 7 FctvMediaTest).
 - `flutter build apk --debug`: verify Android packaging and native compilation.
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: current baseline is 34 existing hits (27 colour uses, 7 stock controls), confirmed against committed source on 2026-11-01; viewing-history changes add none. The older 27-total baseline is superseded. See `improvements.md` for cleanup.
@@ -24,7 +24,7 @@ This file is the shared source for continuing the work in a new session. Read it
 | `lib/live.dart`, `lib/screens/live.dart` | Typed native Live bridge and phone/TV sports/event/channel screens. Four phone destinations and five TV destinations including Sources. |
 | `android/.../Fctv.kt` | Worker-thread FCTV API, bounded protobuf decoding, request headers/session URLs and direct HLS preflight. Owned and disposed by MainActivity. |
 | `lib/addons.dart` | Stremio addon protocol client: manifest / catalog / meta / stream / subtitles over `http`, 15 s timeout, UTF-8 decoding. Bundled addons are manifest snapshots (Cinemeta locked; Public Domain Movies, WatchHub and OpenSubtitles v3 can be switched on and off). User addons and the switches persist in shared_preferences. Every network failure becomes `AddonException(AddonError.unreachable)`, so the client can't tell offline from an addon that is down. `describe()` parses stream text (quality, seeders, size, origin). `magnetFor()` builds a magnet with `tr=` trackers. `openExternal()` calls the native channel. |
-| `lib/state.dart` | Globals: `settings` (`Settings`: `autoplayNext`), `saved`, `downloads`, `addons`. `addons` and `downloads` are not final so tests can swap in a fake. |
+| `lib/state.dart` | Globals: `settings` (`Settings`: `autoplayNext`, persisted audio/subtitle language and Off preferences), `saved`, `downloads`, `addons`. `addons` and `downloads` are not final so tests can swap in a fake. |
 | `lib/playback.dart` | `Playback` record (title, subtitle, type, canonical Stremio `videoId` such as `tt123:4:2`, season, episode) and `play(context, stream, playback)`, the only way screens start playback. Routing: externalUrl â†’ Android ACTION_VIEW; url â†’ `PlayerScreen` with headers; infoHash â†’ `TorrentScreen`. |
 | `lib/torrent.dart` | `TorrentEngine` (MethodChannel `flick/torrent`: add / status / files / stream / stopStream / release / remove), `isTv()` (native `tv`), `isMagnet`, `isVideo`, `guessFile` (Stremio enginefs guessFileIdx: unique SxxEyy match or sole video means sure; otherwise suggest the largest). |
 | `android/.../Torrents.kt` | libtorrent4j session. `add` reuses a live entry with the same info-hash. `release` stops streaming and removes the torrent after 60 s (enginefs ENGINE_TIMEOUT); only a re-`add` cancels that. `openExternal` (http/https only) answers on the main thread, with error `noHandler` when no app can open the link (a TV with no browser; the Where to watch row then shows the URL). `tv` answers whether the UI mode is television. All TorrentHandle calls run on the single `ctl` executor under `synchronized(e)` after checking `alive`. |
@@ -64,7 +64,19 @@ This file is the shared source for continuing the work in a new session. Read it
 - In a `Stack`, `Row` or `Column`, an `if (...)` child placed before stateful siblings needs a `key` on those siblings, or they are rebuilt from scratch when the condition flips (lost focus/ring state; the TV rail ring bug of 2026-10-31).
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
-## Status (2026-11-01)
+## Status (2026-11-02)
+
+### Miruro and offline resume choices
+
+Miruro Play and completed offline downloads now offer Resume with the saved time and Start Over through the shared themed sheet when a checkpoint exists. Miruro resolves its fresh source after the choice; copying links bypasses the playback choice. Native, HTTP and legacy torrent download entry points pass the chosen mode to the existing player. Dismissing or failing to open leaves history intact; no-checkpoint playback opens directly. The sheet uses the TV focus kit and supports larger text. Existing player/settings edits were preserved.
+
+Validation: all 348 Flutter tests pass in the shared working tree, including five new regressions for Miruro refresh ordering/cancellation/failed opens, native and legacy offline mode routing, and phone/TV choices at 1.3× text. All 39 Android unit tests pass and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Changed-file analysis is clean. Full analysis retains only the existing `player_keys.dart:17` lint; design gates retain the existing 34 hits and none in the new sheet. Custom addon identity scoping and real-provider/native phone/TV acceptance remain unfinished in `improvements.md` item 1.
+
+### Audio and subtitle preferences
+
+The existing phone/TV track panels now remember successful manual selections by normalized language, including Subtitles Off. The shared player applies preferences to fresh tracks on subsequent videos, including embedded offline tracks, while missing languages leave the engine fallback intact. Retry restores the current video's exact manual choice where possible, then falls back to language matching. Unknown-language choices remain local to that video; storage failure leaves the selected track playing and shows inline save-retry guidance. No transient track IDs or subtitle URLs are persisted. Design/behavior: `design/player-preferences.md`.
+
+Validation: all 348 Flutter tests in the shared working tree pass, including eleven new persistence/selection regressions for reload, audio/subtitle independence, aliases, changing track IDs, missing-language fallback, Off/re-enable, explicit overrides, stream/addon/embedded priority, offline embedded tracks, and Retry choices including commentary and unknown language. All 39 Android unit tests pass and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Changed-file analysis is clean; full analysis retains only the existing `player_keys.dart:17` lint, and design gates retain the existing 34 hits. Native switching/restart/offline playback and physical phone/TV accessibility remain backlog item 2 acceptance checks.
 
 ### Continue Watching
 
@@ -232,7 +244,8 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
-- Next backlog implementation: finish `improvements.md` item 1: Miruro/offline Resume/Start Over choices, safe scoping for custom addon IDs, and real-provider/physical phone/TV restart/offline/accessibility checks. Continue Watching, progress persistence, history controls and addon playback choices are implemented; do not rebuild them.
+- Audio/subtitle preference implementation is complete; finish its native phone/TV restart, Retry, episode-change, offline and accessibility acceptance in `improvements.md` item 2. The next numbered implementation item is subtitle timing/readability controls; do not rebuild language persistence.
+- Next backlog implementation: finish `improvements.md` item 1: safe scoping for custom addon IDs, and real-provider/physical phone/TV restart/offline/accessibility checks. Continue Watching, progress persistence, history controls and addon/Miruro/offline playback choices are implemented; do not rebuild them.
 - Maintain `improvements.md` as the current improvement backlog: remove completed/already implemented items after verification, retain unfinished portions, and add concrete useful ideas discovered during work. See `AGENTS.md` for the shared agent rule.
 - Verify live rewind/forward on phone and TV with the new APK, including pause/resume, cache eviction and a stream with no seekable range.
 - FCTV: verify visible video/audio on the user's physical phone and Android TV using the repaired APK; the local phone emulator reports advancing 720p playback but cannot render the picture because of its EGL failure. Actual-country routing and other source strategies remain outside the proven fallback/CDN path. See `design/live-diagnosis.md` and `design/live.md`.

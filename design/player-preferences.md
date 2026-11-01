@@ -1,0 +1,9 @@
+# Audio and subtitle preferences
+
+Use the existing phone/TV track panels. A short inline explanation says selections are remembered for future videos; there is no additional settings screen or picker. Successful manual audio/subtitle selections persist normalized language codes in Settings. Subtitle Off is a distinct stored choice. Automatic selections never change preferences; failed track loads never save a choice. A storage failure leaves playback selected and shows an inline instruction to select again to retry saving.
+
+Subsequent videos match fresh tracks by language, preserving existing engine fallback when no match exists. Explicit subtitle language overrides the device/audio heuristic and an engine-selected subtitle. With no preference the device-language heuristic remains. Stream-provided subtitle files precede addon files, then embedded tracks; embedded-only offline playback needs no network result. Subtitle files retain the existing isolated HTTP transport without video headers.
+
+Retry reapplies the current video's selected track/file or Off before considering saved preferences. This also preserves a commentary track or a track with unknown language within the current video. Unknown-language tracks are never persisted as a language preference; the panel explains that limit. Reopening resets automatic-selection flags, and a generation guard discards subtitle operations from the previous open.
+
+Persistence and pure selection tests in test/player_tracks_test.dart cover reload, aliases, new track IDs, independent audio/subtitle values, Off/re-enable, missing-language fallback, explicit overrides, source precedence, offline embedded tracks and Retry. Native track switching, restart/offline playback, real subtitle failures and physical phone/TV accessibility remain acceptance work.

@@ -3,6 +3,9 @@ import 'dart:convert';
 
 import 'package:flick/addons.dart';
 import 'package:flick/anime.dart';
+import 'package:flick/history.dart';
+import 'package:flick/kit/route.dart';
+import 'package:flick/screens/player.dart';
 import 'package:flick/screens/anime.dart';
 import 'package:flick/screens/discover.dart';
 import 'package:flick/screens/title.dart';
@@ -12,6 +15,7 @@ import 'package:flick/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const card = (id: 20, title: 'Naruto', poster: null);
 const episode = (
@@ -135,6 +139,14 @@ class _Catalogs extends Addons {
 
 late _Catalogs _catalogs;
 
+class _PlayerRoutes extends NavigatorObserver {
+  PlayerScreen? player;
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    if (route is EpisodeRoute) player = route.builder(navigator!.context) as PlayerScreen;
+  }
+}
+
 Future<void> pump(WidgetTester tester, Widget home, {double scale = 1, bool still = false}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(360, 640);
@@ -164,6 +176,44 @@ Future<void> pump(WidgetTester tester, Widget home, {double scale = 1, bool stil
 
 void main() {
   setUp(() => addons = _catalogs = _Catalogs());
+
+  testWidgets('Miruro chooses mode before refreshing links; cancellation and failed opens retain progress', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await history.load();
+    await history.save(const WatchProgress(type: 'anime', videoId: 'anilist:20:1', title: 'Naruto',
+      position: Duration(seconds: 123), duration: Duration(minutes: 20)));
+    addTearDown(history.clear);
+    final anime = _Anime()..source = (_) async => result();
+    addTearDown(anime.close);
+    final routes = _PlayerRoutes();
+    await tester.pumpWidget(MaterialApp(theme: flickTheme(), navigatorObservers: [routes], home:
+      AnimeSourcesScreen(card: card, episode: episode, anime: anime, cancel: () {})));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Play'));
+    await tester.pumpAndSettle();
+    expect(anime.resolutions, 1);
+    routes.navigator!.pop();
+    await tester.pumpAndSettle();
+    expect(anime.resolutions, 1);
+    for (final over in [true, false]) {
+      await tester.tap(find.text('Play'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(over ? 'Start over' : 'Resume · 2:03'));
+      await tester.idle();
+      expect(routes.player?.start, over ? Duration.zero : null);
+      expect(routes.player?.source, 'https://cdn.example/master.m3u8');
+      routes.navigator!.pop();
+      await tester.pumpAndSettle();
+    }
+    anime.source = (_) async => throw const AnimeException(AnimeError.unreachable);
+    await tester.tap(find.text('Play'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+    expect(history.position('anime', 'anilist:20:1'), const Duration(seconds: 123));
+    expect(find.text('Play'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('empty query shows the first anime catalog and chips switch the shared feed', (tester) async {
     await pump(tester, const AnimeTab());

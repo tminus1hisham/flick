@@ -26,6 +26,17 @@ class Settings {
   /// Up Next counts down and plays the next episode on its own; off, it waits for a tap.
   bool get autoplayNext => _prefs.getBool('autoplayNext') ?? true;
   set autoplayNext(bool on) => _prefs.setBool('autoplayNext', on);
+
+  String? get audioLanguage => _prefs.getString('audioLanguage');
+  /// A language code, 'off', or null to use the device-language default.
+  String? get subtitleLanguage => _prefs.getString('subtitleLanguage');
+
+  Future<void> saveAudioLanguage(String language) => _saveLanguage('audioLanguage', language);
+  Future<void> saveSubtitleLanguage(String language) => _saveLanguage('subtitleLanguage', language);
+
+  Future<void> _saveLanguage(String key, String language) async {
+    if (!await _prefs.setString(key, language)) throw StateError('Could not save language preference');
+  }
 }
 
 class Device {

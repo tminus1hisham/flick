@@ -31,7 +31,7 @@ import 'upnext.dart';
 import 'tv_player.dart';
 import 'volume.dart';
 
-typedef _Caption = ({
+typedef Caption = ({
   SubtitleTrack track,
 
   /// Addon or stream subtitle file; null for embedded tracks and Off.
@@ -93,6 +93,40 @@ String subtitleLanguageName(String code) {
     if (entry.$1 == normalized) return entry.$2;
   }
   return code.isEmpty ? 'Unknown language' : code;
+}
+
+/// Match language rather than a track ID, which can change between files/opens.
+AudioTrack? preferredAudioTrack(List<AudioTrack> tracks, String? preference, {AudioTrack? choice}) {
+  final audio = tracks.where((t) => t.id != 'auto' && t.id != 'no');
+  final language = subtitleLanguage((choice == null ? preference : choice.language) ?? 'und');
+  if (choice != null) {
+    final exact = audio.where((t) => t.id == choice.id && subtitleLanguage(t.language ?? 'und') == language).firstOrNull;
+    if (exact != null) return exact;
+  }
+  if (language.isEmpty || language == 'und') {
+    return null;
+  }
+  return audio.where((t) => subtitleLanguage(t.language ?? 'und') == language).firstOrNull;
+}
+
+/// A per-video choice wins on Retry; persisted preferences match fresh tracks by language.
+Caption? preferredCaption(List<Caption> captions, {
+  String? preference, Caption? choice, required String deviceLanguage,
+  required String? audioLanguage, required String selectedId, Set<String> streamUrls = const {},
+}) {
+  if (choice?.track.id == 'no' || choice == null && preference == 'off') {
+    return (track: SubtitleTrack.no(), url: null, lang: choice?.lang ?? subtitleLanguage(deviceLanguage), label: 'Off', detail: '');
+  }
+  if (choice != null) {
+    final match = captions.where((c) => choice.url != null ? c.url == choice.url : c.track.id == choice.track.id).firstOrNull;
+    if (match != null) return match;
+  }
+  final language = subtitleLanguage(choice?.lang ?? preference ?? deviceLanguage);
+  if (preference == null && choice == null &&
+      (subtitleLanguage(audioLanguage ?? '') == language || selectedId != 'auto' && selectedId != 'no')) { return null; }
+  final matching = captions.where((c) => c.lang == language);
+  return matching.where((c) => streamUrls.contains(c.url)).firstOrNull ??
+    matching.where((c) => c.url != null).firstOrNull ?? matching.firstOrNull;
 }
 
 /// Embedded subtitle tracks: mpv lists files added by sub-add as numbered tracks
@@ -390,6 +424,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   Timer? _ticker, _reveal;
   bool _panel = false, _languages = false, _loading = false, _fetched = false;
   bool _manual = false, _autoPicked = false, _bitrateSent = false;
+  bool _audioPicked = false, _audioPending = false, _autoPicking = false;
+  int _trackGeneration = 0;
+  AudioTrack? _audioChoice;
+  Caption? _captionChoice;
   String? _catalogueError, _subtitleError, _notice, _language, _pending;
   String _search = '';
   final _languageSearch = TextEditingController();
@@ -400,7 +438,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   final _tvLanguageChoice = FocusNode(debugLabel: 'Selected subtitle language');
   final _scrolls = <String, ScrollController>{};
   SubtitleTrack? _selected;
-  _Caption? _failed;
+  Caption? _failed;
   String? _applicationError;
   String? _lastPlaybackError;
   // Subtitle file text and the mpv track id it was added as, by URL.
@@ -878,8 +916,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  List<_Caption> get _captions {
-    final result = <_Caption>[];
+  List<Caption> get _captions {
+    final result = <Caption>[];
     for (final t in embeddedSubtitles(
       _player.state.tracks.subtitle,
       _added.values,
@@ -921,49 +959,90 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     return result;
   }
 
-  void _autoPick() {
+  Future<void> _chooseAudio(AudioTrack track, {bool automatic = false}) async {
+    if (_audioPending) return;
+    final generation = _trackGeneration;
+    setState(() { _audioPending = true; _audioPicked = true; });
+    try {
+      await _player.setAudioTrack(track);
+      if (!mounted || generation != _trackGeneration) return;
+      if (!automatic) {
+        _audioChoice = track;
+        await _rememberLanguage(track.language, audio: true);
+      }
+    } catch (e) {
+      if (mounted && generation == _trackGeneration) setState(() => _subtitleError = friendlyError(e));
+    } finally {
+      if (mounted && generation == _trackGeneration) setState(() => _audioPending = false);
+    }
+  }
+
+  Future<void> _rememberLanguage(String? language, {bool audio = false, bool off = false}) async {
+    final normalized = subtitleLanguage(language ?? 'und');
+    if (!off && (normalized.isEmpty || normalized == 'und')) {
+      if (mounted) setState(() => _notice = 'Unknown language: this choice applies only to this video.');
+      return;
+    }
+    try {
+      if (audio) {
+        await settings.saveAudioLanguage(normalized);
+      } else {
+        await settings.saveSubtitleLanguage(off ? 'off' : normalized);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _notice = 'Could not save this preference. Select the track again to retry.');
+    }
+  }
+
+  Future<void> _autoPick() async {
+    if (!mounted || !_started || _retrying || _autoPicking) return;
+    final generation = _trackGeneration;
+    _autoPicking = true;
+    try {
+      if (!_audioPicked && !_audioPending) {
+        final selected = preferredAudioTrack(_player.state.tracks.audio, settings.audioLanguage, choice: _audioChoice);
+        if (selected != null) await _chooseAudio(selected, automatic: true);
+      }
+      if (!mounted || generation != _trackGeneration) return;
+      _autoPickSubtitle();
+    } catch (e) {
+      // A missing/broken preferred track must never prevent video playback.
+      debugPrint('track preference: $e');
+    } finally {
+      _autoPicking = false;
+    }
+  }
+
+  void _autoPickSubtitle() {
     if (!mounted ||
         !_started ||
         _manual ||
         _autoPicked ||
-        widget.playback == null ||
         _pending != null) {
       return;
     }
-    final lang = subtitleLanguage(
-      PlatformDispatcher.instance.locale.languageCode,
-    );
-    final streamMatch = widget.subtitles.any(
-      (s) => subtitleLanguage(s.lang) == lang,
-    );
-    if (!streamMatch && (_loading || !_fetched)) return;
-    _autoPicked = true;
-    final audio = _player.state.track.audio;
-    if (subtitleLanguage(audio.language ?? '') == lang) return;
-    final selected = _player.state.track.subtitle;
-    if (selected.id != 'auto' && selected.id != 'no') return;
-    final matching = _captions.where((c) => c.lang == lang).toList();
-    // Stream entries take precedence over addon and embedded entries.
-    final streamUrls = widget.subtitles.map((s) => s.url).toSet();
-    final preferred = matching
-        .where((c) => streamUrls.contains(c.url))
-        .toList();
-    final external = matching.where((c) => c.url != null).toList();
-    if (preferred.isNotEmpty || external.isNotEmpty) {
-      _choose(
-        preferred.isNotEmpty ? preferred.first : external.first,
-        automatic: true,
-      );
-    } else {
-      setState(
-        () => _notice = 'No ${subtitleLanguageName(lang)} subtitles found',
-      );
+    final preference = settings.subtitleLanguage;
+    final choice = _captionChoice;
+    final locale = PlatformDispatcher.instance.locale.languageCode;
+    final caption = preferredCaption(_captions, preference: preference, choice: choice,
+      deviceLanguage: locale, audioLanguage: _player.state.track.audio.language,
+      selectedId: _player.state.track.subtitle.id, streamUrls: widget.subtitles.map((s) => s.url).toSet());
+    if (caption != null) {
+      _autoPicked = true;
+      _choose(caption, automatic: true);
+    } else if (_fetched || widget.playback == null) {
+      _autoPicked = true;
+      final language = subtitleLanguage(choice?.lang ?? preference ?? locale);
+      if (!_captions.any((c) => c.lang == language)) {
+        setState(() => _notice = 'No ${subtitleLanguageName(language)} subtitles found');
+      }
     }
   }
 
-  Future<void> _choose(_Caption caption, {bool automatic = false}) async {
+  Future<void> _choose(Caption caption, {bool automatic = false}) async {
     if (!automatic) _manual = true;
     if (_pending != null) return;
+    final generation = _trackGeneration;
     final previous = _selected ?? _player.state.track.subtitle;
     _applicationError = null;
     setState(() {
@@ -977,6 +1056,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       final url = caption.url;
       if (url != null && !_added.containsKey(url)) {
         final text = await _subtitleText(url);
+        if (!mounted || generation != _trackGeneration) return;
         await _player.setSubtitleTrack(
           SubtitleTrack.data(
             text,
@@ -990,12 +1070,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           await mpv.getProperty('sid'),
           _added.values,
         );
+        if (!mounted || generation != _trackGeneration) return;
         if (sid == null) throw StateError('Subtitle did not load');
         _added[url] = sid;
         track = SubtitleTrack(sid, track.title, track.language);
       } else {
         await _player.setSubtitleTrack(track);
       }
+      if (!mounted || generation != _trackGeneration) return;
       if (_applicationError != null) throw StateError(_applicationError!);
       if (automatic && _manual) {
         await _player.setSubtitleTrack(previous);
@@ -1007,15 +1089,20 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         _failed = null;
         _language = caption.lang;
       });
-      if (!automatic) HapticFeedback.selectionClick();
+      if (!automatic) {
+        _captionChoice = caption;
+        HapticFeedback.selectionClick();
+        await _rememberLanguage(caption.lang, off: track.id == 'no');
+      }
     } catch (e) {
+      if (!mounted || generation != _trackGeneration) return;
       debugPrint('subtitle: $e');
       try {
         await _player.setSubtitleTrack(previous);
       } catch (e) {
         debugPrint('subtitle restore: $e');
       }
-      if (mounted) {
+      if (mounted && generation == _trackGeneration) {
         setState(() {
           _selected = previous;
           _failed = caption;
@@ -1023,7 +1110,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         });
       }
     } finally {
-      if (mounted) setState(() => _pending = null);
+      if (mounted && generation == _trackGeneration) setState(() => _pending = null);
     }
   }
 
@@ -1121,6 +1208,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Future<void> _open(Duration start) {
+    _trackGeneration++;
+    _started = false;
+    _manual = false;
+    _autoPicked = false;
+    _audioPicked = false;
+    _audioPending = false;
+    _pending = null;
     _liveRange.value = null;
     _openedAt = start;
     _beginEpisode(opening: true);
@@ -1820,6 +1914,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 if (languages.isEmpty)
                   Text('No subtitle languages available', style: FlickTv.body),
               ] else ...[
+                Text('Audio and subtitle choices are remembered for future videos.', style: FlickTv.meta),
                 row(
                   'Off',
                   _pending == null
@@ -1884,15 +1979,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   row(
                     audio.title ??
                         subtitleLanguageName(audio.language ?? 'und'),
-                    () async {
-                      try {
-                        await _player.setAudioTrack(audio);
-                      } catch (e) {
-                        if (mounted) {
-                          setState(() => _subtitleError = friendlyError(e));
-                        }
-                      }
-                    },
+                    _audioPending ? null : () => _chooseAudio(audio),
                     selected: audio.id == _player.state.track.audio.id,
                   ),
                 if (_next != null)
@@ -2015,12 +2102,12 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
 
   Widget _tracksPanel() {
     final captions = _captions;
-    final groups = <String, List<_Caption>>{};
+    final groups = <String, List<Caption>>{};
     for (final caption in captions) {
       groups.putIfAbsent(caption.lang, () => []).add(caption);
     }
     final language = _language ?? (groups.isEmpty ? null : groups.keys.first);
-    final files = groups[language] ?? const <_Caption>[];
+    final files = groups[language] ?? const <Caption>[];
     final active = _selected ?? _player.state.track.subtitle;
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
@@ -2235,6 +2322,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                   ScrollController.new,
                                 ),
                                 children: [
+                                  const Padding(
+                                    padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
+                                    child: Text('Audio and subtitle choices are remembered for future videos.', style: FlickText.metadata),
+                                  ),
                                   if (_loading) ...[
                                     for (var i = 0; i < 2; i++)
                                       const Padding(
@@ -2318,18 +2409,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                         selected:
                                             track.id ==
                                             _player.state.track.audio.id,
-                                        onTap: () async {
-                                          try {
-                                            await _player.setAudioTrack(track);
-                                          } catch (e) {
-                                            if (mounted) {
-                                              setState(
-                                                () => _subtitleError =
-                                                    friendlyError(e),
-                                              );
-                                            }
-                                          }
-                                        },
+                                        onTap: _audioPending ? null : () => _chooseAudio(track),
                                       ),
                                   ],
                                   if (_next != null)
