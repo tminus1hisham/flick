@@ -12,6 +12,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../kit/route.dart';
 import '../kit/focus.dart';
+import '../history.dart';
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
 import '../pip.dart';
@@ -361,7 +362,7 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
   late LiveSource _source = (url: widget.source, headers: widget.headers);
   final _player = Player(
     configuration: const PlayerConfiguration(bufferSize: 400 * 1024 * 1024),
@@ -404,6 +405,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final _added = <String, String>{};
   // open() resets state.position to 0 until mpv reports time-pos; Retry and the stop check use this instead.
   Duration _pos = Duration.zero;
+  Timer? _checkpoint;
+  Duration? _savedPosition;
+  Duration _duration = Duration.zero;
   // ±10 s seek (design/seek.md): taps add up and seek once, 400 ms after the
   // last, so a torrent clears its piece deadlines once per burst.
   final _taps = SeekTaps();
@@ -440,6 +444,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final playback = widget.playback;
+    if (!widget.live && playback != null) {
+      _pos = history.position(playback.type, playback.videoId);
+      _checkpoint = Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
+    }
     _live++;
     _immersive();
     _pip.addListener(_pipChanged);
@@ -450,8 +460,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (device.tv) _tvRefresh.value++;
           // Before the early return: a seek to the start must reset Up Next.
           _upNext(p);
+          final position = watchPosition(p, started: _started, opening: _opening, completed: _completed);
+          if (position != null && _burst.current(position)) _pos = position;
           if (p <= Duration.zero) return;
-          if (_burst.current(p)) _pos = p;
           _pauseWait.position(p, DateTime.now());
           if (!_started) {
             // Errors before playback started weren't fatal after all.
@@ -487,6 +498,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       )
       ..add(
         _player.stream.playing.listen((playing) {
+          if (!playing) _saveProgress();
           if (_androidPip) _pip.playing(playing);
           if (device.tv) _tvRefresh.value++;
           if (!playing && _lastPlaybackError != null) _checkStopped();
@@ -497,6 +509,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }))
       ..add(
         _player.stream.duration.listen((d) {
+          if (d > Duration.zero) _duration = d;
           if (device.tv) _tvRefresh.value++;
           _upNext();
           final t = widget.torrent, size = widget.size;
@@ -1127,6 +1140,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _saveProgress();
+    _checkpoint?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _pip.removeListener(_pipChanged);
     _pip.dispose();
     _entryFocus.dispose();
@@ -1154,6 +1170,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
       SystemChrome.setPreferredOrientations([]);
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _saveProgress();
+  }
+
+  void _saveProgress() {
+    final p = widget.playback;
+    // open() emits temporary zeroes; a failed open must leave the previous checkpoint intact.
+    if (widget.live || p == null || !_started || _opening || _savedPosition == _pos) return;
+    _savedPosition = _pos;
+    history.save(WatchProgress(
+      type: p.type, videoId: p.videoId, title: p.title, subtitle: p.subtitle, poster: p.poster,
+      position: _pos, duration: _duration,
+    )).catchError((Object e) {
+      _savedPosition = null;
+      debugPrint('viewing progress: $e');
+    });
   }
 
   Future<void> _toggleMute() =>
@@ -1216,8 +1251,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _seekTimer = Timer(const Duration(milliseconds: 400), () {
       final target = _burst.settle();
       if (target != null) {
-        // The position stream skips 0, so a seek to the start wouldn't
-        // update _pos.
         _seekTo(target);
       }
       _seek.value = (0, _burst.total);

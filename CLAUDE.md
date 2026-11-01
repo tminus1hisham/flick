@@ -5,11 +5,11 @@ Flick is a Flutter 3.41 / Dart 3.11 Android app (package `flick`, Material 3, da
 This file is the shared source for continuing the work in a new session. Read it before you change anything. Update the **Status** and **Next** sections when you finish a piece of work.
 
 ## Gates (run before calling anything done)
-- `flutter analyze lib test`: no issues. Scope to app/test rather than the nested worktree in `.claude`.
-- `flutter test`: 271 tests after the FCTV integration.
-- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 30 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest, 5 FctvTest).
+- `flutter analyze lib test`: target no issues. Current committed baseline has one missing-braces lint at `lib/player_keys.dart:17`; viewing-history files analyze clean. Scope to app/test rather than the nested worktree in `.claude`.
+- `flutter test`: 303 tests after viewing-progress persistence.
+- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 39 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest, 7 FctvTest, 7 FctvMediaTest).
 - `flutter build apk --debug`: verify Android packaging and native compilation.
-- Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: 27 existing hits (26 color uses, one legacy progress bar); no new files have hits.
+- Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: current baseline is 34 existing hits (27 colour uses, 7 stock controls), confirmed against committed source on 2026-11-01; viewing-history changes add none. The older 27-total baseline is superseded. See `improvements.md` for cleanup.
 - `PlayerScreen` cannot be pumped in widget tests without native libmpv. Test pure helpers and the independent TvPlayerControls instead.
 
 ## Branches and history
@@ -37,6 +37,7 @@ This file is the shared source for continuing the work in a new session. Read it
 | `lib/screens/sources.dart` | D4 Sources at route `/sources`: bundled switches, add by manifest URL with inline errors, remove with an inline Undo row. |
 | `lib/screens/torrent.dart` | Torrent start screen (stage spine, peers and speed): auto-opens `fileIdx` or a sure guess, otherwise the file list with "Suggested"; Retry / Choose another source; releases (not removes) the torrent on exit. |
 | `lib/saved.dart` | `Saved`: device favourites and likes for Discover titles (shared_preferences), open to everyone. |
+| `lib/history.dart` | `ViewingHistory`: on-device unfinished-video checkpoints, canonical content IDs, 95% completion removal, bounded retention and corruption-tolerant loading. `watchPosition` distinguishes a real seek to zero from mpv open/close resets. |
 | `lib/kit/toggle.dart` | `ToggleAction` (favourite/like; `onPressed` answers whether state changed, haptics only then). |
 | `lib/kit/sheet.dart` | `showFlickSheet`: the first kit piece (themed, content-sized, reduced-motion aware). New sheets go through it. |
 | `lib/main.dart` | `FlickApp`, and `Shell`: phone bottom bar, TV rail (`device.tv` only, never width). On TV: content at x 144, one `FocusScope` per tab (remembers its item; Left at the edge searches the shell), Sources as a 4th tab, and the Back contract (`PopScope(canPop: false)`: content â†’ rail's selected item â†’ `SystemNavigator.pop`). |
@@ -64,6 +65,14 @@ This file is the shared source for continuing the work in a new session. Read it
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
 ## Status (2026-11-01)
+
+### Viewing progress (first backlog slice)
+
+`lib/history.dart` persists the 100 most recently watched unfinished videos by content type and canonical IMDb/Kitsu/AniList episode ID. The shared player restores that position on open and checkpoints every five seconds, on pause, on backgrounding and on dispose. Videos at 95% completion leave resume history; failed opens/retry resets do not erase a checkpoint. Live broadcasts and unsupported/custom addon IDs are excluded. Existing addon, Miruro and offline-download callers already carry the supported identities, so stream URLs/headers are never saved in history. Actual seeks to zero clear the checkpoint while temporary mpv open/close zeroes are ignored.
+
+Continue Watching, explicit Resume/Start Over and removal/clear-history UI, custom addon identity scoping and native phone/TV acceptance remain unfinished in backlog item 1. The persistence API includes remove/clear for those controls. No physical device was controlled.
+
+Validation: all 303 Flutter tests pass (10 history regressions), all 39 Android unit tests pass, and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Project-wide analysis reports only the pre-existing missing-braces lint in `lib/player_keys.dart:17`; scoped analysis of the changed files was clean. Design checks match committed source exactly: 7 stock-control and 27 colour hits, no additions. Persistence tests establish reload/identity/completion/removal/corruption behavior; the native player cannot be pumped headlessly, so actual restart/resume and offline playback still require phone/TV acceptance.
 
 Live seeking: phone ±10-second buttons/double-taps and hidden TV Left/Right now use mpv's cached seekable range, including unknown-duration streams. Targets clamp to the current cache boundaries; no range disables seeking. No server recording or persistent timeshift is added.
 Validation: analysis clean; all 281 Flutter tests pass, including cached-range parsing and phone/TV seek boundary regressions; Android unit tests pass; debug APK built. Design gates retain the documented 27 existing hits.
@@ -197,6 +206,7 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
+- Finish viewing-history UI and acceptance from `improvements.md` item 1: Continue Watching with fresh source resolution, explicit Resume/Start Over, removal/clear controls, safe scoping for custom addon IDs, and physical phone/TV restart/offline tests. The first progress-persistence slice is implemented; do not rebuild it.
 - Maintain `improvements.md` as the current improvement backlog: remove completed/already implemented items after verification, retain unfinished portions, and add concrete useful ideas discovered during work. See `AGENTS.md` for the shared agent rule.
 - Verify live rewind/forward on phone and TV with the new APK, including pause/resume, cache eviction and a stream with no seekable range.
 - FCTV: verify visible video/audio on the user's physical phone and Android TV using the repaired APK; the local phone emulator reports advancing 720p playback but cannot render the picture because of its EGL failure. Actual-country routing and other source strategies remain outside the proven fallback/CDN path. See `design/live-diagnosis.md` and `design/live.md`.

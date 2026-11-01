@@ -22,6 +22,7 @@ Future<void> main() async {
   await downloads.init();
   await addons.load();
   await saved.load();
+  await history.load();
   device.tv = await isTv();
   // The remote is a keyboard: the ring shows from the first frame, even before a key press.
   if (device.tv) FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
