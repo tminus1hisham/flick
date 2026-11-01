@@ -64,7 +64,7 @@ final class PickStream extends AddonNext {
 /// Plays [s]: url → player, infoHash → torrent start (fileIdx, else a guessed file),
 /// externalUrl → the service's app or site. [addon] (the source of [s]) lets Up Next find the next episode's
 /// stream in the same binge group. Returns when the user is back on a stream list.
-Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon}) async {
+Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon, Duration? start}) async {
   for (var moved = false;; moved = true) {
     final external = s.externalUrl, url = s.url;
     if (external != null) {
@@ -77,11 +77,11 @@ Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon
     if (url != null) {
       screen = PlayerScreen(
           title: title, source: url, headers: s.headers, subtitles: s.subtitles,
-          playback: p, filename: s.filename, size: s.videoSize, hash: s.videoHash, next: next);
+          playback: p, start: start, filename: s.filename, size: s.videoSize, hash: s.videoHash, next: next);
     } else if (s.infoHash != null) {
       screen = TorrentScreen(magnetFor(s), fileIdx: s.fileIdx,
           season: p.season, episode: p.episode, title: title,
-          playback: p, subtitles: s.subtitles, hash: s.videoHash, next: next);
+          playback: p, start: start, subtitles: s.subtitles, hash: s.videoHash, next: next);
     } else {
       throw ArgumentError('Stream has no playable source');
     }
@@ -90,6 +90,7 @@ Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon
     switch (result) {
       case NextStream r:
         (s, p, addon) = (r.stream, r.playback, r.addon);
+        start = null;
       case PickStream r:
         Navigator.push(context, EpisodeRoute(builder: (_) => StreamsScreen(r.meta, r.video), next: true));
         return;

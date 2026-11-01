@@ -121,11 +121,12 @@ class _MagnetDialogState extends State<_MagnetDialog> {
 class TorrentScreen extends StatefulWidget {
   const TorrentScreen(this.magnet,
       {this.fileIdx, this.season, this.episode, this.title, this.playback, this.subtitles = const [], this.hash,
-      this.next, this.download = false, this.poster, super.key});
+      this.next, this.start, this.download = false, this.poster, super.key});
   final String magnet;
   final int? fileIdx, season, episode;
   final String? title, poster;
   final Playback? playback;
+  final Duration? start;
   final List<Subtitle> subtitles;
   final String? hash;
   final bool download;
@@ -276,6 +277,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
                     title: widget.title ?? f.name,
                     source: url,
                     playback: widget.playback,
+                    start: widget.start,
                     subtitles: widget.subtitles,
                     hash: widget.hash,
                     filename: f.name,

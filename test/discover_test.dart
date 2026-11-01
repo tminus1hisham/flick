@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _Addon implements Addon {
   bool filterable = false;
+  bool searchNew = false;
   @override
   String get id => 'cinemeta';
   @override
@@ -25,7 +26,7 @@ class _Addon implements Addon {
   @override
   List<Catalog> get catalogs => [
         (addon: this, type: 'movie', id: 'top', name: 'Popular', searchable: true, genres: filterable ? const ['Action', 'Sci-Fi'] : const []),
-        (addon: this, type: 'movie', id: 'year', name: 'New', searchable: false, genres: const []),
+        (addon: this, type: 'movie', id: 'year', name: 'New', searchable: searchNew, genres: const []),
         (addon: this, type: 'series', id: 'top', name: 'Popular', searchable: true, genres: filterable ? const ['Action', 'Sci-Fi'] : const []),
         (addon: this, type: 'anime', id: 'anime', name: 'Anime catalog', searchable: true, genres: const []),
       ];
@@ -67,6 +68,121 @@ Future<void> _pump(WidgetTester tester) async {
 
 void main() {
   setUp(() => addons = _fake = _Addons());
+
+  MetaPreview title(String id, String name) =>
+      (id: id, type: 'movie', name: name, poster: null, releaseInfo: null);
+
+  Future<void> search(WidgetTester tester, String query) async {
+    await tester.enterText(find.byType(TextField), query);
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('search shows each source as it arrives, deduplicates and retries only failures', (tester) async {
+    _fake._addon.searchNew = true;
+    final slow = Completer<List<MetaPreview>>();
+    var fail = false;
+    _fake.respond = (c, q, skip) => q == null ? null : c.id == 'top'
+        ? fail ? Future.error(StateError('Unavailable')) : slow.future
+        : Future.value(skip == 0 ? [title('tt1', 'Found elsewhere')] : []);
+    await _pump(tester);
+    await tester.pumpAndSettle();
+    await search(tester, 'film');
+    expect(find.text('Found elsewhere'), findsOneWidget);
+    expect(_fake.requests.where((r) => r.$3 == 'film').map((r) => r.$2), ['top', 'year']);
+
+    slow.complete([title('tt1', 'Duplicate'), title('tt2', 'Another result')]);
+    await tester.pumpAndSettle();
+    expect(find.text('Duplicate'), findsNothing);
+    expect(find.text('Another result'), findsOneWidget);
+
+    fail = true;
+    await tester.drag(find.byType(CustomScrollView).last, const Offset(0, -800));
+    await tester.pumpAndSettle();
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Found elsewhere'), findsOneWidget);
+    expect(_fake.requests.where((r) => r.$3 == 'film' && r.$4 > 0),
+        containsAll([('movie', 'top', 'film', 2), ('movie', 'year', 'film', 1)]));
+    final before = _fake.requests.length;
+    fail = false;
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(_fake.requests.skip(before), [('movie', 'top', 'film', 2)]);
+    expect(find.text('Retry'), findsNothing);
+  });
+
+  testWidgets('search ignores late responses after query, type and enabled catalogs change', (tester) async {
+    _fake._addon.searchNew = true;
+    final old = Completer<List<MetaPreview>>();
+    _fake.respond = (c, q, _) => q == 'old' ? old.future : q == null ? null :
+        Future.value([title('tt2', '${c.type} ${c.id} result')]);
+    await _pump(tester);
+    await tester.pumpAndSettle();
+    await search(tester, 'old');
+    await search(tester, 'new');
+    await tester.tap(find.text('Series'));
+    await tester.pumpAndSettle();
+    expect(find.text('series top result'), findsOneWidget);
+    old.complete([title('tt1', 'Stale result')]);
+    await tester.pumpAndSettle();
+    expect(find.text('Stale result'), findsNothing);
+    await tester.tap(find.text('Movies'));
+    await tester.pumpAndSettle();
+    expect(find.text('movie year result'), findsNothing); // Same canonical ID is deduplicated.
+    _fake._addon.searchNew = false;
+    _fake.notifyListeners();
+    await tester.pumpAndSettle();
+    final feed = tester.widget<CatalogFeed>(find.byType(CatalogFeed).last);
+    expect(feed.searchCatalogs!.map((c) => c.id), ['top']);
+    expect(find.text('Stale result'), findsNothing);
+  });
+
+  testWidgets('search bounds requests to four and stops queued work when disposed', (tester) async {
+    final pending = List.generate(6, (_) => Completer<List<MetaPreview>>());
+    var active = 0, peak = 0;
+    _fake.respond = (c, _, _) async {
+      active++;
+      if (active > peak) peak = active;
+      final page = await pending[int.parse(c.id)].future;
+      active--;
+      return page;
+    };
+    final catalogs = [for (var i = 0; i < 6; i++)
+      (addon: _fake._addon, type: 'movie', id: '$i', name: 'Source $i', searchable: true, genres: <String>[])];
+    await tester.pumpWidget(MaterialApp(theme: flickTheme(), home: Scaffold(
+      body: CatalogFeed.search(catalogs, query: 'film'))));
+    await tester.pump();
+    expect(_fake.requests.length, 4);
+    pending[1].complete([title('tt1', 'First available')]);
+    await tester.pumpAndSettle();
+    expect(find.text('First available'), findsOneWidget);
+    expect(_fake.requests.length, 5);
+    expect(peak, 4);
+    await tester.pumpWidget(const SizedBox());
+    for (var i = 0; i < pending.length; i++) {
+      if (!pending[i].isCompleted) pending[i].complete([]);
+    }
+    await tester.pumpAndSettle();
+    expect(_fake.requests.length, 5);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed searches offer retry instead of an empty-results message', (tester) async {
+    _fake._addon.searchNew = true;
+    var fail = true;
+    _fake.respond = (_, q, _) => q == null ? null : fail
+        ? Future.error(AddonException(AddonError.unreachable))
+        : Future.value([]);
+    await _pump(tester);
+    await tester.pumpAndSettle();
+    await search(tester, 'film');
+    expect(find.text('Nothing found for “film”'), findsNothing);
+    expect(find.text("Couldn't connect. Check your connection and try again."), findsOneWidget);
+    fail = false;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing found for “film”'), findsOneWidget);
+  });
 
   testWidgets('genre tabs reset paging, survive empty results, and ignore stale pages', (tester) async {
     _fake._addon.filterable = true;

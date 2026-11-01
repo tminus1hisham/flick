@@ -290,6 +290,39 @@ void main() {
     expect(find.byKey(const ValueKey('rail-panel')), findsNothing);
   });
 
+  testWidgets('multi-catalog TV search keeps focus as slower sources finish at larger text', (tester) async {
+    final fake = _Addons();
+    final second = fake._addon.catalogs[1];
+    fake._addon.catalogs[1] = (addon: second.addon, type: second.type, id: second.id,
+        name: second.name, searchable: true, genres: second.genres);
+    final slow = Completer<List<MetaPreview>>();
+    fake.respond = (c, q, _) => q != null && c.id == 'top' ? slow.future : null;
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpApp(tester, with_: fake);
+    await key(tester, LogicalKeyboardKey.arrowUp);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    await key(tester, LogicalKeyboardKey.select);
+    await tester.enterText(find.byType(TextField), 'kid');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.text('year 0'), findsOneWidget);
+    expect(textFocused(), isTrue);
+    for (var i = 0; i < 4 && !(focused()?.startsWith('year') ?? false); i++) {
+      await key(tester, LogicalKeyboardKey.arrowDown);
+    }
+    expect(focused(), matches(r'^year [0-2], 2019$'));
+    final before = primaryFocus;
+    slow.complete([(id: 'tt1', type: 'movie', name: 'Slow source result', poster: null, releaseInfo: null)]);
+    await tester.pumpAndSettle();
+    expect(find.text('Slow source result'), findsOneWidget);
+    expect(primaryFocus, before);
+    expect(tester.takeException(), isNull);
+    await systemBack(tester);
+    expect(find.byType(TextField), findsNothing);
+    expect(focused(), 'Search titles');
+  });
+
   testWidgets('8: with no catalogs, Add sources is reachable and opens Sources', (tester) async {
     await pumpApp(tester, with_: _Addons(empty: true));
     expect(find.text('No catalogs for this type yet.'), findsOneWidget);

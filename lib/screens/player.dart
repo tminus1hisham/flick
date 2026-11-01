@@ -329,6 +329,7 @@ class PlayerScreen extends StatefulWidget {
     this.headers = const {},
     this.subtitles = const [],
     this.playback,
+    this.start,
     this.filename,
     this.size,
     this.hash,
@@ -339,6 +340,8 @@ class PlayerScreen extends StatefulWidget {
     super.key,
   });
   final Playback? playback;
+  /// Explicit start for this open; Retry continues from the current position.
+  final Duration? start;
   final bool live;
   final Future<LiveSource> Function()? resolveLive;
   final String? filename, hash;
@@ -447,7 +450,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     final playback = widget.playback;
     if (!widget.live && playback != null) {
-      _pos = history.position(playback.type, playback.videoId);
+      _pos = widget.start ?? history.position(playback.type, playback.videoId);
       _checkpoint = Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
     }
     _live++;

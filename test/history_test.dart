@@ -117,6 +117,20 @@ void main() {
     expect(history.entries, isEmpty);
   });
 
+  test('removing an already absent entry rewrites storage for a retry', () async {
+    final history = ViewingHistory();
+    await history.load();
+    await history.save(progress());
+    await history.remove('series', 'tt123:1:2');
+    // Model an earlier failed write leaving the old registry on disk.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('viewingHistory', jsonEncode([progress().toJson()]));
+    await history.remove('series', 'tt123:1:2');
+    final restored = ViewingHistory();
+    await restored.load();
+    expect(restored.entries, isEmpty);
+  });
+
   test('corrupt records do not discard valid records or prevent startup', () async {
     SharedPreferences.setMockInitialValues({'viewingHistory': jsonEncode([
       progress().toJson(), {}, null, {...progress().toJson(), 'position': -4},

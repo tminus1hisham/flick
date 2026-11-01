@@ -9,6 +9,7 @@ import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
 import 'title.dart';
+import 'history.dart';
 
 (String, String, String) _key(Catalog c) => (c.addon.base, c.type, c.id);
 const _favourites = ('', '', 'favourites');
@@ -113,6 +114,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
+  void _history() => Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryScreen(history)));
+
   Widget _tvHeader(
     List<Catalog> catalogs,
     Catalog? selected,
@@ -176,6 +179,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               ),
             ] else ...[
               const Spacer(),
+              FocusFrame.button(
+                key: const ValueKey('history-open'),
+                semanticLabel: 'Viewing history',
+                onActivate: _history,
+                child: const SizedBox(width: FlickTokens.minTouchTarget, height: FlickTokens.minTouchTarget,
+                  child: Icon(Icons.history)),
+              ),
+              const SizedBox(width: 8),
               FocusFrame.button(
                 key: const ValueKey('search-open'),
                 focusNode: _searchActionFocus,
@@ -259,13 +270,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     bool hasFavourites,
     bool showFavourites,
     List<MetaPreview> favourites,
-    Catalog? searchable,
+    List<Catalog> searchable,
     bool searching,
     bool heroes,
   ) {
     final header = KeyedSubtree(key: _header, child: _tvHeader(catalogs, selected, hasFavourites, showFavourites));
     final Widget body;
-    if (searching && searchable == null) {
+    if (searching && searchable.isEmpty) {
       body = TvDiscoverScroll(
         header: header,
         slivers: [
@@ -280,13 +291,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ],
       );
     } else if (searching) {
-      body = CatalogFeed(
-        searchable!,
+      body = CatalogFeed.search(
+        searchable,
         query: _query,
         onClear: _clear,
         tvHeader: header,
         onAddSources: _addSources,
-        key: ValueKey(('tv-search', _key(searchable), _query)),
+        key: ValueKey(('tv-search', Object.hashAll(searchable.map(_key)), _query)),
       );
     } else if (showFavourites) {
       body = CatalogFeed.saved(
@@ -342,7 +353,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           final selected = catalogs.where((c) => _key(c) == _selected).firstOrNull ?? catalogs.firstOrNull;
           final favourites = [for (final f in saved.favourites) if (f.type == _type) f];
           final showFavourites = _selected == _favourites && favourites.isNotEmpty;
-          final searchable = catalogs.where((c) => c.searchable).firstOrNull;
+          final searchable = catalogs.where((c) => c.searchable).toList();
           final searching = _query.isNotEmpty;
           final heroes = !MediaQuery.disableAnimationsOf(context);
           if (context.tv) {
@@ -375,6 +386,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       ),
                     ),
                   ),
+                  IconButton(tooltip: 'Viewing history', onPressed: _history, icon: const Icon(Icons.history)),
                 ]),
               ),
               const SizedBox(height: 8),
@@ -443,11 +455,12 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     enabled: heroes && searching,
                     child: !searching
                         ? const SizedBox.shrink()
-                        : searchable == null
+                        : searchable.isEmpty
                             ? CatalogNotice(Icons.search, "Your sources can't search these titles.",
                                 action: 'Clear search', onAction: _clear)
-                            : CatalogFeed(searchable,
-                                query: _query, onClear: _clear, key: ValueKey((_key(searchable), _query))),
+                            : CatalogFeed.search(searchable,
+                                query: _query, onClear: _clear,
+                                key: ValueKey((Object.hashAll(searchable.map(_key)), _query))),
                   ),
                 ]),
               ),
@@ -586,7 +599,15 @@ class CatalogFeed extends StatefulWidget {
     this.tvHeader,
     this.onAddSources,
     super.key,
-  }) : saved = null;
+  }) : saved = null, searchCatalogs = null;
+
+  const CatalogFeed.search(List<Catalog> this.searchCatalogs, {
+    required String this.query,
+    this.onClear,
+    this.tvHeader,
+    this.onAddSources,
+    super.key,
+  }) : catalog = null, saved = null;
 
   /// The device favourites: one fixed page, no paging.
   const CatalogFeed.saved(List<MetaPreview> this.saved, {
@@ -594,9 +615,11 @@ class CatalogFeed extends StatefulWidget {
     this.onAddSources,
     super.key,
   })  : catalog = null,
+        searchCatalogs = null,
         query = null,
         onClear = null;
   final Catalog? catalog;
+  final List<Catalog>? searchCatalogs;
   final List<MetaPreview>? saved;
   final String? query;
   final VoidCallback? onClear;
@@ -609,7 +632,11 @@ class CatalogFeed extends StatefulWidget {
 
 class _CatalogFeedState extends State<CatalogFeed> {
   final _items = <MetaPreview>[];
-  final _ids = <String>{};
+  final _ids = <(String, String)>{};
+  final _searchOffsets = <Catalog, int>{};
+  final _searchSeen = <Catalog, Set<(String, String)>>{};
+  final _searchDone = <Catalog>{};
+  final _searchFailures = <Catalog, Object>{};
   String? _genre;
   int _generation = 0;
   bool _loading = false, _done = false;
@@ -715,6 +742,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
 
   Future<void> _more() async {
     if (_loading || _done) return;
+    if (widget.searchCatalogs != null) return _searchMore();
     final generation = _generation;
     final catalog = widget.catalog!;
     setState(() {
@@ -725,7 +753,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
       final page = await addons.catalog(catalog, search: widget.query, genre: _genre, skip: _items.length);
       if (!mounted || generation != _generation) return;
       // Pages can overlap; a page with nothing new ends the feed, and Hero tags stay unique.
-      final fresh = page.where((m) => _ids.add(m.id)).toList();
+      final fresh = page.where((m) => _ids.add((m.type, m.id))).toList();
       _items.addAll(fresh);
       _done = fresh.isEmpty;
     } catch (e) {
@@ -733,6 +761,41 @@ class _CatalogFeedState extends State<CatalogFeed> {
       _error = e;
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _searchMore() async {
+    final pending = widget.searchCatalogs!.where((c) => !_searchDone.contains(c) &&
+        (_searchFailures.isEmpty || _searchFailures.containsKey(c))).toList().iterator;
+    setState(() { _loading = true; _error = null; });
+    Future<void> worker() async {
+      while (mounted && pending.moveNext()) {
+        final catalog = pending.current;
+        try {
+          final skip = _searchOffsets[catalog] ?? 0;
+          final page = await addons.catalog(catalog, search: widget.query, skip: skip);
+          if (!mounted) return;
+          final seen = _searchSeen.putIfAbsent(catalog, () => <(String, String)>{});
+          final fresh = page.where((m) => seen.add((m.type, m.id))).toList();
+          setState(() {
+            _searchOffsets[catalog] = skip + page.length;
+            if (fresh.isEmpty) _searchDone.add(catalog);
+            _searchFailures.remove(catalog);
+            _items.addAll(fresh.where((m) => _ids.add((m.type, m.id))));
+          });
+        } catch (e) {
+          if (!mounted) return;
+          _searchFailures[catalog] = e;
+        }
+      }
+    }
+    // Each source keeps its own offset; slow sources cannot hold back visible results.
+    await Future.wait([for (var i = 0; i < 4; i++) worker()]);
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = _searchFailures.values.firstOrNull;
+      _done = _searchDone.length == widget.searchCatalogs!.length;
+    });
   }
 
   // Keep builders indexable so directional traversal can later materialize an
@@ -749,8 +812,8 @@ class _CatalogFeedState extends State<CatalogFeed> {
     final width = (box.maxWidth - FlickTv.insetH - FlickTv.gridPad * 2 -
         FlickTv.gridGap * (FlickTv.columns - 1)) / FlickTv.columns;
     final scaler = MediaQuery.textScalerOf(context);
-    final caption = scaler.scale(FlickTv.card.fontSize!) * FlickTv.card.height! +
-        scaler.scale(FlickTv.meta.fontSize!) * FlickTv.meta.height!;
+    final caption = (scaler.scale(FlickTv.card.fontSize!) * FlickTv.card.height!).ceilToDouble() +
+        (scaler.scale(FlickTv.meta.fontSize!) * FlickTv.meta.height!).ceilToDouble();
     final grid = SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: FlickTv.columns,
       crossAxisSpacing: FlickTv.gridGap,
@@ -801,7 +864,8 @@ class _CatalogFeedState extends State<CatalogFeed> {
         slivers.add(SliverToBoxAdapter(
           child: TvNotice(
             _offline(_error) ? Icons.wifi_off : Icons.report_outlined,
-            _offline(_error) ? "You're offline. Check your connection." : "Couldn't load more titles.",
+            widget.searchCatalogs != null ? "Some sources couldn't be searched." :
+                _offline(_error) ? "You're offline. Check your connection." : "Couldn't load more titles.",
             action: 'Retry',
             onAction: _more,
           ),
@@ -892,7 +956,8 @@ class _CatalogFeedState extends State<CatalogFeed> {
                           color: FlickTokens.textSecondary),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text(_offline(_error) ? "Couldn't connect. Check your connection." : "Couldn't load more titles",
+                        child: Text(widget.searchCatalogs != null ? "Some sources couldn't be searched." :
+                            _offline(_error) ? "Couldn't connect. Check your connection." : "Couldn't load more titles",
                             style: FlickText.body),
                       ),
                       const SizedBox(width: 8),
@@ -993,8 +1058,8 @@ class _TvPosterSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scaler = MediaQuery.textScalerOf(context);
-    final titleHeight = scaler.scale(FlickTv.card.fontSize!) * FlickTv.card.height!;
-    final yearHeight = scaler.scale(FlickTv.meta.fontSize!) * FlickTv.meta.height!;
+    final titleHeight = (scaler.scale(FlickTv.card.fontSize!) * FlickTv.card.height!).ceilToDouble();
+    final yearHeight = (scaler.scale(FlickTv.meta.fontSize!) * FlickTv.meta.height!).ceilToDouble();
     return ExcludeSemantics(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const AspectRatio(

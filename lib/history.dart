@@ -82,7 +82,9 @@ class ViewingHistory extends ChangeNotifier {
   }
 
   Future<void> remove(String type, String videoId) async {
-    if (_entries.remove((type, videoId)) != null) await _persist();
+    _entries.remove((type, videoId));
+    // A retry must write again even if a failed write already removed the in-memory entry.
+    await _persist();
   }
 
   Future<void> clear() async {

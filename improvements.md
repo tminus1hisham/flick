@@ -13,12 +13,12 @@ Researched and checked against the source on 2026-11-01. This is a living backlo
 
 ## Highest priority
 
-### 1. Finish viewing-history controls and Continue Watching
+### 1. Finish Continue Watching and explicit resume actions
 
-- **Gap:** The shared player now checkpoints and automatically restores progress by content type/canonical video ID, including Miruro and downloads carrying that identity; live broadcasts are excluded. Continue Watching, explicit Resume/Start Over actions and removal/clear-history UI remain absent. Unsupported/custom addon IDs are excluded until collision-safe provider scoping exists. Real playback/restart acceptance remains unverified.
+- **Gap:** The shared player checkpoints and automatically restores progress by content type/canonical video ID, including Miruro and downloads carrying that identity; live broadcasts are excluded. Discover now exposes viewing history with per-video removal, confirmed clear-all and persistence retry on phone/TV. Continue Watching and explicit Resume/Start Over actions remain absent. Unsupported/custom addon IDs are excluded until collision-safe provider scoping exists. Real playback/restart and physical-device history-control acceptance remain unverified.
 - **Benefit:** Return to an unfinished film or episode without finding it and scrubbing manually.
-- **Complete when:** Title pages offer Resume and Start Over; Continue Watching opens the correct episode and re-resolves online sources (including Miruro) rather than replaying saved URLs; videos at 95% completion leave that row. Expose the history store's removal/clear controls. Scope noncanonical addon IDs without breaking resume across source changes or offline downloads. Verify restart/resume, seeking back to zero, completion, source changes, failed opens, retries and offline playback on phone/TV; retain live exclusion.
-- **Start with:** `lib/history.dart`, `lib/screens/player.dart`, `lib/playback.dart`, and title/discovery/anime/download entry points. Persistence tests cover reload, content identity, completion, deletion, corruption and the 100-video retention bound; they do not establish native seek behavior.
+- **Complete when:** Title pages offer Resume and Start Over; Continue Watching opens the correct episode and re-resolves online sources (including Miruro) rather than replaying saved URLs; videos at 95% completion leave that row. Scope noncanonical addon IDs without breaking resume across source changes or offline downloads. Verify restart/resume, seeking back to zero, completion, source changes, failed opens, retries and offline playback on phone/TV; retain live exclusion. Verify the implemented history controls with TalkBack and a physical remote.
+- **Start with:** `lib/history.dart`, `lib/screens/history.dart`, `lib/screens/player.dart`, `lib/playback.dart`, and title/discovery/anime/download entry points. Persistence tests cover reload, content identity, completion, deletion/retry, corruption and the 100-video retention bound. Widget tests cover removal, clear confirmation/cancel, retry after the last row disappears, phone/TV routing and remote scrolling/focus at 1.3× text; they do not establish native seek behavior or physical-device accessibility.
 
 ### 2. Save audio and subtitle preferences
 
@@ -64,14 +64,7 @@ Researched and checked against the source on 2026-11-01. This is a living backlo
 - **Complete when:** These screens follow existing TV components/type sizes; every action is reachable with a visible focus indicator; scrolling reveals focused controls; sheets restore focus; Back behaves predictably. Hide raw season-pack paths where a useful episode/title label exists. Verify with D-pad input and larger text.
 - **Research:** Android's [TV navigation guidance](https://developer.android.com/design/ui/tv/guides/foundations/navigation-on-tv) emphasizes reachable controls, predictable directions and straightforward Back behavior. Reuse `lib/kit/focus.dart` and existing TV layouts.
 
-### 8. Search all enabled searchable catalogs
-
-- **Gap:** Discover picks `catalogs.where((c) => c.searchable).firstOrNull`, so only the first searchable catalog for the selected type receives a query. Movie/series filtering and separate anime search already exist.
-- **Benefit:** Find titles supplied by another enabled catalog without assuming the first catalog contains everything.
-- **Complete when:** Search queries reach all enabled searchable catalogs for the current type, with deduplication by canonical type/ID, bounded requests and independent failure handling. A slow/unreachable addon must not hide successful results. Ignore stale responses after the query/type changes and preserve phone/TV focus behavior. Keep anime's separate provider search unless a concrete need justifies combining it.
-- **Evidence:** `lib/screens/discover.dart` and the catalog capability parsing in `lib/addons.dart`; this recommendation follows from the current implementation rather than competitor feature parity.
-
-### 9. Restore clean validation gates
+### 8. Restore clean validation gates
 
 - **Gap:** `flutter analyze lib test` reports an existing missing-braces lint in `lib/player_keys.dart:17`. The current design checker reports 7 stock-control and 27 raw-colour violations, all also present in committed code; the handoff's older 27-total baseline is stale. Its default theme-directory exemption also misses `lib/theme.dart`.
 - **Benefit:** A clean, accurately configured baseline makes new regressions visible without manually comparing every warning.
