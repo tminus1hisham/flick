@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'addons.dart';
 import 'kit/route.dart';
+import 'live.dart';
 import 'screens/player.dart';
 import 'screens/title.dart';
 import 'screens/torrent.dart';
@@ -20,6 +21,11 @@ typedef Playback = ({
   int? episode,
   Meta? meta,
 });
+
+Future<void> playLive(BuildContext context, String title, LiveSource source, Future<LiveSource> Function() resolve) =>
+    Navigator.push<void>(context, EpisodeRoute(builder: (_) => PlayerScreen(
+      title: title, source: source.url, headers: source.headers, live: true, resolveLive: resolve,
+    )));
 
 /// One episode's [Playback]; the Streams screen and Up Next both build it here so they stay identical.
 Playback episodePlayback(Meta meta, Video video) {

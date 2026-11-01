@@ -7,6 +7,7 @@ import 'kit/rail.dart';
 import 'screens/discover.dart';
 import 'screens/anime.dart';
 import 'screens/downloads.dart';
+import 'screens/live.dart';
 import 'screens/sources.dart';
 import 'screens/torrent.dart';
 import 'state.dart';
@@ -42,7 +43,7 @@ class FlickApp extends StatelessWidget {
       );
 }
 
-/// Discover, Anime and Downloads: a bottom bar on the phone, the [FlickRail] (plus Sources) on TV.
+/// Discover, Anime, Live and Downloads: bottom bar on phone, [FlickRail] plus Sources on TV.
 class Shell extends StatefulWidget {
   const Shell({super.key});
 
@@ -56,7 +57,7 @@ class _ShellState extends State<Shell> {
   // TV only. One scope per tab remembers its last focused item; Left at a tab's edge searches the shell.
   final _rail = FocusScopeNode(debugLabel: 'rail');
   final _tabs = List.generate(
-      4, (i) => FocusScopeNode(debugLabel: 'tab $i', directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope));
+      5, (i) => FocusScopeNode(debugLabel: 'tab $i', directionalTraversalEdgeBehavior: TraversalEdgeBehavior.parentScope));
 
   @override
   void initState() {
@@ -109,8 +110,9 @@ class _ShellState extends State<Shell> {
               padding: const EdgeInsets.only(left: FlickTv.railColumn + FlickTv.contentGap),
               child: IndexedStack(index: _tab, children: [
                 for (final (i, tab) in [
-                  DiscoverScreen(onAddSources: () => _select(3)),
-                  AnimeTab(onAddSources: () => _select(3)),
+                  DiscoverScreen(onAddSources: () => _select(4)),
+                  AnimeTab(onAddSources: () => _select(4)),
+                  LiveTab(active: _tab == 2),
                   Scaffold(appBar: _downloadsBar(), body: const DownloadsScreen()),
                   const SourcesScreen(),
                 ].indexed)
@@ -128,6 +130,7 @@ class _ShellState extends State<Shell> {
                 destinations: const [
                   (icon: Icons.explore_outlined, label: 'Discover'),
                   (icon: animeIcon, label: 'Anime'),
+                  (icon: Icons.live_tv_outlined, label: 'Live'),
                   (icon: Icons.download_outlined, label: 'Downloads'),
                 ],
                 bottom: (icon: Icons.settings_outlined, label: 'Sources'),
@@ -142,8 +145,8 @@ class _ShellState extends State<Shell> {
 
   Widget _phone() => Scaffold(
         // Discover and Anime draw their own headers.
-        appBar: _tab == 2 ? _downloadsBar() : null,
-        body: IndexedStack(index: _tab, children: const [DiscoverScreen(), AnimeTab(), DownloadsScreen()]),
+        appBar: _tab == 3 ? _downloadsBar() : null,
+        body: IndexedStack(index: _tab, children: [const DiscoverScreen(), const AnimeTab(), LiveTab(active: _tab == 2), const DownloadsScreen()]),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),
@@ -152,6 +155,8 @@ class _ShellState extends State<Shell> {
                 icon: Icon(Icons.explore_outlined), selectedIcon: Icon(Icons.explore), label: 'Discover'),
             NavigationDestination(
                 icon: AnimeGlyph(), selectedIcon: AnimeGlyph(filled: true), label: 'Anime'),
+            NavigationDestination(
+                icon: Icon(Icons.live_tv_outlined), selectedIcon: Icon(Icons.live_tv), label: 'Live'),
             NavigationDestination(
                 icon: Icon(Icons.download_outlined), selectedIcon: Icon(Icons.download), label: 'Downloads'),
           ],

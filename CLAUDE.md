@@ -6,8 +6,8 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze lib test`: no issues. Scope to app/test rather than the nested worktree in `.claude`.
-- `flutter test`: 263 tests pass after the integration.
-- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 25 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest).
+- `flutter test`: 271 tests after the FCTV integration.
+- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 30 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest, 5 FctvTest).
 - `flutter build apk --debug`: verify Android packaging and native compilation.
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: 27 existing hits (26 color uses, one legacy progress bar); no new files have hits.
 - `PlayerScreen` cannot be pumped in widget tests without native libmpv. Test pure helpers and the independent TvPlayerControls instead.
@@ -21,6 +21,8 @@ This file is the shared source for continuing the work in a new session. Read it
 ## Architecture
 | File | Holds |
 |---|---|
+| `lib/live.dart`, `lib/screens/live.dart` | Typed native Live bridge and phone/TV sports/event/channel screens. Four phone destinations and five TV destinations including Sources. |
+| `android/.../Fctv.kt` | Worker-thread FCTV API, bounded protobuf decoding, request headers/session URLs and direct HLS preflight. Owned and disposed by MainActivity. |
 | `lib/addons.dart` | Stremio addon protocol client: manifest / catalog / meta / stream / subtitles over `http`, 15 s timeout, UTF-8 decoding. Bundled addons are manifest snapshots (Cinemeta locked; Public Domain Movies, WatchHub and OpenSubtitles v3 can be switched on and off). User addons and the switches persist in shared_preferences. Every network failure becomes `AddonException(AddonError.unreachable)`, so the client can't tell offline from an addon that is down. `describe()` parses stream text (quality, seeders, size, origin). `magnetFor()` builds a magnet with `tr=` trackers. `openExternal()` calls the native channel. |
 | `lib/state.dart` | Globals: `settings` (`Settings`: `autoplayNext`), `saved`, `downloads`, `addons`. `addons` and `downloads` are not final so tests can swap in a fake. |
 | `lib/playback.dart` | `Playback` record (title, subtitle, type, canonical Stremio `videoId` such as `tt123:4:2`, season, episode) and `play(context, stream, playback)`, the only way screens start playback. Routing: externalUrl â†’ Android ACTION_VIEW; url â†’ `PlayerScreen` with headers; infoHash â†’ `TorrentScreen`. |
@@ -62,6 +64,15 @@ This file is the shared source for continuing the work in a new session. Read it
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
 ## Status (2026-11-01)
+
+### FCTV Live adapter
+Playback repair: empty region fields returned placeholder streams; the APK's bundled AS/ID fallback returns real signed relays without a location lookup. Their CDN metadata requires per-segment URL construction and `_s2` signing. `FctvMedia.kt` now handles that HTTP/CDN path through a bounded loopback HLS proxy. The provider's public bootstrap supplies the current API origin and runtime configuration. Diagnosis, implementation scope and evidence: `design/live-diagnosis.md`.
+
+Added Live between Anime and Downloads on phone and TV, covering the APK's 19 sports, event/channel browsing, lazy first-load, inline errors, refresh, TV focus, and live-specific shared-player controls. Native `Fctv.kt` handles bounded protobuf/API requests, refreshed API/media headers and URL/session decoding without new dependencies. The proxy covers child playlists, media, keys/init files, ranges, scoped redirects and bounded retries. The resolver preflights through the same transport; Retry resolves a new URL/session and replaces the proxy, and Back/activity destruction close resources. Details, APK fingerprint and protocol: `design/live.md`.
+
+Validation after repair: 271 Flutter tests and 39 Kotlin tests pass, static analysis is clean, and the debug APK built at `build/app/outputs/flutter-apk/app-debug.apk`. Design checks retain 27 pre-existing violations, with none in the new Live files. Native tests cover CDN signature/selection, HLS URI rewriting, keys/init files, ranges/redirects, credential scoping, private-host rejection and cleanup. An ignored real-source Kotlin check fetched 20 distinct segments across ten playlist refreshes through the actual proxy. Two desktop channel families (DZ ES and TyR) returned valid media. Longer desktop probes encountered a CDN timeout and source removal; these runs do not establish uninterrupted ten-minute playback.
+
+The phone emulator loaded events/channels and opened Cercle Brugge vs Royal Antwerp / DZ BE. Read-only inspection of the actual media_kit state confirmed `playing=true`, `buffering=false`, `started=true`, 1280x720 video, position advancing past 693 seconds and no error; Android AudioFlinger showed an active 48 kHz track owned by Flick. The native proxy served a real playlist before Back and refused connections afterward, confirming shutdown. A fresh launch with the final APK again produced advancing 720p playback and passed the Back/shutdown check. Temporary debugger forwards were removed and the emulator was closed. Its rendered screenshot remains black with `EGL_BAD_ATTRIBUTE` errors, so visible-picture and physical-device acceptance are not claimed. No physical phone was driven. Ads, accounts, optional HLS injection, actual-country routing and the proprietary P2P engine remain excluded. Decompiled sources and probe/screenshot evidence are ignored under `.scratch/fctv-*`.
 
 ### Main integration
 All important work branches are integrated into `main`, including TV Title/Player, phone seek controls, native offline download pause/resume/delete and foreground notifications. The sections below retain prior review/device evidence; their historical "unmerged" statements are superseded by this status.
@@ -183,6 +194,7 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
+- FCTV: verify visible video/audio on the user's physical phone and Android TV using the repaired APK; the local phone emulator reports advancing 720p playback but cannot render the picture because of its EGL failure. Actual-country routing and other source strategies remain outside the proven fallback/CDN path. See `design/live-diagnosis.md` and `design/live.md`.
 - TV-specific Downloads, Sources and Torrent start layouts remain future work; the existing implementations are available through the TV shell. TV Discover, Anime, Title and Player are merged.
 - Verify the integrated APK on a phone/TV emulator, including resumed native downloads, streaming while downloading and the artwork buffering transition. Prior TV video decoding remained unverified because of emulator EGL errors.
 - Check the updated Anime icon on the phone with the next APK build.

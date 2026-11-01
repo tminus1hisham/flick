@@ -16,10 +16,11 @@ class TvPlayerControls extends StatefulWidget {
     required this.buffer, required this.playing, required this.panel, required this.tracks,
     required this.buffering, required this.onToggle, required this.onSeek, required this.onExit,
     required this.onTracks, required this.onCloseTracks, required this.onRetry,
-    this.logo, this.poster, this.waiting = false, this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.upNext, this.upNextVisible = false, super.key});
+    this.logo, this.poster, this.waiting = false, this.live = false, this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.upNext, this.upNextVisible = false, super.key});
   final String title;
   final String? subtitle, error, logo, poster;
   final bool waiting;
+  final bool live;
   final Duration position, duration, buffer;
   final bool playing, panel, retrying, upNextVisible, subtitlesOn;
   final Widget tracks;
@@ -76,6 +77,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   void _cardFocus() => _arm();
 
   void _seek(bool forward, KeyEvent event) {
+    if (widget.live) { _show(); return; }
     if (event is! KeyRepeatEvent || _heldKey != event.logicalKey) {
       _heldAt = event.timeStamp;
       _heldKey = event.logicalKey;
@@ -204,7 +206,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     );
 
   Widget _barView() => Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-    Semantics(label: '${playerTime(widget.position)} of ${playerTime(widget.duration)}', child: SizedBox(height: 4,
+    if (!widget.live) Semantics(label: '${playerTime(widget.position)} of ${playerTime(widget.duration)}', child: SizedBox(height: 4,
       child: LayoutBuilder(builder: (context, box) => Stack(children: [
         const Positioned.fill(child: ColoredBox(color: FlickTokens.outline)),
         Align(alignment: Alignment.centerLeft, child: SizedBox(width: box.maxWidth * _fraction(widget.buffer), height: 4,
@@ -218,7 +220,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       _button(widget.playing ? Icons.pause : Icons.play_arrow_rounded, widget.playing ? 'Pause' : 'Play',
         () { widget.onToggle(); _arm(); }, node: _play, disc: true),
       const SizedBox(width: 16),
-      Expanded(child: Text('${playerTime(widget.position)} / ${playerTime(widget.duration)}',
+      Expanded(child: Text(widget.live ? 'Live' : '${playerTime(widget.position)} / ${playerTime(widget.duration)}',
         style: monoStyle.copyWith(fontSize: 16, height: 22 / 16))),
       _button(Icons.closed_caption_outlined, 'Subtitles', widget.onTracks, node: _tracks, selected: widget.subtitlesOn),
       if (widget.onNext != null) ...[

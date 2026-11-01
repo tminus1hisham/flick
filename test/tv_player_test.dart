@@ -11,9 +11,10 @@ import 'package:flick/theme.dart';
 import 'package:flick/stall.dart';
 
 class _Harness extends StatefulWidget {
-  const _Harness({super.key, this.duration = const Duration(minutes: 10), this.waiting = false});
+  const _Harness({super.key, this.duration = const Duration(minutes: 10), this.waiting = false, this.live = false});
   final Duration duration;
   final bool waiting;
+  final bool live;
   @override
   State<_Harness> createState() => _HarnessState();
 }
@@ -30,6 +31,7 @@ class _HarnessState extends State<_Harness> {
   void pause() => setState(() => playing = false);
   @override
   Widget build(BuildContext context) => Scaffold(body: TvPlayerControls(
+    live: widget.live,
     title: 'Flash Gordon', subtitle: 'S1 E2 · The Tunnel of Terror',
     position: const Duration(minutes: 2), duration: widget.duration, buffer: const Duration(minutes: 3),
     playing: playing, panel: panel, error: error,
@@ -83,7 +85,7 @@ void main() {
   });
 
   Future<GlobalKey<_HarnessState>> pump(WidgetTester tester, {Duration duration = const Duration(minutes: 10),
-      Size size = const Size(960, 540), double scale = 1, bool waiting = false}) async {
+      Size size = const Size(960, 540), double scale = 1, bool waiting = false, bool live = false}) async {
     device.tv = true;
     FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
     tester.view.physicalSize = size;
@@ -93,7 +95,7 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     final harness = GlobalKey<_HarnessState>();
     await tester.pumpWidget(MaterialApp(theme: flickTheme(tv: true), shortcuts: tvShortcuts,
-      home: _Harness(key: harness, duration: duration, waiting: waiting)));
+      home: _Harness(key: harness, duration: duration, waiting: waiting, live: live)));
     await tester.pumpAndSettle();
     return harness;
   }
@@ -107,6 +109,14 @@ void main() {
       const JSONMethodCodec().encodeMethodCall(const MethodCall('popRoute')), (_) {});
     await tester.pumpAndSettle();
   }
+
+  testWidgets('live controls hide duration and ignore seeking even when duration is known', (tester) async {
+    final h = await pump(tester, live: true);
+    await key(tester, LogicalKeyboardKey.arrowRight);
+    expect(h.currentState!.seeks, isEmpty);
+    expect(find.text('Live'), findsOneWidget);
+    expect(find.text('2:00 / 10:00'), findsNothing);
+  });
 
   testWidgets('hidden Select toggles once and focuses Play; bar arrows traverse without seeking', (tester) async {
     final h = await pump(tester);

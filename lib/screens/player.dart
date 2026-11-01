@@ -13,6 +13,7 @@ import '../kit/route.dart';
 import '../kit/focus.dart';
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
+import '../live.dart';
 import '../stall.dart';
 import '../state.dart';
 import '../theme.dart';
@@ -131,8 +132,10 @@ bool stoppedEarly({
   required Duration position,
   required Duration duration,
   required Duration buffer,
+  bool live = false,
 }) {
   if (!started) return true;
+  if (live) return true;
   if (duration <= Duration.zero || position >= duration * 0.9) return false;
   return error && buffer - position < const Duration(seconds: 1);
 }
@@ -322,9 +325,13 @@ class PlayerScreen extends StatefulWidget {
     this.hash,
     this.torrent,
     this.next,
+    this.live = false,
+    this.resolveLive,
     super.key,
   });
   final Playback? playback;
+  final bool live;
+  final Future<LiveSource> Function()? resolveLive;
   final String? filename, hash;
   final int? size;
 
@@ -347,6 +354,7 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  late LiveSource _source = (url: widget.source, headers: widget.headers);
   final _player = Player(
     configuration: const PlayerConfiguration(bufferSize: 400 * 1024 * 1024),
   );
@@ -644,6 +652,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   bool get _stoppedEarly => stoppedEarly(
+    live: widget.live,
     started: _started,
     error: _lastPlaybackError != null,
     position: _pos,
@@ -757,7 +766,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _showError(Object e) {
-    debugPrint('player: $e');
+    debugPrint(widget.live ? 'live playback error' : 'player: $e');
     final message = '$e'.toLowerCase();
     if (message.contains('subtitle') || message.contains('sub-add')) {
       // _choose reports a file that failed to load; these never end playback.
@@ -781,6 +790,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _fetchSubtitles() async {
+    if (widget.live) return;
     if (_loading || _fetched) return;
     final p = widget.playback;
     if (p == null) return;
@@ -998,6 +1008,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_retrying) return;
     setState(() => _retrying = true);
     try {
+      if (widget.resolveLive != null) {
+        final source = await widget.resolveLive!();
+        if (!mounted) return;
+        _source = source;
+      }
       setState(() {
         _error = null;
         // Reloading the file drops the subtitle files added to it.
@@ -1005,9 +1020,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       _added.clear();
       _lastPlaybackError = null;
-      await _open(_pos);
+      await _open(widget.live ? Duration.zero : _pos);
     } catch (e) {
-      _showError(e);
+      if (widget.live) {
+        _fatalError();
+      } else {
+        _showError(e);
+      }
     } finally {
       if (mounted) setState(() => _retrying = false);
     }
@@ -1041,7 +1060,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _openedAt = start;
     _beginEpisode(opening: true);
     return _player.open(
-      Media(widget.source, start: start, httpHeaders: widget.headers),
+      Media(_source.url, start: start, httpHeaders: _source.headers),
     );
   }
 
@@ -1086,6 +1105,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   void _nudge(int seconds) {
+    if (widget.live) return;
     // From _pos, not state.position: open() reports 0 until mpv seeks.
     final counted = _burst.nudge(
       seconds,
@@ -1114,7 +1134,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _controls(VideoState state) => Stack(
     children: [
       MaterialVideoControls(state),
-      Positioned.fill(
+      if (!widget.live) Positioned.fill(
         child: IgnorePointer(
           ignoring: _panel,
           child: LayoutBuilder(
@@ -1210,6 +1230,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     ];
     final theme = MaterialVideoControlsThemeData(
+      displaySeekBar: !widget.live,
       topButtonBar: bar,
       topButtonBarMargin: EdgeInsets.zero,
       buttonBarHeight: _barHeight,
@@ -1219,17 +1240,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         SizedBox(
           width: primaryBarWidth,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: widget.live ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
             children: [
-              _SeekButton(_player, back: true, onPressed: () => _nudge(-10)),
+              if (!widget.live) _SeekButton(_player, back: true, onPressed: () => _nudge(-10)),
               const MaterialPlayOrPauseButton(iconSize: FlickTokens.grid * 12),
-              _SeekButton(_player, back: false, onPressed: () => _nudge(10)),
+              if (!widget.live) _SeekButton(_player, back: false, onPressed: () => _nudge(10)),
             ],
           ),
         ),
       ],
       bottomButtonBar: [
-        const MaterialPositionIndicator(),
+        if (widget.live) const Text('Live', style: FlickText.button) else const MaterialPositionIndicator(),
         const Spacer(),
         IconButton(
           tooltip: 'Subtitles',
@@ -1447,6 +1468,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ? null
                   : _upNextView(next, _player.state.position);
               return TvPlayerControls(
+                live: widget.live,
                 title: widget.playback?.title ?? widget.title,
                 subtitle: widget.playback?.subtitle,
                 position: _player.state.position,

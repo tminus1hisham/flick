@@ -131,7 +131,7 @@ void main() {
       expect(railFocus(), tab);
       expect(tester.getSize(find.byKey(const ValueKey('rail-panel'))).width, FlickTv.railExpanded);
       expect(tester.getTopLeft(find.byKey(const ValueKey('rail-panel'))).dx, 0);
-      for (final label in ['Discover', 'Anime', 'Downloads', 'Sources']) {
+      for (final label in ['Discover', 'Anime', 'Live', 'Downloads', 'Sources']) {
         expect(labelOpacity(tester, label), 1, reason: label);
       }
       expect(tester.getTopLeft(find.byType(screen)).dx, FlickTv.railColumn + FlickTv.contentGap,
@@ -205,13 +205,13 @@ void main() {
   testWidgets('f: Sources is a rail destination inside the shell, not a route', (tester) async {
     await pumpApp(tester);
     await systemBack(tester);
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       await key(tester, LogicalKeyboardKey.arrowDown);
     }
     expect(railFocus(), 'Sources');
 
     await key(tester, LogicalKeyboardKey.select);
-    expect(shownTab(tester), 3);
+    expect(shownTab(tester), 4);
     expect(find.byType(SourcesScreen), findsOneWidget);
     expect(ModalRoute.of(tester.element(find.byType(SourcesScreen)))!.isFirst, isTrue);
     expect(find.byType(FlickRail), findsOneWidget);
@@ -221,7 +221,7 @@ void main() {
     await pumpApp(tester, tv: false);
     expect(find.byType(FlickRail), findsNothing);
     expect(find.byType(NavigationBar), findsOneWidget);
-    for (final tab in ['Discover', 'Anime', 'Downloads']) {
+    for (final tab in ['Discover', 'Anime', 'Live', 'Downloads']) {
       expect(find.descendant(of: find.byType(NavigationBar), matching: find.text(tab)), findsOneWidget);
     }
     expect(find.byType(SourcesScreen), findsNothing);

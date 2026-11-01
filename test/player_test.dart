@@ -34,6 +34,10 @@ void main() {
     test('an unknown duration is the end of the video', () {
       expect(early(duration: Duration.zero), isFalse);
     });
+    test('live termination is recoverable even with no duration or error', () {
+      expect(stoppedEarly(live: true, started: true, error: false,
+        position: Duration.zero, duration: Duration.zero, buffer: Duration.zero), isTrue);
+    });
     test('early after a stream error with nothing buffered is a failure', () {
       expect(early(), isTrue);
     });

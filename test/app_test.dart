@@ -65,7 +65,7 @@ void main() {
     await tester.pumpWidget(const FlickApp());
     await tester.pumpAndSettle();
 
-    for (final tab in ['Discover', 'Anime', 'Downloads']) {
+    for (final tab in ['Discover', 'Anime', 'Live', 'Downloads']) {
       expect(find.text(tab), findsWidgets);
     }
     expect(find.text('The Kid'), findsOneWidget);
