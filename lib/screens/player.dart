@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/gestures.dart';
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -13,6 +14,7 @@ import '../kit/route.dart';
 import '../kit/focus.dart';
 import '../addons.dart' show Subtitle;
 import '../playback.dart';
+import '../pip.dart';
 import '../live.dart';
 import '../player_keys.dart' show LiveSeekRange, liveSeekRange;
 import '../stall.dart';
@@ -425,6 +427,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final _tvRefresh = ValueNotifier(0);
   final _liveRange = ValueNotifier<LiveSeekRange?>(null);
   final _video = GlobalKey<VideoState>();
+  late final _pip = PictureInPicture(
+    onStop: () => _player.pause().catchError(_showError),
+  );
+  bool get _androidPip =>
+      !kIsWeb && !device.tv && defaultTargetPlatform == TargetPlatform.android;
 
   // Up Next pushes the next player before this one is disposed: only the last
   // one out restores the system bars and rotation.
@@ -435,6 +442,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     super.initState();
     _live++;
     _immersive();
+    _pip.addListener(_pipChanged);
+    if (_androidPip) _pip.init();
     _subs
       ..add(
         _player.stream.position.listen((p) {
@@ -478,6 +487,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       )
       ..add(
         _player.stream.playing.listen((playing) {
+          if (_androidPip) _pip.playing(playing);
           if (device.tv) _tvRefresh.value++;
           if (!playing && _lastPlaybackError != null) _checkStopped();
         }),
@@ -516,6 +526,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _nextBar.value++;
       _upNext();
     }, onError: (Object e) => debugPrint('up next: $e'));
+  }
+
+  void _pipChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _enterPip() async {
+    if (_video.currentState?.isFullscreen() == true) {
+      await _video.currentState?.exitFullscreen();
+    }
+    if (!mounted) return;
+    if (!await _pip.enter() && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Picture-in-picture is unavailable. Check the app’s picture-in-picture permission in Android settings.',
+          ),
+        ),
+      );
+    }
   }
 
   /// The player is landscape and full-bleed, also after leaving fullscreen.
@@ -1097,6 +1127,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _pip.removeListener(_pipChanged);
+    _pip.dispose();
     _entryFocus.dispose();
     _headingFocus.dispose();
     _tvLanguageFocus.dispose();
@@ -1206,7 +1238,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// media_kit's controls with the double-tap seek layer on top, in the page
   /// and in media_kit's fullscreen route. While a burst is open its side
   /// takes the taps itself, so media_kit doesn't flash the controls on each.
-  Widget _controls(VideoState state) => Stack(
+  Widget _controls(VideoState state) => ListenableBuilder(
+    listenable: _pip,
+    builder: (_, _) =>
+        _pip.active ? const SizedBox.shrink() : _touchControls(state),
+  );
+
+  Widget _touchControls(VideoState state) => Stack(
     children: [
       MaterialVideoControls(state),
       Positioned.fill(
@@ -1376,6 +1414,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ),
           ),
         const MaterialFullscreenButton(),
+        ListenableBuilder(
+          listenable: _pip,
+          builder: (_, _) => !_pip.supported
+              ? const SizedBox.shrink()
+              : StreamBuilder<bool>(
+                  stream: _player.stream.playing,
+                  initialData: _player.state.playing,
+                  builder: (_, playing) => IconButton(
+                    tooltip: 'Picture-in-picture',
+                    onPressed: playing.data == true ? _enterPip : null,
+                    icon: const Icon(Icons.picture_in_picture_alt),
+                  ),
+                ),
+        ),
       ],
       seekBarColor: Colors.white.withValues(alpha: 0.2),
       seekBarBufferColor: Colors.white.withValues(alpha: 0.45),
@@ -1411,13 +1463,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   child: Video(
                     key: _video,
                     controller: _controller,
+                    // Android onStop pauses playback after PiP is dismissed.
+                    pauseUponEnteringBackgroundMode: !_androidPip,
                     controls: _controls,
                     // media_kit's default shows the bars and unlocks rotation.
                     onExitFullscreen: _immersive,
                   ),
                 ),
               ),
-              if (_error == null)
+              if (!_pip.active && _error == null)
                 Positioned.fill(
                   child: ExcludeFocus(
                     excluding: _panel,
@@ -1434,7 +1488,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
-              if (next != null)
+              if (!_pip.active && next != null)
                 Positioned.fill(
                   child: SafeArea(
                     child: Padding(
@@ -1467,7 +1521,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
-              if (_error != null)
+              if (!_pip.active && _error != null)
                 Positioned.fill(
                   child: ColoredBox(
                     color: FlickTokens.background,
@@ -1514,7 +1568,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ),
-              if (_panel)
+              if (!_pip.active && _panel)
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -1522,6 +1576,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     onTap: () => _togglePanel(false),
                   ),
                 ),
+              if (!_pip.active)
               Positioned.fill(
                 child: Align(
                   alignment: Alignment.centerRight,
