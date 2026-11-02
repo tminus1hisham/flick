@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'addons.dart';
+import 'history.dart';
 import 'kit/route.dart';
 import 'live.dart';
 import 'queue.dart';
@@ -13,6 +14,7 @@ import 'upnext.dart';
 
 /// What the player needs to name a title and find its subtitles; [meta] (series only) finds the next episode.
 typedef Playback = ({
+  ContentScope? scope,
   String title,
   String? subtitle,
   String? logo,
@@ -32,7 +34,7 @@ Future<void> playLive(BuildContext context, String title, LiveSource source, Fut
     )));
 
 Playback moviePlayback(QueuedMovie item) => (title: item.title, subtitle: null, logo: null,
-  poster: item.poster, type: 'movie', videoId: item.id, season: null, episode: null, meta: null);
+  poster: item.poster, type: 'movie', videoId: item.id, season: null, episode: null, scope: item.scope, meta: null);
 
 class MovieNext {
   MovieNext(this.choice);
@@ -60,6 +62,7 @@ Playback episodePlayback(Meta meta, Video video) {
     season: video.season,
     episode: video.episode,
     meta: meta,
+    scope: videoScope(video.id, meta.scope),
   );
 }
 

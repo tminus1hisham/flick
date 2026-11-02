@@ -189,7 +189,7 @@ void main() {
       videoId: 'tt123:1:2',
       season: 1,
       episode: 2,
-      meta: null,
+      scope: null, meta: null,
     ),
   );
 

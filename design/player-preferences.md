@@ -4,6 +4,8 @@ Use the existing phone/TV track panels. A short inline explanation says selectio
 
 Subsequent videos match fresh tracks by language, preserving existing engine fallback when no match exists. Explicit subtitle language overrides the device/audio heuristic and an engine-selected subtitle. With no preference the device-language heuristic remains. Stream-provided subtitle files precede addon files, then embedded tracks; embedded-only offline playback needs no network result. Subtitle files retain the existing isolated HTTP transport without video headers.
 
+A caption explicitly saved for a download is selected locally before these language defaults, including captions without language metadata. Global Off and a current manual choice still win. Saved captions suppress automatic subtitle-server requests; Find online subtitles is explicit. See `offline-subtitles.md` for persistence and cleanup.
+
 Retry reapplies the current video's selected track/file or Off before considering saved preferences. This also preserves a commentary track or a track with unknown language within the current video. Unknown-language tracks are never persisted as a language preference; the panel explains that limit. Reopening resets automatic-selection flags, and a generation guard discards subtitle operations from the previous open.
 
 Persistence and pure selection tests in test/player_tracks_test.dart cover reload, aliases, new track IDs, independent audio/subtitle values, Off/re-enable, missing-language fallback, explicit overrides, source precedence, offline embedded tracks and Retry. Native track switching, restart/offline playback, real subtitle failures and physical phone/TV accessibility remain acceptance work.

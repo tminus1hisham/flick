@@ -13,6 +13,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Addon implements Addon {
+  @override
+  String get scopeId => id;
   _Addon(this.name);
   @override
   final String name;
@@ -60,9 +62,10 @@ class _Downloads extends Downloads {
     required String title,
     String? poster,
     required Playback playback,
+    List<Subtitle> subtitles = const [],
   }) async {
     requests.add((url: url, headers: headers,
-        data: StreamDownload(title: title, poster: poster, playback: playback)));
+        data: StreamDownload(title: title, poster: poster, playback: playback, subtitles: subtitles)));
     if (pending != null) await pending!.future;
     if (fail) throw StateError('Queue unavailable');
   }
@@ -98,7 +101,7 @@ Meta _meta(String type, [List<Video> videos = const [], bool artwork = false]) =
       background: null,
       logo: artwork ? 'https://images.example/logo.png' : null,
       description: null,
-      releaseInfo: '2013',
+      scope: null, releaseInfo: '2013',
       runtime: null,
       imdbRating: null,
       genres: const ['Animation'],
@@ -112,7 +115,7 @@ Future<void> _open(WidgetTester tester, Addons fake, String type) async {
   addons = fake;
   await tester.pumpWidget(MaterialApp(
     theme: flickTheme(),
-    home: TitleScreen((id: 'tt1', type: type, name: 'Rick and Morty', poster: null, releaseInfo: null)),
+    home: TitleScreen((id: 'tt1', type: type, name: 'Rick and Morty', poster: null, scope: null, releaseInfo: null)),
   ));
   await tester.pumpAndSettle();
 }
@@ -187,7 +190,7 @@ void main() {
       videoId: p.videoId,
       season: p.season,
       episode: p.episode,
-      meta: null,
+      scope: null, meta: null,
     ));
     final json = jsonDecode(encoded) as Map<String, dynamic>;
     expect((json['playback'] as Map).containsKey('meta'), isFalse);
@@ -205,7 +208,7 @@ void main() {
       videoId: 'tt123',
       season: null,
       episode: null,
-      meta: null,
+      scope: null, meta: null,
     );
     const data = StreamDownload(title: 'The Kid', playback: p);
     final decoded = StreamDownload.fromMetaData(data.toMetaData())!;

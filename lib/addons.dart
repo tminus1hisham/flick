@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'history.dart';
 
-typedef MetaPreview = ({String id, String type, String name, String? poster, String? releaseInfo});
+typedef MetaPreview = ({String id, String type, String name, String? poster, String? releaseInfo, ContentScope? scope});
+Object previewKey(MetaPreview p) => videoScope(p.id, p.scope) == null ? p.id : (p.type, p.id, p.scope);
+
 typedef Video = ({String id, String title, int? season, int? episode, DateTime? released, String? thumbnail});
 typedef Meta = ({
+  ContentScope? scope,
   String id,
   String type,
   String name,
@@ -53,7 +58,11 @@ class AddonException implements Exception {
 
 /// One addon manifest served from [base] (the manifest URL minus `/manifest.json`).
 class Addon {
-  Addon(this._m, this.base, {this.bundled = false, this.locked = false});
+  Addon(this._m, this.base, {this.bundled = false, this.locked = false, String? scopeId})
+      : scopeId = scopeId ?? (bundled ? 'bundled:${_m['id']}' :
+          List.generate(16, (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0')).join());
+  // A local identity keeps configured URLs and credentials out of content checkpoints.
+  final String scopeId;
   final Map<String, dynamic> _m;
   final String base;
   final bool bundled;
@@ -150,29 +159,35 @@ class Addons extends ChangeNotifier {
   /// Reads persisted addons; no network, so [all] and [active] are right on the first frame.
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
+    var migrate = false;
     try {
       final raw = _prefs.getString('addons');
+      final records = raw == null ? const [] : jsonDecode(raw) as List;
+      migrate = records.any((e) => e is Map && e['scopeId'] == null && _validManifest(e['manifest']));
       _user = [
-        for (final e in raw == null ? const [] : jsonDecode(raw) as List)
+        for (final e in records)
           if (e is Map && e['url'] is String && _validManifest(e['manifest']))
-            Addon((e['manifest'] as Map).cast<String, dynamic>(), _baseOf(e['url'] as String)),
+            Addon((e['manifest'] as Map).cast<String, dynamic>(), _baseOf(e['url'] as String), scopeId: e['scopeId'] as String?),
       ]
         // Added by link before it was built in (Torrentio): the built-in copy replaces it.
         ..removeWhere((u) => _bundled.any((b) => b.id == u.id));
     } catch (_) {
       _user = [];
+      migrate = false;
     }
     try {
       _disabled = {...?_prefs.getStringList('addonsDisabled')};
     } catch (_) {
       _disabled = {};
     }
+    // Persist local identities before any custom content can create a checkpoint.
+    if (migrate) { await _save(); }
   }
 
   Future<void> _save() async {
-    await _prefs.setString('addons', jsonEncode([
-      for (final a in _user) {'url': '${a.base}/manifest.json', 'manifest': a._m},
-    ]));
+    if (!await _prefs.setString('addons', jsonEncode([
+      for (final a in _user) {'url': '${a.base}/manifest.json', 'manifest': a._m, 'scopeId': a.scopeId},
+    ]))) { throw StateError('Could not save addon identities'); }
     await _prefs.setStringList('addonsDisabled', _disabled.toList());
     notifyListeners();
   }
@@ -266,6 +281,7 @@ class Addons extends ChangeNotifier {
             type: _titleType(_str(m['type']) ?? c.type),
             name: _str(m['name']) ?? '',
             poster: _str(m['poster']),
+            scope: videoScope(m['id'] as String, (provider: c.addon.scopeId, titleId: m['id'] as String)),
             releaseInfo: _str(m['releaseInfo']),
           ),
     ];
@@ -276,6 +292,17 @@ class Addons extends ChangeNotifier {
     type = _titleType(type);
     final a = active.where((a) => a.serves('meta', type, id)).firstOrNull;
     if (a == null) throw AddonException(AddonError.invalid);
+    return _metaFrom(a, type, id);
+  }
+
+  Future<Meta> scopedMeta(String type, String id, ContentScope? scope) async {
+    if (scope == null) return meta(type, id);
+    final a = active.where((a) => a.scopeId == scope.provider && a.serves('meta', _titleType(type), id)).firstOrNull;
+    if (a == null) throw AddonException(AddonError.invalid);
+    return _metaFrom(a, _titleType(type), id);
+  }
+
+  Future<Meta> _metaFrom(Addon a, String type, String id) async {
     final m = (await _get('${a.base}/meta/${_seg(type)}/${_seg(id)}.json'))['meta'];
     if (m is! Map) throw AddonException(AddonError.invalid);
     return (
@@ -286,6 +313,7 @@ class Addons extends ChangeNotifier {
       background: _str(m['background']),
       logo: _str(m['logo']),
       description: _str(m['description']),
+      scope: (provider: a.scopeId, titleId: id),
       releaseInfo: _str(m['releaseInfo']),
       runtime: _str(m['runtime']),
       imdbRating: _str(m['imdbRating']),

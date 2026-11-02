@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart';
+import '../history.dart';
 import '../kit/focus.dart';
+import '../kit/sidebar.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
@@ -116,7 +118,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
-  void _queue() => Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieQueueScreen()));
+  void _queue() {
+    if (context.tv) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieQueueScreen()));
+    } else {
+      showPlaybackSidebar<void>(context, (_) => const MovieQueueScreen());
+    }
+  }
 
   void _history() => Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryScreen(history)));
 
@@ -647,9 +655,9 @@ class CatalogFeed extends StatefulWidget {
 
 class _CatalogFeedState extends State<CatalogFeed> {
   final _items = <MetaPreview>[];
-  final _ids = <(String, String)>{};
+  final _ids = <(String, String, ContentScope?)>{};
   final _searchOffsets = <Catalog, int>{};
-  final _searchSeen = <Catalog, Set<(String, String)>>{};
+  final _searchSeen = <Catalog, Set<(String, String, ContentScope?)>>{};
   final _searchDone = <Catalog>{};
   final _searchFailures = <Catalog, Object>{};
   String? _genre;
@@ -701,7 +709,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
 
   // TV: one focus node per title, so a move can focus an index that was not built yet.
   final _scroll = ScrollController();
-  final _focus = <String, FocusNode>{};
+  final _focus = <Object, FocusNode>{};
   double _row = 0;
 
   @override
@@ -718,7 +726,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
     final from = primaryFocus;
     if (from == null) return null;
     final down = intent.direction == TraversalDirection.down;
-    final index = _items.indexWhere((m) => _focus[m.id] == from);
+    final index = _items.indexWhere((m) => _focus[previewKey(m)] == from);
     if (index < 0 || !_scroll.hasClients ||
         (!down && intent.direction != TraversalDirection.up) || (!down && index < FlickTv.columns)) {
       from.focusInDirection(intent.direction);
@@ -730,14 +738,14 @@ class _CatalogFeedState extends State<CatalogFeed> {
       if (_error != null) from.focusInDirection(intent.direction);
       return null;
     }
-    final built = _focus[_items[target].id];
+    final built = _focus[previewKey(_items[target])];
     if (built?.context != null) {
       tvReveal(built!);
       return null;
     }
     final p = _scroll.position;
     p.jumpTo((p.pixels + rows * (_row + FlickTv.gridGap)).clamp(p.minScrollExtent, p.maxScrollExtent));
-    final id = _items[target].id;
+    final id = previewKey(_items[target]);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final node = _focus[id];
       if (mounted && node?.context != null) tvReveal(node!);
@@ -768,7 +776,7 @@ class _CatalogFeedState extends State<CatalogFeed> {
       final page = await addons.catalog(catalog, search: widget.query, genre: _genre, skip: _items.length);
       if (!mounted || generation != _generation) return;
       // Pages can overlap; a page with nothing new ends the feed, and Hero tags stay unique.
-      final fresh = page.where((m) => _ids.add((m.type, m.id))).toList();
+      final fresh = page.where((m) => _ids.add((m.type, m.id, m.scope))).toList();
       _items.addAll(fresh);
       _done = fresh.isEmpty;
     } catch (e) {
@@ -789,13 +797,13 @@ class _CatalogFeedState extends State<CatalogFeed> {
           final skip = _searchOffsets[catalog] ?? 0;
           final page = await addons.catalog(catalog, search: widget.query, skip: skip);
           if (!mounted) return;
-          final seen = _searchSeen.putIfAbsent(catalog, () => <(String, String)>{});
-          final fresh = page.where((m) => seen.add((m.type, m.id))).toList();
+          final seen = _searchSeen.putIfAbsent(catalog, () => <(String, String, ContentScope?)>{});
+          final fresh = page.where((m) => seen.add((m.type, m.id, m.scope))).toList();
           setState(() {
             _searchOffsets[catalog] = skip + page.length;
             if (fresh.isEmpty) _searchDone.add(catalog);
             _searchFailures.remove(catalog);
-            _items.addAll(fresh.where((m) => _ids.add((m.type, m.id))));
+            _items.addAll(fresh.where((m) => _ids.add((m.type, m.id, m.scope))));
           });
         } catch (e) {
           if (!mounted) return;
@@ -817,8 +825,8 @@ class _CatalogFeedState extends State<CatalogFeed> {
   // unbuilt target index without changing the artwork or caption widgets.
   Widget _buildTvItem(BuildContext context, int index) => _TvPoster(
         _items[index],
-        focusNode: _focus.putIfAbsent(_items[index].id, () => FocusNode(debugLabel: 'poster $index')),
-        key: ValueKey(_items[index].id),
+        focusNode: _focus.putIfAbsent(previewKey(_items[index]), () => FocusNode(debugLabel: 'poster $index')),
+        key: ValueKey(previewKey(_items[index])),
       );
 
   Widget _buildTvSkeleton(BuildContext context, int index) => const _TvPosterSkeleton();
@@ -995,7 +1003,7 @@ void _openTitle(BuildContext context, MetaPreview m) {
     type: m.type == 'anime' ? 'series' : m.type,
     name: m.name,
     poster: m.poster,
-    releaseInfo: m.releaseInfo,
+    scope: m.scope, releaseInfo: m.releaseInfo,
   );
   Navigator.push(
     context,
@@ -1037,7 +1045,7 @@ class _TvPoster extends StatelessWidget {
             child: AspectRatio(
               aspectRatio: FlickTv.posterAspect,
               child: Hero(
-                tag: m.id,
+                tag: previewKey(m),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
                   // A poster still loading reads as a card, not a hole.
@@ -1147,7 +1155,7 @@ class _PosterState extends State<_Poster> {
               AspectRatio(
                 aspectRatio: 2 / 3,
                 child: Hero(
-                  tag: m.id,
+                  tag: previewKey(m),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
                     child: NetImage(m.poster ?? ''),

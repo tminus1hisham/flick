@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../addons.dart';
+import '../history.dart';
 import '../downloads.dart' show DownloadState;
 import '../kit/download_button.dart';
 import '../kit/toggle.dart';
@@ -47,7 +48,7 @@ class _TitleScreenState extends State<TitleScreen> {
   int? _season;
 
   bool get _series => widget.preview.type == 'series';
-  Future<Meta> _load() => addons.meta(widget.preview.type, widget.preview.id);
+  Future<Meta> _load() => addons.scopedMeta(widget.preview.type, widget.preview.id, widget.preview.scope);
   void _retry() => setState(() { _meta = _load(); });
 
   @override
@@ -98,7 +99,7 @@ class _TitleScreenState extends State<TitleScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Hero(
-              tag: p.id,
+              tag: previewKey(p),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
                 child: SizedBox(
@@ -174,7 +175,7 @@ class _TitleScreenState extends State<TitleScreen> {
         const SliverToBoxAdapter(child: _Heading('Streams', style: FlickText.railHeading)),
         _StreamList(
             (title: m.name, subtitle: null, logo: m.logo, poster: m.poster ?? widget.preview.poster,
-                type: m.type, videoId: m.id, season: null, episode: null, meta: null),
+                type: m.type, videoId: m.id, season: null, episode: null, scope: videoScope(m.id, m.scope), meta: null),
             poster: m.poster ?? widget.preview.poster),
       ];
     }
@@ -219,12 +220,12 @@ class _TvTitleScreen extends StatefulWidget {
 
 class _TvTitleScreenState extends State<_TvTitleScreen> {
   late Future<Meta> _meta = widget.meta == null
-      ? addons.meta(widget.preview.type, widget.preview.id) : Future.value(widget.meta!);
+      ? addons.scopedMeta(widget.preview.type, widget.preview.id, widget.preview.scope) : Future.value(widget.meta!);
   late Video? _video = widget.video;
   int? _season;
   final _episodes = GlobalKey<_TvPaneFocusState>();
 
-  void _retry() => setState(() { _meta = addons.meta(widget.preview.type, widget.preview.id); });
+  void _retry() => setState(() { _meta = addons.scopedMeta(widget.preview.type, widget.preview.id, widget.preview.scope); });
 
   void _backToEpisodes() {
     setState(() => _video = null);
@@ -289,7 +290,7 @@ class _TvTitleScreenState extends State<_TvTitleScreen> {
       ]),
     )),
     _StreamList(video == null
-        ? (title: meta.name, subtitle: null, logo: meta.logo, poster: meta.poster ?? widget.preview.poster, type: meta.type, videoId: meta.id, season: null, episode: null, meta: null)
+        ? (title: meta.name, subtitle: null, logo: meta.logo, poster: meta.poster ?? widget.preview.poster, type: meta.type, videoId: meta.id, season: null, episode: null, scope: videoScope(meta.id, meta.scope), meta: null)
         : episodePlayback(meta, video), poster: meta.poster ?? widget.preview.poster),
   ], key: ValueKey(video?.id ?? meta.id));
 
@@ -462,7 +463,7 @@ class StreamsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (context.tv) { return _TvTitleScreen(
-      (id: meta.id, type: meta.type, name: meta.name, poster: meta.poster, releaseInfo: meta.releaseInfo),
+      (id: meta.id, type: meta.type, name: meta.name, poster: meta.poster, scope: meta.scope, releaseInfo: meta.releaseInfo),
       meta: meta, video: video,
     ); }
     final ep = episodeLabel(video.season, video.episode);
@@ -593,7 +594,7 @@ class _StreamListState extends State<_StreamList> {
           _ => false,
         });
     final noun = widget.playback.type == 'series' ? 'episode' : 'movie';
-    final position = history.position(widget.playback.type, widget.playback.videoId);
+    final position = history.position(widget.playback.type, widget.playback.videoId, scope: widget.playback.scope);
     return [
       if (position > Duration.zero && !noStreams) ...[
         _Chips([(false, 'Resume · ${playerTime(position)}'), (true, 'Start over')], _startOver,
@@ -718,6 +719,7 @@ class _StreamRowState extends State<_StreamRow> {
           title: playback.title,
           playback: playback,
           download: true,
+          subtitles: stream.subtitles,
           poster: widget.poster,
         ))) == true;
       } else {
@@ -727,6 +729,7 @@ class _StreamRowState extends State<_StreamRow> {
           title: playback.title,
           poster: widget.poster,
           playback: playback,
+          subtitles: stream.subtitles,
         );
       }
       if (mounted) setState(() => _queued = queued);
@@ -770,7 +773,7 @@ class _StreamRowState extends State<_StreamRow> {
           tooltip: movieQueue.contains(playback.videoId, provider: addon.base) ? 'Already in playback queue' : 'Add to playback queue',
           onPressed: () async {
             final added = await movieQueue.add(QueuedMovie.fromStream(playback.videoId, playback.title,
-              playback.poster ?? widget.poster, addon, stream, start: widget.start));
+              playback.poster ?? widget.poster, addon, stream, start: widget.start, scope: playback.scope));
             if (mounted) {
               setState(() => _playbackQueueNotice = movieQueue.error ??
                 (added ? 'Added to playback queue.' : 'Already in playback queue.'));

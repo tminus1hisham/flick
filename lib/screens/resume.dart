@@ -9,7 +9,7 @@ import '../theme.dart';
 
 /// Null means dismissed; choosing a mode never changes the saved checkpoint.
 Future<bool?> chooseStartOver(BuildContext context, Playback playback) async {
-  final position = history.position(playback.type, playback.videoId);
+  final position = history.position(playback.type, playback.videoId, scope: playback.scope);
   if (position == Duration.zero) return false;
   return showFlickSheet<bool>(context, (context) => InitialFocus(
     child: SingleChildScrollView(child: Padding(

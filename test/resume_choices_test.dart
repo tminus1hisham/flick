@@ -16,7 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _video = (id: 'tt1:2:3', title: 'Third episode', season: 2, episode: 3,
   released: null, thumbnail: null);
 Meta _meta(String type) => (id: 'tt1', type: type, name: 'Test title', poster: null,
-  background: null, logo: null, description: null, releaseInfo: null, runtime: null,
+  background: null, logo: null, description: null, scope: null, releaseInfo: null, runtime: null,
   imdbRating: null, genres: <String>[], videos: [_video]);
 final _source = Addon({'id': 'test', 'name': 'Test source', 'types': ['movie', 'series'],
   'resources': ['stream'], 'catalogs': []}, 'https://example.test');
@@ -82,7 +82,7 @@ void main() {
           final routes = _Routes();
           await tester.pumpWidget(MaterialApp(theme: flickTheme(tv: tv), shortcuts: tv ? tvShortcuts : null,
             navigatorObservers: [routes], home: type == 'movie'
-              ? const TitleScreen((id: 'tt1', type: 'movie', name: 'Test title', poster: null, releaseInfo: null))
+              ? const TitleScreen((id: 'tt1', type: 'movie', name: 'Test title', poster: null, scope: null, releaseInfo: null))
               : StreamsScreen(_meta(type), _video)));
           await tester.pumpAndSettle();
           expect(fake.requests, [id]);

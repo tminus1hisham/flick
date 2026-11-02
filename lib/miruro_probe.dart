@@ -274,7 +274,7 @@ class _MiruroProbeState extends State<MiruroProbe> {
                                   'anilist:${result.episode.animeId}:${result.episode.number}',
                               season: null,
                               episode: result.episode.number,
-                              meta: null,
+                              scope: null, meta: null,
                             )),
                       child: const Text('Play'),
                     ),

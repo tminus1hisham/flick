@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Addon implements Addon {
+  @override
+  String get scopeId => id;
   _Addon(this.id, this.name, {this.bundled = false, this.locked = false, this.capability = 'Streams · Movies & series'});
   @override
   final String id, name, capability;

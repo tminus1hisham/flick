@@ -94,9 +94,12 @@ class _DownloadRowState extends State<DownloadRow> {
       final p = stream.playback;
       final over = await chooseStartOver(context, p);
       if (!mounted || over == null) return;
+      final caption = await downloads.subtitles.get(_taskId);
+      if (!mounted) return;
       final title = p.subtitle == null ? stream.title : '${stream.title} · ${p.subtitle}';
       final result = await Navigator.push<Object?>(context, MaterialPageRoute(builder: (_) => PlayerScreen(
         title: title, source: path, headers: const {}, playback: p, start: over ? Duration.zero : null,
+        downloadId: _taskId, offlineSubtitle: caption, subtitles: stream.subtitles,
       )));
       if (mounted) await continueMovieQueue(context, result);
     } catch (_) {
@@ -282,8 +285,11 @@ Future<void> _playNative(BuildContext context, Download d) async {
   }
   final over = await chooseStartOver(context, d.playback);
   if (!context.mounted || over == null) return;
+  final caption = await downloads.subtitles.get(d.taskId);
+  if (!context.mounted) return;
   final result = await Navigator.push<Object?>(context, MaterialPageRoute(builder: (_) => PlayerScreen(
     title: d.playback.title, source: d.path, playback: d.playback, start: over ? Duration.zero : null,
+    downloadId: d.taskId, offlineSubtitle: caption, subtitles: d.subtitles,
   )));
   if (context.mounted) await continueMovieQueue(context, result);
 }

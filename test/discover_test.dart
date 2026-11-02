@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Addon implements Addon {
+  @override
+  String get scopeId => id;
   bool filterable = false;
   bool searchNew = false;
   @override
@@ -52,7 +54,7 @@ class _Addons extends Addons {
         Future.value([
           if (search == null && skip < 60)
             for (var i = skip; i < skip + 30; i++)
-              (id: '${c.type}-${c.id}-$i', type: c.type, name: '${c.type} ${c.id} $i', poster: null, releaseInfo: '2019'),
+              (id: '${c.type}-${c.id}-$i', type: c.type, name: '${c.type} ${c.id} $i', poster: null, scope: null, releaseInfo: '2019'),
         ]);
   }
 }
@@ -70,7 +72,7 @@ void main() {
   setUp(() => addons = _fake = _Addons());
 
   MetaPreview title(String id, String name) =>
-      (id: id, type: 'movie', name: name, poster: null, releaseInfo: null);
+      (id: id, type: 'movie', name: name, poster: null, scope: null, releaseInfo: null);
 
   Future<void> search(WidgetTester tester, String query) async {
     await tester.enterText(find.byType(TextField), query);
@@ -206,7 +208,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(_fake.genres.last, 'Sci-Fi');
     expect(find.text('No titles in this catalog yet.'), findsOneWidget);
-    stale.complete([(id: 'stale', type: 'movie', name: 'Stale action', poster: null, releaseInfo: null)]);
+    stale.complete([(id: 'stale', type: 'movie', name: 'Stale action', poster: null, scope: null, releaseInfo: null)]);
     await tester.pumpAndSettle();
     expect(find.text('Stale action'), findsNothing);
     _fake.respond = (_, _, _) => null;
@@ -229,7 +231,7 @@ void main() {
     expect(find.byType(GridSkeleton), findsOneWidget);
     expect(find.text('movie top 0'), findsNothing);
 
-    page.complete([(id: 'tt1', type: 'movie', name: 'Severance', poster: null, releaseInfo: '2022–')]);
+    page.complete([(id: 'tt1', type: 'movie', name: 'Severance', poster: null, scope: null, releaseInfo: '2022–')]);
     await tester.pumpAndSettle();
 
     expect(find.byType(GridSkeleton), findsNothing);

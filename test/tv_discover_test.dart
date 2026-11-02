@@ -19,6 +19,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _Addon implements Addon {
   @override
+  String get scopeId => id;
+  @override
   String get id => 'cinemeta';
   @override
   String get name => 'Cinemeta';
@@ -61,7 +63,7 @@ class _Addons extends Addons {
       Future.value([
         if (skip == 0)
           for (var i = 0; i < (search == null ? 40 : 3); i++)
-            (id: '${c.id}-$search-$i', type: c.type, name: '${c.id} $i', poster: null, releaseInfo: '2019'),
+            (id: '${c.id}-$search-$i', type: c.type, name: '${c.id} $i', poster: null, scope: null, releaseInfo: '2019'),
       ]);
   }
 
@@ -182,7 +184,7 @@ void main() {
     await tester.pump();
     expect(focusedText(), 'Movies');
 
-    page.complete([for (var i = 0; i < 10; i++) (id: 'm$i', type: 'movie', name: 'M $i', poster: null, releaseInfo: '2020')]);
+    page.complete([for (var i = 0; i < 10; i++) (id: 'm$i', type: 'movie', name: 'M $i', poster: null, scope: null, releaseInfo: '2020')]);
     await tester.pumpAndSettle();
     expect(find.text('M 0'), findsOneWidget);
     expect(focusedText(), 'Movies');
@@ -313,7 +315,7 @@ void main() {
     }
     expect(focused(), matches(r'^year [0-2], 2019$'));
     final before = primaryFocus;
-    slow.complete([(id: 'tt1', type: 'movie', name: 'Slow source result', poster: null, releaseInfo: null)]);
+    slow.complete([(id: 'tt1', type: 'movie', name: 'Slow source result', poster: null, scope: null, releaseInfo: null)]);
     await tester.pumpAndSettle();
     expect(find.text('Slow source result'), findsOneWidget);
     expect(primaryFocus, before);

@@ -6,7 +6,7 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze lib test`: target no issues. Current committed baseline has one missing-braces lint at `lib/player_keys.dart:17`; viewing-history files analyze clean. Scope to app/test rather than the nested worktree in `.claude`.
-- `flutter test`: 385 tests pass in the shared working tree after playback queues and the concurrent download controls work.
+- `flutter test`: 424 tests pass in the shared working tree after saved offline captions, subtitle timing/readability controls, custom resume identity and mobile queue sheet changes.
 - Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 45 tests pass (18 HttpTest, 4 MiruroPolicyTest, 6 DownloadsTest, 7 FctvTest, 7 FctvMediaTest, 3 LiveMediaSessionTest).
 - `flutter build apk --debug`: verify Android packaging and native compilation.
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: current baseline is 34 existing hits (27 colour uses, 7 stock controls), confirmed against committed source on 2026-11-01; viewing-history changes add none. The older 27-total baseline is superseded. See `improvements.md` for cleanup.
@@ -65,6 +65,38 @@ This file is the shared source for continuing the work in a new session. Read it
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
 ## Status (2026-11-02)
+
+### External subtitles with offline downloads
+
+Completed HTTP/kept/legacy downloads now let users save the selected external caption from the existing phone/TV subtitle panel, replace/remove it and reopen it after restart. Download metadata retains stream-provided candidates. The download-owned sidecar registry stores local filename/language/label metadata and journals writes so failed replacement keeps the old caption and interrupted saves can be cleaned up with video deletion. All three deletion paths remove associated files; stale saves are rejected after deletion. Saved captions load locally before default language matching without subtitle-server access, while Off/current manual choices retain precedence. External requests never receive video headers and are bounded to 2 MiB/20 seconds. No dependencies or playback engines were added.
+
+Workflow, persistence/failure behavior, caption-renderer limits and verification scope: `design/offline-subtitles.md`. Physical phone/TV airplane-mode restart, native rendering/storage and accessibility acceptance remain in `improvements.md` item 5.
+
+Validation: all 424 Flutter tests pass, including 18 new offline-caption/store/routing regressions. The focused subtitle/download/title/preference run passes 61 tests. All 45 Android unit tests pass and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Full analysis retains only the existing `player_keys.dart:17` lint; design gates retain their existing 7 stock-control/27 colour findings, with no hits in the new files. No physical phone or paid mobile data was used.
+
+### Subtitle timing and readability
+
+Phone/TV subtitle panels now include expandable Timing & appearance controls: ±0.25s timing steps/reset (±30s bound), 75–200% text size/reset, dark background/outline, and a preview. Appearance persists atomically through Settings and updates the existing Flutter subtitle renderer. Timing remains local to each video/subtitle pairing within a player session, including recognized tracks on Retry; Off applies zero and new videos/live sources do not inherit offsets. Serialized native writes discard stale queued adjustments, errors expose Retry, and failed saves retain the applied appearance. Phone Subtitles exits media_kit's auxiliary fullscreen route before opening the existing route-owned panel. No dependencies or playback-engine changes.
+
+The current renderer flattens ASS styling and does not display image subtitles; the controls state these limits. Behavior/source notes and verification scope: `design/subtitle-adjustments.md`. Physical timing/rendering, fullscreen transitions and phone/TV accessibility remain backlog item 3 acceptance checks.
+
+Validation: all 406 Flutter tests pass, including eight new adjustment regressions (20 tests pass with the existing language-preference suite). All 45 Android unit tests pass, and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Full analysis retains only the existing `player_keys.dart:17` lint, and design gates retain their existing 7 stock-control/27 colour findings with none in the new files. Phone/TV widget checks cover larger text, 48dp targets, remote activation and visible save-retry feedback. No physical-device interaction was performed.
+
+### Mobile playback queue sheet
+
+Movie/live playback queues and Discover's mobile movie queue now open in a draggable house bottom sheet. Handle/list gestures resize the sheet, handle drags down to its minimum dismiss it, and the list scrolls after expansion. Compact/initial/full stops adapt to landscape and the live-search keyboard; Back/Close remain pinned. The handle provides accessible resize actions and respects reduced motion. TV keeps its sidebar, focus behavior and pinned live tabs. No dependencies or queue/playback state changes. See `design/playback-queue.md`; physical gesture/TalkBack acceptance remains in backlog item 4.
+
+Validation: all 398 shared-tree Flutter tests pass, including mobile portrait/landscape dragging, scrolling, dismissal, live-search keyboard at 1.3× text and unchanged TV layout/focus. Android unit-test gate passes (45 tests); the final debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. All seven touched UI/test files analyze cleanly. Full analysis retains the existing `player_keys.dart:17` lint; design gates retain their existing 34 findings. A keyboard regression pins distinct minimum/maximum sheet extents so Flutter hands drags to the list even in short landscape viewports. Existing unrelated workspace changes were preserved.
+
+### Custom addon resume identity
+
+Custom addon checkpoints now carry a persisted local provider identity and the exact parent title ID. Catalog navigation, phone/TV stream choices, player history, offline HTTP/native/legacy download records, queued playback and Up Next retain that ownership while stream lookup still uses the original video ID. Canonical IMDb/Kitsu/Anilist identities remain shared across sources. Continue Watching resolves custom titles only through their enabled owning provider; missing/removed providers fail visibly and preserve progress rather than trying an unrelated provider. User-addon IDs migrate on load; configuration URLs and credentials are not copied into checkpoints. Removing and reinstalling an addon creates a new owner identity; Undo retains the original. Legacy custom downloads without ownership stay unscoped rather than guessing a provider.
+
+`test/custom_resume_test.dart` and the new history regression cover migration/reload, provider/parent collisions, removal/reinstall, source changes, offline and queue metadata, Up Next, exact parent resolution and Retry, plus colliding catalog search IDs on phone/TV. No new dependencies. Physical phone/TV acceptance remains backlog item 1; saved-list action/deduplication collisions discovered during the work are separately tracked in backlog item 9.
+
+Verification: all 19 isolated custom-resume/history tests pass. In the shared tree, 396 Flutter tests passed; two concurrently added live-sheet tests failed (`mobile live sheet fits portrait and keyboard at 1.3x`: missing finder; landscape counterpart: 24px overflow in `test/live_queue_test.dart`). An earlier run of the existing 385-test suite passed before those concurrent edits. All 45 Android unit tests pass. Full analysis retains only the existing `player_keys.dart:17` lint; design gates retain the existing 7 stock-control and 27 colour findings. Concurrent queue sheet/sidebar edits were preserved.
+
+The debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`; a first attempt failed on a missing Gradle classpath snapshot, and the retry succeeded. No physical-device interaction was performed.
 
 ### Movie queue and live Queue/Server sidebar
 
@@ -259,10 +291,10 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
-- Verify queue playback on physical phone/TV: movie completion/manual next through direct, torrent, fullscreen and offline playback; changed/missing providers; live Server/game switching, Retry and cancellation without leaked proxies. See `design/playback-queue.md` and backlog item 4.
+- Verify queue playback on physical phone/TV: mobile sheet dragging, dismissal, TalkBack resize actions, rotation and live-search keyboard; movie completion/manual next through direct, torrent, fullscreen and offline playback; changed/missing providers; live Server/game switching, Retry and cancellation without leaked proxies. See `design/playback-queue.md` and backlog item 4.
 - Download network/storage controls are implemented. Finish physical phone/TV metered/unmetered switching, background/restart transfers, disk-full/cleanup/Retry and accessibility acceptance in `improvements.md` item 6; do not rebuild the controls.
-- Audio/subtitle preference implementation is complete; finish its native phone/TV restart, Retry, episode-change, offline and accessibility acceptance in `improvements.md` item 2. The next numbered implementation item is subtitle timing/readability controls; do not rebuild language persistence.
-- Next backlog implementation: finish `improvements.md` item 1: safe scoping for custom addon IDs, and real-provider/physical phone/TV restart/offline/accessibility checks. Continue Watching, progress persistence, history controls and addon/Miruro/offline playback choices are implemented; do not rebuild them.
+- Audio/subtitle preferences, timing/readability controls and saved offline captions are implemented; finish their physical phone/TV acceptance in `improvements.md` items 2, 3 and 5. The next numbered implementation item is TV Downloads/Sources/torrent startup layouts (item 7); do not rebuild the completed controls.
+- Continue Watching and custom addon identity scoping are implemented. Finish only the real-provider/physical phone/TV restart/offline/accessibility checks in `improvements.md` item 1; do not rebuild the completed resume controls.
 - Maintain `improvements.md` as the current improvement backlog: remove completed/already implemented items after verification, retain unfinished portions, and add concrete useful ideas discovered during work. See `AGENTS.md` for the shared agent rule.
 - Verify live rewind/forward on phone and TV with the new APK, including pause/resume, cache eviction and a stream with no seekable range.
 - FCTV: verify visible video/audio on the user's physical phone and Android TV using the repaired APK; the local phone emulator reports advancing 720p playback but cannot render the picture because of its EGL failure. Actual-country routing and other source strategies remain outside the proven fallback/CDN path. See `design/live-diagnosis.md` and `design/live.md`.
@@ -290,7 +322,6 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 2. Optional second review of 653e238 (player state machine).
 3. **P2, deferred by the user:** YouTube (Stremio's YouTube addon `https://v3-channels.strem.io`, `ytId` streams, Cinemeta trailers; Claude and Codex both recommend handing off to the YouTube app via the `openExternal` intent, not embedding). ("Up next" is done, see Status.)
 4. **Known gaps and follow-ups:**
-   - No size cap on subtitle downloads.
    - WatchHub loading skeleton rows and the "No services listed" state aren't built.
    - Movie streams wait for meta before querying.
    - Discover search runs on submit, not as you type.

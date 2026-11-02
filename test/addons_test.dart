@@ -200,7 +200,7 @@ void main() {
       'https://v3-cinemeta.strem.io/catalog/movie/top/genre=Action%20%26%20Adventure&skip=100.json',
       'https://v3-cinemeta.strem.io/catalog/movie/top.json',
     ]);
-    expect(metas.single, (id: 'tt1', type: 'movie', name: 'One', poster: 'p', releaseInfo: '1999'));
+    expect(metas.single, (id: 'tt1', type: 'movie', name: 'One', poster: 'p', scope: null, releaseInfo: '1999'));
   });
 
   test('bundled catalogs exclude Cinemeta and Kitsu required-extra rows', () async {

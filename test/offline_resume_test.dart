@@ -4,6 +4,8 @@ import 'package:flick/downloads.dart';
 import 'package:flick/history.dart';
 import 'package:flick/kit/focus.dart';
 import 'package:flick/playback.dart';
+import 'package:flick/offline_subtitles.dart';
+import 'package:background_downloader/background_downloader.dart';
 import 'package:flick/screens/downloads.dart';
 import 'package:flick/screens/player.dart';
 import 'package:flick/screens/resume.dart';
@@ -16,7 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const Playback _playback = (title: 'Offline movie', subtitle: null, logo: null, poster: null,
-  type: 'movie', videoId: 'tt123', season: null, episode: null, meta: null);
+  type: 'movie', videoId: 'tt123', season: null, episode: null, scope: null, meta: null);
 
 class _Routes extends NavigatorObserver {
   PlayerScreen? player;
@@ -30,7 +32,7 @@ class _Routes extends NavigatorObserver {
 }
 
 class _LocalDownloads extends Downloads {
-  _LocalDownloads(this.path);
+  _LocalDownloads(this.path, {super.subtitles});
   final String? path;
   @override
   Future<String?> localPath(String id) async => path;
@@ -43,6 +45,47 @@ void main() {
     await history.load();
   });
   tearDown(() { downloads = original; device.tv = false; });
+
+  for (final kind in ['http', 'kept', 'legacy']) {
+    testWidgets('$kind playback passes the saved local caption after store reload', (tester) async {
+      final root = Directory.systemTemp.createTempSync('offline-caption-route');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final video = File('${root.path}/film.mp4')..writeAsStringSync('Fixture');
+      final store = OfflineSubtitles(directory: () async => Directory('${root.path}/captions'));
+      const candidate = (id: 'English', url: 'https://subs.test/one.srt', lang: 'en');
+      const stream = StreamDownload(title: 'Offline movie', playback: _playback, subtitles: [candidate]);
+      final native = Download(hash: 'hash', magnet: 'magnet', file: 0, playback: _playback,
+        path: video.path, state: DownloadState.done, subtitles: [candidate]);
+      final kept = TorrentDownload(KeptTorrent(id: 1, infoHash: 'hash', magnet: 'magnet', file: 0,
+        dir: root.path, titleJson: stream.toMetaData(), name: 'film.mp4', size: 7, done: true))
+        ..info = TorrentProgress(downloaded: 7, total: 7, done: true, path: video.path);
+      final task = DownloadTask(taskId: 'http', url: 'https://video.test/film', metaData: stream.toMetaData());
+      final record = TaskRecord(task, TaskStatus.complete, 1, 7);
+      final id = kind == 'http' ? task.taskId : kind == 'kept' ? kept.taskId : native.taskId;
+      final saved = await tester.runAsync(() => store.save(id, text: 'Offline caption', label: 'English', lang: 'en', exists: () => true));
+      final reloaded = OfflineSubtitles(directory: () async => Directory('${root.path}/captions'));
+      final manager = _LocalDownloads(video.path, subtitles: reloaded);
+      downloads = manager;
+      addTearDown(manager.dispose);
+      final routes = _Routes();
+      if (kind == 'legacy') manager.items.add(native);
+      final Widget home = kind == 'legacy' ? const DownloadsScreen() : kind == 'kept'
+        ? DownloadRow.torrent(download: kept, poster: File('missing'))
+        : DownloadRow(record: record, poster: File('missing'), stream: stream);
+      await tester.pumpWidget(MaterialApp(theme: flickTheme(), navigatorObservers: [routes],
+        home: Scaffold(body: home)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Offline movie'));
+      await tester.idle();
+      expect(routes.player?.downloadId, id);
+      expect(routes.player?.offlineSubtitle?.path, saved!.path);
+      expect(await tester.runAsync(() => routes.player!.offlineSubtitle!.read()), 'Offline caption');
+      expect(routes.player?.subtitles, [candidate]);
+      expect(routes.player?.headers, isEmpty);
+      routes.navigator!.pop();
+      await tester.pumpAndSettle();
+    });
+  }
 
   for (final tv in [false, true]) {
     testWidgets('resume choices preserve progress and support cancellation, tv=$tv', (tester) async {

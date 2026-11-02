@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _hash = 'ed0afbc1a2b3c4d5e6f708192a3b4c5d6e7f8091';
 const _magnet = 'magnet:?xt=urn:btih:ED0AFBC1A2B3C4D5E6F708192A3B4C5D6E7F8091&dn=Rick';
 const Playback _ep =
-    (title: 'Rick and Morty', subtitle: 'S4 E2', logo: 'https://img/logo.png', poster: 'https://img/p.jpg', meta: null, type: 'series', videoId: 'tt1:4:2', season: 4, episode: 2);
+    (title: 'Rick and Morty', subtitle: 'S4 E2', logo: 'https://img/logo.png', poster: 'https://img/p.jpg', scope: null, meta: null, type: 'series', videoId: 'tt1:4:2', season: 4, episode: 2);
 
 /// Records channel calls; [progressOf] answers progress.
 class _Engine implements TorrentEngine {
@@ -148,6 +148,7 @@ void main() {
   });
 
   test('new HTTP tasks and retries retain identity and headers under the network choice', () async {
+    const subtitle = (id: 'English', url: 'https://subtitles.test/one.srt', lang: 'en');
     final e = _Engine();
     final http = _Downloader();
     final d = Downloads(engine: e, downloader: http);
@@ -155,11 +156,12 @@ void main() {
     await d.load();
     await d.setWifiOnly(true);
     await d.enqueueStream(url: 'https://video.test/file.mp4', headers: {'Authorization': 'video-only'},
-      title: _ep.title, playback: _ep);
+      title: _ep.title, playback: _ep, subtitles: [subtitle]);
     final task = http.tasks.single;
     expect(task.requiresWiFi, isTrue);
     expect(task.headers, {'Authorization': 'video-only'});
     expect(StreamDownload.fromMetaData(task.metaData)!.playback.videoId, _ep.videoId);
+    expect(StreamDownload.fromMetaData(task.metaData)!.subtitles, [subtitle]);
     await d.retry(TaskRecord(task, TaskStatus.failed, -1, -1));
     expect(http.tasks.last.taskId, task.taskId);
     expect(http.tasks.last.headers, task.headers);
@@ -193,10 +195,11 @@ void main() {
   });
 
   test('an unfinished download survives a restart and is added to the engine again', () async {
+    const subtitle = (id: 'English', url: 'https://subtitles.test/one.srt', lang: 'en');
     final first = _Engine();
     final a = _downloads(first);
     await a.load();
-    await a.start(_magnet, _ep, 3, poster: 'https://img/p.jpg');
+    await a.start(_magnet, _ep, 3, poster: 'https://img/p.jpg', subtitles: [subtitle]);
     expect(first.calls, ['add dl/$_hash', 'download 7 3']);
 
     final second = _Engine();
@@ -204,6 +207,7 @@ void main() {
     await b.load();
     expect(second.calls, ['add dl/$_hash', 'download 7 3']);
     final d = b.items.single;
+    expect(d.subtitles, [subtitle]);
     expect((d.hash, d.file, d.poster, d.playback, d.state), (_hash, 3, 'https://img/p.jpg', _ep, DownloadState.queued));
     expect(b.of(_hash.toUpperCase(), 3), same(d));
     expect(b.of(_hash, null, 'tt1:4:2'), same(d));

@@ -4,9 +4,9 @@ import 'package:flick/history.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-WatchProgress progress({String type = 'series', String id = 'tt123:1:2',
+WatchProgress progress({String type = 'series', String id = 'tt123:1:2', ContentScope? scope,
     int seconds = 123, int duration = 1200}) => WatchProgress(
-  type: type, videoId: id, title: 'A title', subtitle: 'Episode 2', poster: null,
+  type: type, videoId: id, scope: scope, title: 'A title', subtitle: 'Episode 2', poster: null,
   position: Duration(seconds: seconds), duration: Duration(seconds: duration),
 );
 
@@ -74,6 +74,31 @@ void main() {
       expect(history.position('series', id), Duration.zero);
     }
     expect(history.entries, isEmpty);
+  });
+
+  test('custom IDs isolate providers and parents across restart and deletion', () async {
+    const north = (provider: 'north', titleId: 'show:one');
+    const south = (provider: 'south', titleId: 'show:one');
+    const other = (provider: 'north', titleId: 'show:two');
+    final history = ViewingHistory();
+    await history.load();
+    for (final scope in [north, south, other]) {
+      await history.save(progress(id: 'clip', scope: scope));
+    }
+    await history.save(progress(id: 'clip', scope: north, seconds: 450));
+    await history.load();
+    expect(history.entries.length, 3);
+    expect(history.position('series', 'clip'), Duration.zero);
+    expect(history.position('series', 'clip', scope: north), const Duration(seconds: 450));
+    expect(history.position('series', 'clip', scope: south), const Duration(seconds: 123));
+    await history.remove('series', 'clip', scope: north);
+    await history.save(progress(id: 'clip', scope: south, seconds: 1140));
+    await history.load();
+    expect(history.entries.single.scope, other);
+    await history.save(progress(scope: north));
+    expect(history.position('series', 'tt123:1:2', scope: south), const Duration(seconds: 123));
+    await history.save(progress(id: 'clip', scope: other, seconds: 0));
+    expect(history.position('series', 'clip', scope: other), Duration.zero);
   });
 
   test('95 percent completion removes only that episode; a seek back restores it', () async {

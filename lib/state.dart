@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'addons.dart';
@@ -5,6 +7,7 @@ import 'downloads.dart';
 import 'history.dart';
 import 'queue.dart';
 import 'saved.dart';
+import 'subtitles.dart';
 
 final saved = Saved();
 final history = ViewingHistory();
@@ -36,6 +39,22 @@ class Settings {
 
   Future<void> saveAudioLanguage(String language) => _saveLanguage('audioLanguage', language);
   Future<void> saveSubtitleLanguage(String language) => _saveLanguage('subtitleLanguage', language);
+
+  SubtitleAppearance get subtitleAppearance {
+    try {
+      final value = jsonDecode(_prefs.getString('subtitleAppearance') ?? '{}') as Map;
+      final appearance = (size: value['size'] as int, background: value['background'] as bool);
+      if (validSubtitleAppearance(appearance)) return appearance;
+    } catch (_) { /* Invalid appearance preferences use readable defaults. */ }
+    return defaultSubtitleAppearance;
+  }
+
+  Future<void> saveSubtitleAppearance(SubtitleAppearance value) async {
+    if (!validSubtitleAppearance(value)) throw ArgumentError.value(value);
+    if (!await _prefs.setString('subtitleAppearance', jsonEncode({'size': value.size, 'background': value.background}))) {
+      throw StateError('Could not save subtitle appearance');
+    }
+  }
 
   Future<void> _saveLanguage(String key, String language) async {
     if (!await _prefs.setString(key, language)) throw StateError('Could not save language preference');

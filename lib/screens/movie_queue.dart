@@ -79,7 +79,7 @@ class _MovieQueueScreenState extends State<MovieQueueScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: FlickTokens.background,
+    backgroundColor: context.tv ? FlickTokens.background : FlickTokens.surface1,
     body: SafeArea(child: FocusTraversalGroup(policy: ReadingOrderTraversalPolicy(requestFocusCallback: tvReveal),
       child: ListenableBuilder(listenable: movieQueue, builder: (context, _) => Column(children: [
         Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Row(children: [
@@ -89,6 +89,7 @@ class _MovieQueueScreenState extends State<MovieQueueScreen> {
           if (movieQueue.items.isNotEmpty) QueueTextButton(onPressed: () => setState(() => _clear = !_clear), child: const Text('Clear')),
         ])),
         Expanded(child: ListView(
+        primary: true,
         padding: EdgeInsets.all(context.tv ? FlickTv.insetV : FlickTokens.pageGutter),
         children: [
           if (_clear) Wrap(spacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
@@ -104,7 +105,7 @@ class _MovieQueueScreenState extends State<MovieQueueScreen> {
             Wrap(spacing: 8, children: [
               QueueTextButton(onPressed: _busy ? null : () => _resolve(_selected!), child: const Text('Retry')),
               QueueTextButton(onPressed: _busy ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
-                TitleScreen((id: _selected!.id, type: 'movie', name: _selected!.title, poster: _selected!.poster, releaseInfo: null)))),
+                TitleScreen((id: _selected!.id, type: 'movie', name: _selected!.title, poster: _selected!.poster, scope: _selected!.scope, releaseInfo: null)))),
                 child: const Text('Choose another source')),
             ]),
           ],

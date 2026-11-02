@@ -12,13 +12,19 @@ Opening or resolving a stream does not consume its queue entry. The shared playe
 
 ## Live flow
 
-The right-side translucent panel has Queue and Server tabs. Queue lists the session's ordered games above the existing sport/team/game/league search, with explicit Add, Next game, movement and removal actions. A queued game loads channels and waits for a choice. Server shows the current game's channels, marks the selected channel and disables unavailable choices. Failed switches leave queued games in place with inline recovery.
+The panel has Queue and Server tabs. Queue lists the session's ordered games above the existing sport/team/game/league search, with explicit Add, Next game, movement and removal actions. A queued game loads channels and waits for a choice. Server shows the current game's channels, marks the selected channel and disables unavailable choices. Failed switches leave queued games in place with inline recovery.
 
 Native `prepare` preflights a candidate proxy without replacing the active proxy; `commit` activates only that candidate, and `cancelPrepared` invalidates outstanding work and closes staged resources. Closing the panel cancels pending preparation. Back/activity destruction also clean up native resources. Retry refreshes the current selected channel, including after a successful server/game switch.
 
 The sidebar owns a modal focus scope above normal/fullscreen playback. Back, Close and the outside barrier dismiss it and restore trigger focus. TV player shortcuts, timers and delayed focus requests are suspended while it is open. The pinned Back/Close controls and house focus rings remain visible at larger text. Loading uses skeletons; empty, error and save-retry feedback stays inline. Motion uses existing tokens and respects reduced motion. Queue contents are allowed to scroll; there is no scheduled switching or mixed episode queue.
 
+## Mobile sheet (2026-11-02)
+
+Movie and live playback queues use the house bottom sheet on mobile, including Discover's movie queue entry. It opens at 65% height, supports compact/expanded stops and a full-height view, and reserves at least 240 dp for controls on short screens. Dragging the handle resizes it; dragging down to the minimum closes it. The primary list expands the sheet before scrolling. The handle exposes accessible increase/decrease actions. Reduced motion skips handle animations and list snapping. Keyboard insets resize the available sheet space, and mobile live tabs scroll with the list. Back/Close remain pinned; movie actions and live source-switch cancellation retain their existing behavior. TV keeps the translucent right sidebar and its pinned tabs; Discover on TV keeps its full queue page.
+
 ## Verification and remaining acceptance
+
+Mobile-sheet validation (2026-11-02): all 398 shared-tree Flutter tests pass, the Android unit-test gate passes (45 tests), and the debug APK builds. Seven touched UI/test files analyze cleanly. Gesture regressions cover portrait/landscape resizing, list scrolling, handle dismissal, focus restoration and unchanged TV presentation; live-panel tests cover keyboard search at 1.3× text, including Flutter's drag handoff when little vertical space remains. Existing analysis/design baseline findings remain unchanged. Physical touch/TalkBack acceptance remains outstanding.
 
 Regressions cover persistence/corruption/write retry, source matching, duplicate/order mutations, startup retention, direct/torrent/offline handoff, completion deferral/exactly-once behavior, fresh live bridge identity, stale searches, failed switches, cancellation and phone/TV layout/focus at 1.3× text. Native session tests cover staging, stale commit rejection, cancellation, replacement and direct-source cleanup.
 

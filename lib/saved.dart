@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'addons.dart';
+import 'history.dart';
 
 /// Favourites and likes for Discover (addon) titles, kept on this device.
 class Saved extends ChangeNotifier {
@@ -20,7 +21,7 @@ class Saved extends ChangeNotifier {
           type: j['type'] as String,
           name: j['name'] as String,
           poster: j['poster'] as String?,
-          releaseInfo: j['releaseInfo'] as String?,
+          scope: readContentScope(j['scope']), releaseInfo: j['releaseInfo'] as String?,
         ),
     ];
     likes = {...?_prefs.getStringList('likes')};
@@ -34,7 +35,7 @@ class Saved extends ChangeNotifier {
     notifyListeners();
     await _prefs.setString('favourites', jsonEncode([
       for (final f in favourites)
-        {'id': f.id, 'type': f.type, 'name': f.name, 'poster': f.poster, 'releaseInfo': f.releaseInfo},
+        {'id': f.id, 'type': f.type, 'name': f.name, 'poster': f.poster, 'releaseInfo': f.releaseInfo, 'scope': writeContentScope(f.scope)},
     ]));
   }
 

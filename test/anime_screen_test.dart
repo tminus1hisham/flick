@@ -110,7 +110,7 @@ class _Catalogs extends Addons {
     genres.add(genre);
     return page ?? Future.value([
       if (skip == 0)
-        (id: 'kitsu:11', type: itemType, name: 'Kitsu ${c.id}', poster: null, releaseInfo: '2002'),
+        (id: 'kitsu:11', type: itemType, name: 'Kitsu ${c.id}', poster: null, scope: null, releaseInfo: '2002'),
     ]);
   }
 
@@ -125,7 +125,7 @@ class _Catalogs extends Addons {
       background: null,
       logo: null,
       description: null,
-      releaseInfo: '2002',
+      scope: null, releaseInfo: '2002',
       runtime: null,
       imdbRating: null,
       genres: const <String>[],
@@ -252,7 +252,7 @@ void main() {
     await pump(tester, AnimeTab(client: anime));
     expect(find.byType(GridSkeleton), findsOneWidget);
     page.complete([
-      (id: 'kitsu:11', type: 'series', name: 'Kitsu title', poster: null, releaseInfo: null),
+      (id: 'kitsu:11', type: 'series', name: 'Kitsu title', poster: null, scope: null, releaseInfo: null),
     ]);
     await tester.pumpAndSettle();
     final feed = tester.state(find.byType(CatalogFeed));

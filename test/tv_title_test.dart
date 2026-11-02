@@ -21,7 +21,7 @@ const _stream = (name: 'Test release', title: '1080p Blu-ray', infoHash: 'abc', 
 Meta _meta({String type = 'series', List<Video> videos = const [_video]}) => (
   id: 'kitsu:1', type: type, name: 'A very long title that takes two lines on television',
   poster: null, background: null, logo: null, description: 'A description of this title. ' * 40,
-  releaseInfo: '2026', runtime: '24 min', imdbRating: null, genres: ['Animation'], videos: videos,
+  scope: null, releaseInfo: '2026', runtime: '24 min', imdbRating: null, genres: ['Animation'], videos: videos,
 );
 
 class _Addons extends Addons {
@@ -63,7 +63,7 @@ void main() {
     tester.platformDispatcher.textScaleFactorTestValue = scale;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.pumpWidget(MaterialApp(theme: flickTheme(tv: true), shortcuts: tvShortcuts,
-      home: TitleScreen((id: 'kitsu:1', type: type, name: 'Preview title', poster: null, releaseInfo: '2026'))));
+      home: TitleScreen((id: 'kitsu:1', type: type, name: 'Preview title', poster: null, scope: null, releaseInfo: '2026'))));
     if (settle) { await tester.pumpAndSettle(); }
     else { await tester.pump(); await tester.pump(); }
   }

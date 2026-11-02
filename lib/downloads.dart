@@ -11,11 +11,15 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'playback.dart';
+import 'addons.dart' show Subtitle;
+import 'history.dart';
+import 'offline_subtitles.dart';
 import 'torrent.dart';
 
 /// Direct streams keep their playback identity, without online Up Next or request headers.
 class StreamDownload {
-  const StreamDownload({required this.title, this.poster, required this.playback});
+  const StreamDownload({required this.title, this.poster, required this.playback, this.subtitles = const []});
+  final List<Subtitle> subtitles;
   final String title;
   final String? poster;
   final Playback playback;
@@ -24,13 +28,14 @@ class StreamDownload {
         'flickDownload': 'stream',
         'title': title,
         'poster': poster,
+        'subtitles': _writeSubtitles(subtitles),
         'playback': {
           'title': playback.title,
           'subtitle': playback.subtitle,
           'logo': playback.logo,
           'poster': playback.poster,
           'type': playback.type,
-          'videoId': playback.videoId,
+          'videoId': playback.videoId, 'scope': writeContentScope(playback.scope),
           'season': playback.season,
           'episode': playback.episode,
         },
@@ -43,6 +48,7 @@ class StreamDownload {
     return StreamDownload(
       title: m['title'] as String,
       poster: m['poster'] as String?,
+      subtitles: _readSubtitles(m['subtitles']),
       playback: (
         title: p['title'] as String,
         subtitle: p['subtitle'] as String?,
@@ -52,11 +58,20 @@ class StreamDownload {
         videoId: p['videoId'] as String,
         season: p['season'] as int?,
         episode: p['episode'] as int?,
-        meta: null,
+        scope: readContentScope(p['scope']), meta: null,
       ),
     );
   }
 }
+
+List<Map<String, String>> _writeSubtitles(List<Subtitle> subtitles) => [
+  for (final s in subtitles) {'id': s.id, 'url': s.url, 'lang': s.lang},
+];
+List<Subtitle> _readSubtitles(Object? value) => [
+  for (final s in value is List ? value : const [])
+    if (s is Map && s['id'] is String && s['url'] is String && s['lang'] is String)
+      (id: s['id'] as String, url: s['url'] as String, lang: s['lang'] as String),
+];
 
 /// Adapts a native torrent to the same row states as an HTTP download.
 class TorrentDownload {
@@ -105,7 +120,9 @@ DownloadState downloadState(String engine) => switch (engine) {
 class Download {
   Download(
       {required this.hash, required this.magnet, required this.file, required this.playback, this.poster,
-      this.path = '', this.state = DownloadState.queued, this.total = 0});
+      this.path = '', this.state = DownloadState.queued, this.total = 0, this.subtitles = const []});
+  final List<Subtitle> subtitles;
+  String get taskId => 'legacy-$hash-$file';
   final String hash, magnet;
   final int file;
   final Playback playback;
@@ -119,9 +136,10 @@ class Download {
   Map<String, Object?> toJson() => {
         'hash': hash, 'magnet': magnet, 'file': file, 'poster': poster, 'path': path, 'state': state.name,
         'total': total,
+        'subtitles': _writeSubtitles(subtitles),
         'playback': {
           'title': playback.title, 'subtitle': playback.subtitle, 'logo': playback.logo, 'poster': playback.poster, 'type': playback.type,
-          'videoId': playback.videoId, 'season': playback.season, 'episode': playback.episode,
+          'videoId': playback.videoId, 'scope': writeContentScope(playback.scope), 'season': playback.season, 'episode': playback.episode,
         },
       };
 
@@ -135,12 +153,13 @@ class Download {
       path: j['path'] as String,
       state: DownloadState.values.byName(j['state'] as String),
       total: j['total'] as int,
+      subtitles: _readSubtitles(j['subtitles']),
       playback: (
         title: p['title'] as String,
         subtitle: p['subtitle'] as String?,
         logo: p['logo'] as String?,
         poster: (p['poster'] ?? j['poster']) as String?,
-        meta: null,
+        scope: readContentScope(p['scope']), meta: null,
         type: p['type'] as String,
         videoId: p['videoId'] as String,
         season: p['season'] as int?,
@@ -154,8 +173,9 @@ class Download {
 // shortcut: legacy kept records coexist with the native registry; consolidate only with a data migration.
 class Downloads extends ChangeNotifier {
   /// [engine] and [dirFor] are seams for tests.
-  Downloads({TorrentEngine? engine, FileDownloader? downloader, this.dirFor = downloadDir})
-      : _engine = engine, _fd = downloader ?? FileDownloader();
+  Downloads({TorrentEngine? engine, FileDownloader? downloader, this.dirFor = downloadDir, OfflineSubtitles? subtitles})
+      : _engine = engine, _fd = downloader ?? FileDownloader(), subtitles = subtitles ?? OfflineSubtitles();
+  final OfflineSubtitles subtitles;
   TorrentEngine? _engine;
   final Future<String> Function(String hash) dirFor;
   late SharedPreferences _prefs;
@@ -208,11 +228,12 @@ class Downloads extends ChangeNotifier {
   }
 
   /// Registers [file] of [magnet]. Throws, with nothing listed, when the engine refuses it.
-  Future<void> start(String magnet, Playback playback, int file, {String? poster}) async {
+  Future<void> start(String magnet, Playback playback, int file, {String? poster, List<Subtitle> subtitles = const []}) async {
     final hash = infoHashOf(magnet)!;
     final old = of(hash, file);
     if (old != null && old.state != DownloadState.failed) return;
-    final d = Download(hash: hash, magnet: magnet, file: file, playback: playback, poster: poster);
+    final d = Download(hash: hash, magnet: magnet, file: file, playback: playback, poster: poster, subtitles: subtitles);
+    _deleted.remove(d.taskId);
     await _register(d);
     if (old != null) items.remove(old);
     items.insert(0, d);
@@ -244,6 +265,7 @@ class Downloads extends ChangeNotifier {
   }
 
   Future<void> deleteNative(Download d) async {
+    _deleted.add(d.taskId);
     // ponytail: one torrent per hash; another file of the same torrent keeps the data until it goes too.
     if (!items.any((o) => o != d && o.hash == d.hash)) {
       final id = _ids.remove(d.hash);
@@ -255,6 +277,7 @@ class Downloads extends ChangeNotifier {
         } on FileSystemException catch (_) {} // already gone
       }
     }
+    await subtitles.remove(d.taskId);
     items.remove(d);
     await _changed();
   }
@@ -477,8 +500,9 @@ class Downloads extends ChangeNotifier {
     required String title,
     String? poster,
     required Playback playback,
+    List<Subtitle> subtitles = const [],
   }) async {
-    final metadata = StreamDownload(title: title, poster: poster, playback: playback);
+    final metadata = StreamDownload(title: title, poster: poster, playback: playback, subtitles: subtitles);
     final kept = await engine.keep(id, file, titleJson: metadata.toMetaData());
     _deleted.remove(kept.taskId);
     torrentRecords.removeWhere((r) => r.taskId == kept.taskId);
@@ -515,6 +539,7 @@ class Downloads extends ChangeNotifier {
     required String title,
     String? poster,
     required Playback playback,
+    List<Subtitle> subtitles = const [],
   }) async {
     final uri = Uri.tryParse(url);
     if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https') || uri.host.isEmpty) {
@@ -535,7 +560,7 @@ class Downloads extends ChangeNotifier {
       requiresWiFi: wifiOnly,
       retries: 5,
       displayName: playback.subtitle == null ? title : '$title · ${playback.subtitle}',
-      metaData: StreamDownload(title: title, poster: poster, playback: playback).toMetaData(),
+      metaData: StreamDownload(title: title, poster: poster, playback: playback, subtitles: subtitles).toMetaData(),
     );
     if (!await _fd.enqueue(task)) throw StateError('Download was not queued');
     await refresh();
@@ -578,6 +603,19 @@ class Downloads extends ChangeNotifier {
     await _refreshTorrents();
   }
 
+  Future<OfflineSubtitle> saveSubtitle(String id, {required String text, required String label, required String lang}) async {
+    final saved = await subtitles.save(id, text: text, label: label, lang: lang, exists: () =>
+      !_deleted.contains(id) && (items.any((d) => d.taskId == id) ||
+        records.any((r) => r.taskId == id) || torrentRecords.any((r) => r.taskId == id)));
+    notifyListeners();
+    return saved;
+  }
+
+  Future<void> removeSubtitle(String id) async {
+    await subtitles.remove(id);
+    notifyListeners();
+  }
+
   Future<void> delete(Object record) async {
     if (record is Download) return deleteNative(record);
     final r = record as TaskRecord;
@@ -585,6 +623,7 @@ class Downloads extends ChangeNotifier {
     await _fd.cancelTaskWithId(r.taskId);
     final f = File(await r.task.filePath());
     if (f.existsSync()) await f.delete();
+    await subtitles.remove(r.taskId);
     final p = posterOf(r.taskId);
     if (p.existsSync()) await p.delete();
     await _fd.database.deleteRecordWithId(r.taskId);
@@ -592,9 +631,10 @@ class Downloads extends ChangeNotifier {
   }
 
   Future<void> deleteTorrent(TorrentDownload r) async {
-    final engine = await torrentEngine();
-    await engine.remove(r.kept.id);
     _deleted.add(r.taskId);
+    final engine = await _e;
+    await engine.remove(r.kept.id);
+    await subtitles.remove(r.taskId);
     torrentRecords.remove(r);
     final p = posterOf(r.taskId);
     if (p.existsSync()) await p.delete();

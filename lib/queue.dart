@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'addons.dart';
+import 'history.dart';
 import 'live.dart';
 
 /// Completion notifications can repeat; neither a failed open nor Retry consumes a queued movie.
@@ -31,7 +32,8 @@ class MovieQueueProgress {
 /// A source preference, not a saved playback URL or set of credentials.
 class QueuedMovie {
   QueuedMovie({required this.id, required this.title, required this.provider,
-    this.poster, this.infoHash, this.fileIdx, this.filename, this.name, this.release, this.group, this.start});
+    this.poster, this.infoHash, this.fileIdx, this.filename, this.name, this.release, this.group, this.start, this.scope});
+  final ContentScope? scope;
   final String id, title, provider;
   final String? poster, infoHash, filename, name, release, group;
   final int? fileIdx;
@@ -41,17 +43,17 @@ class QueuedMovie {
     (RegExp(r'^tt\d+$').hasMatch(id) || this.provider == provider);
 
   factory QueuedMovie.fromStream(String id, String title, String? poster, Addon addon, AddonStream stream,
-      {Duration? start}) => QueuedMovie(id: id, title: title, poster: poster, provider: addon.base,
+      {Duration? start, ContentScope? scope}) => QueuedMovie(id: id, title: title, poster: poster, provider: addon.base, scope: scope,
     infoHash: stream.infoHash, fileIdx: stream.fileIdx, filename: stream.filename,
     name: stream.name, release: stream.title, group: stream.bingeGroup, start: start);
 
   Map<String, dynamic> toJson() => {'id': id, 'title': title, 'provider': provider, 'poster': poster,
     'infoHash': infoHash, 'fileIdx': fileIdx, 'filename': filename, 'name': name,
-    'release': release, 'group': group, 'start': start?.inMilliseconds};
+    'release': release, 'group': group, 'start': start?.inMilliseconds, 'scope': writeContentScope(scope)};
 
   factory QueuedMovie.fromJson(Map<String, dynamic> j) {
     final item = QueuedMovie(id: j['id'] as String, title: j['title'] as String,
-      provider: j['provider'] as String, poster: j['poster'] as String?, infoHash: j['infoHash'] as String?,
+      provider: j['provider'] as String, scope: readContentScope(j['scope']), poster: j['poster'] as String?, infoHash: j['infoHash'] as String?,
       fileIdx: j['fileIdx'] as int?, filename: j['filename'] as String?, name: j['name'] as String?,
       release: j['release'] as String?, group: j['group'] as String?,
       start: j['start'] == null ? null : Duration(milliseconds: j['start'] as int));

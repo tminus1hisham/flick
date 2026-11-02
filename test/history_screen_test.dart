@@ -12,8 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _FailingHistory extends ViewingHistory {
   bool fail = true;
   @override
-  Future<void> remove(String type, String videoId) async {
-    await super.remove(type, videoId);
+  Future<void> remove(String type, String videoId, {ContentScope? scope}) async {
+    await super.remove(type, videoId, scope: scope);
     if (fail) throw StateError('Storage unavailable');
   }
 }

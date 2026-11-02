@@ -41,7 +41,7 @@ class _Addons extends Addons {
 
 final _addon = Addon({'id': 'org.test', 'name': 'Test', 'resources': const []}, 'https://example.invalid');
 final Meta _series = (id: 'tt1', type: 'series', name: 'Show', poster: null, background: null, logo: null,
-    description: null, releaseInfo: null, runtime: null, imdbRating: null, genres: const [], videos: [_v(1, 2)]);
+    description: null, scope: null, releaseInfo: null, runtime: null, imdbRating: null, genres: const [], videos: [_v(1, 2)]);
 
 void main() {
   group('nextVideo', () {

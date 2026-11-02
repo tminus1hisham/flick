@@ -136,6 +136,7 @@ void main() {
 
   for (final outside in [false, true]) {
     testWidgets('${outside ? 'outside tap' : 'Back'} closes sidebar and restores trigger focus', (tester) async {
+      device.tv = true;
       tester.view.physicalSize = const Size(960, 540);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -158,6 +159,39 @@ void main() {
       expect(trigger.hasFocus, isTrue);
       expect(client.cancellations, 1);
       expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final landscape in [false, true]) {
+    testWidgets('mobile live sheet fits ${landscape ? 'landscape' : 'portrait'} and keyboard at 1.3x', (tester) async {
+      tester.view.physicalSize = landscape ? const Size(800, 360) : const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final key = GlobalKey<NavigatorState>();
+      final client = _Client();
+      await tester.pumpWidget(MaterialApp(navigatorKey: key, theme: flickTheme(),
+        builder: (context, child) => MediaQuery(data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(1.3)), child: child!), home: const Scaffold()));
+      showPlaybackSidebar<void>(key.currentContext!, (_) => LiveQueuePanel(
+        client: client, event: current, channel: server(current, 1), onSwitch: (_, _) async => true));
+      await tester.pumpAndSettle();
+      final sheet = tester.widget<DraggableScrollableSheet>(find.byType(DraggableScrollableSheet));
+      sheet.controller!.jumpTo(sheet.minChildSize);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+      await tester.pumpAndSettle();
+      final resized = tester.widget<DraggableScrollableSheet>(find.byType(DraggableScrollableSheet));
+      expect(resized.minChildSize, lessThan(resized.maxChildSize));
+      await tester.scrollUntilVisible(find.byType(TextField), 24,
+        scrollable: find.byWidgetPredicate((widget) => widget is Scrollable && widget.axisDirection == AxisDirection.down));
+      await tester.enterText(find.byType(TextField), 'Chelsea');
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(LiveQueuePanel), findsNothing);
+      expect(client.cancellations, 1);
     });
   }
 

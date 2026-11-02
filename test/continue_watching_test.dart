@@ -33,7 +33,7 @@ class _Addons extends Addons {
     if (pending != null) return pending!.future;
     if (fail) throw StateError('Offline');
     return (id: id, type: type, name: 'Saved title', poster: null,
-      background: null, logo: null, description: null, releaseInfo: null, runtime: null,
+      background: null, logo: null, description: null, scope: null, releaseInfo: null, runtime: null,
       imdbRating: null, genres: <String>[], videos: missing ? <Video>[] : <Video>[
         _video, (id: 'kitsu:42:3', title: 'Kitsu episode', season: 1, episode: 3,
           released: null, thumbnail: null)]);

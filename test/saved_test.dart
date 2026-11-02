@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const MetaPreview _kid = (id: 'tt0012349', type: 'movie', name: 'The Kid', poster: null, releaseInfo: '1921');
+const MetaPreview _kid = (id: 'tt0012349', type: 'movie', name: 'The Kid', poster: null, scope: null, releaseInfo: '1921');
 
 class _Addons extends Addons {
   @override
@@ -21,7 +21,7 @@ class _Addons extends Addons {
         background: null,
         logo: null,
         description: null,
-        releaseInfo: '1921',
+        scope: null, releaseInfo: '1921',
         runtime: null,
         imdbRating: null,
         genres: const <String>[],

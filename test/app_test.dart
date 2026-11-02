@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _Addon implements Addon {
   @override
+  String get scopeId => id;
+  @override
   String get id => 'cinemeta';
   @override
   String get name => 'Cinemeta';
@@ -26,7 +28,7 @@ class _Addon implements Addon {
   String get capability => 'Catalogs';
 }
 
-const _film = (id: 'tt1', type: 'movie', name: 'The Kid', poster: null, releaseInfo: '1921');
+const _film = (id: 'tt1', type: 'movie', name: 'The Kid', poster: null, scope: null, releaseInfo: '1921');
 
 class _Addons extends Addons {
   final _addon = _Addon();
@@ -37,7 +39,7 @@ class _Addons extends Addons {
   @override
   Future<Meta> meta(String type, String id) async => (
         id: 'tt1', type: 'movie', name: 'The Kid', poster: null, background: null, logo: null,
-        description: null, releaseInfo: '1921', runtime: null, imdbRating: null, genres: <String>[], videos: <Video>[],
+        description: null, scope: null, releaseInfo: '1921', runtime: null, imdbRating: null, genres: <String>[], videos: <Video>[],
       );
   @override
   List<Addon> streamSources(String type, String videoId) => const [];

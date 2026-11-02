@@ -16,6 +16,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _Addon implements Addon {
   @override
+  String get scopeId => id;
+  @override
   String get id => 'cinemeta';
   @override
   String get name => 'Cinemeta';
@@ -39,7 +41,7 @@ class _Addons extends Addons {
   List<Catalog> get catalogs => _addon.catalogs;
   @override
   Future<List<MetaPreview>> catalog(Catalog c, {String? search, String? genre, int skip = 0}) async =>
-      [(id: 'tt1', type: 'movie', name: 'The Kid', poster: null, releaseInfo: '1921')];
+      [(id: 'tt1', type: 'movie', name: 'The Kid', poster: null, scope: null, releaseInfo: '1921')];
 }
 
 class _Downloads extends Downloads {}

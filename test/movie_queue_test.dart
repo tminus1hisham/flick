@@ -35,7 +35,7 @@ class _Addons extends Addons {
   List<Addon> streamSources(String type, String videoId) => active;
   @override
   Future<Meta> meta(String type, String id) async => (id: id, type: type, name: 'Movie $id',
-    poster: null, background: null, logo: null, description: null, releaseInfo: null,
+    poster: null, background: null, logo: null, description: null, scope: null, releaseInfo: null,
     runtime: null, imdbRating: null, genres: <String>[], videos: <Video>[]);
   @override
   Future<List<AddonStream>> streams(Addon addon, String type, String videoId) async {
@@ -223,7 +223,7 @@ void main() {
     });
 
     testWidgets('movie sources add to playback queue separately from download on ${tv ? 'TV' : 'phone'}', (tester) async {
-      await pump(tester, const TitleScreen((id: 'tt1', type: 'movie', name: 'Movie tt1', poster: null, releaseInfo: null)), tv: tv);
+      await pump(tester, const TitleScreen((id: 'tt1', type: 'movie', name: 'Movie tt1', poster: null, scope: null, releaseInfo: null)), tv: tv);
       await tester.ensureVisible(find.byTooltip('Add to playback queue'));
       await tester.tap(find.byTooltip('Add to playback queue'));
       await tester.pumpAndSettle();

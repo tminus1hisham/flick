@@ -64,7 +64,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (progress.subtitle != null) Text(progress.subtitle!, style: context.tv ? FlickTv.body : FlickText.body),
       Text('${_time(progress.position)}${progress.duration > Duration.zero ? ' / ${_time(progress.duration)}' : ''}',
         style: context.tv ? FlickTv.meta : FlickText.metadata),
-      _action('Remove from history', () => _change(() => widget.history.remove(progress.type, progress.videoId))),
+      _action('Remove from history', () => _change(() => widget.history.remove(progress.type, progress.videoId, scope: progress.scope))),
     ]),
   ));
 

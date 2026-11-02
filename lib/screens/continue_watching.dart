@@ -80,7 +80,7 @@ class _WatchSourcesScreenState extends State<WatchSourcesScreen> {
   Future<Widget> _load() async {
     final p = widget.progress;
     final parts = p.videoId.split(':');
-    if (parts.first == 'anilist') {
+    if (p.scope == null && parts.first == 'anilist') {
       final anime = _anime ??= widget.anime ?? Anime(browser: _browser.request);
       final id = int.parse(parts[1]), number = int.parse(parts[2]);
       final episode = (await anime.episodes(id)).where((e) => e.number == number).firstOrNull;
@@ -88,9 +88,9 @@ class _WatchSourcesScreenState extends State<WatchSourcesScreen> {
       return AnimeSourcesScreen(card: (id: id, title: p.title, poster: p.poster),
         episode: episode, anime: anime, cancel: _cancel);
     }
-    final id = parts.first == 'kitsu' ? parts.take(2).join(':') : parts.first;
-    if (p.type == 'movie') return TitleScreen((id: id, type: p.type, name: p.title, poster: p.poster, releaseInfo: null));
-    final meta = await addons.meta(p.type, id);
+    final id = p.scope?.titleId ?? (parts.first == 'kitsu' ? parts.take(2).join(':') : parts.first);
+    if (p.type == 'movie') return TitleScreen((id: id, type: p.type, name: p.title, poster: p.poster, scope: p.scope, releaseInfo: null));
+    final meta = await addons.scopedMeta(p.type, id, p.scope);
     final video = meta.videos.where((v) => v.id == p.videoId).firstOrNull;
     if (video == null) throw StateError('This episode is no longer listed by your sources.');
     return StreamsScreen(meta, video);

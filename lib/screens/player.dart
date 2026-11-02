@@ -6,7 +6,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
@@ -24,6 +23,8 @@ import 'movie_queue.dart';
 import '../player_keys.dart' show LiveSeekRange, liveSeekRange;
 import '../stall.dart';
 import '../state.dart';
+import '../subtitles.dart';
+import '../offline_subtitles.dart';
 import '../theme.dart';
 import '../torrent.dart';
 import '../upnext.dart';
@@ -31,6 +32,8 @@ import '../widgets.dart';
 import 'buffering.dart';
 import 'seek.dart';
 import 'speed.dart';
+import 'subtitle_adjustments.dart';
+import 'offline_subtitles.dart';
 import 'upnext.dart';
 import 'tv_player.dart';
 import 'volume.dart';
@@ -117,6 +120,7 @@ AudioTrack? preferredAudioTrack(List<AudioTrack> tracks, String? preference, {Au
 Caption? preferredCaption(List<Caption> captions, {
   String? preference, Caption? choice, required String deviceLanguage,
   required String? audioLanguage, required String selectedId, Set<String> streamUrls = const {},
+  String? savedUrl,
 }) {
   if (choice?.track.id == 'no' || choice == null && preference == 'off') {
     return (track: SubtitleTrack.no(), url: null, lang: choice?.lang ?? subtitleLanguage(deviceLanguage), label: 'Off', detail: '');
@@ -124,6 +128,10 @@ Caption? preferredCaption(List<Caption> captions, {
   if (choice != null) {
     final match = captions.where((c) => choice.url != null ? c.url == choice.url : c.track.id == choice.track.id).firstOrNull;
     if (match != null) return match;
+  }
+  if (choice == null && savedUrl != null) {
+    final saved = captions.where((c) => c.url == savedUrl).firstOrNull;
+    if (saved != null) return saved;
   }
   final language = subtitleLanguage(choice?.lang ?? preference ?? deviceLanguage);
   if (preference == null && choice == null &&
@@ -366,6 +374,7 @@ class PlayerScreen extends StatefulWidget {
     required this.source,
     this.headers = const {},
     this.subtitles = const [],
+    this.downloadId, this.offlineSubtitle,
     this.playback,
     this.start,
     this.filename,
@@ -394,6 +403,8 @@ class PlayerScreen extends StatefulWidget {
   final String title;
   final Map<String, String> headers;
   final List<Subtitle> subtitles;
+  final String? downloadId;
+  final OfflineSubtitle? offlineSubtitle;
 
   /// The torrent behind [source] when it is the engine's loopback stream.
   final ({TorrentEngine engine, int id})? torrent;
@@ -459,7 +470,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   String? _lastPlaybackError;
   // Subtitle file text and the mpv track id it was added as, by URL.
   final _subtitleFiles = <String, String>{};
+  late OfflineSubtitle? _offlineSubtitle = widget.offlineSubtitle;
   final _added = <String, String>{};
+  late SubtitleAppearance _appearance = settings.subtitleAppearance;
+  late final _timing = SubtitleTiming((seconds) =>
+      (_player.platform as NativePlayer).setProperty('sub-delay', '$seconds'));
   // open() resets state.position to 0 until mpv reports time-pos; Retry and the stop check use this instead.
   Duration _pos = Duration.zero;
   Timer? _checkpoint;
@@ -504,7 +519,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     final playback = widget.playback;
     if (!widget.live && playback != null) {
-      _pos = widget.start ?? history.position(playback.type, playback.videoId);
+      _pos = widget.start ?? history.position(playback.type, playback.videoId, scope: playback.scope);
       _checkpoint = Timer.periodic(const Duration(seconds: 5), (_) => _saveProgress());
     }
     _live++;
@@ -539,6 +554,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             if (_player.state.buffering) _beginEpisode(opening: false);
           }
           _autoPick();
+          _syncTiming();
         }),
       )
       ..add(
@@ -550,6 +566,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       ..add(
         _player.stream.track.listen((_) {
           if (mounted) setState(() {});
+          _syncTiming();
         }),
       )
       ..add(
@@ -672,6 +689,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _liveRange.value = null;
       _added.clear();
       _selected = null;
+      _timing.clear();
       _lastPlaybackError = null;
       setState(() => _error = null);
       await _open(Duration.zero);
@@ -985,9 +1003,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
-  Future<void> _fetchSubtitles() async {
+  Future<void> _fetchSubtitles({bool force = false}) async {
     if (widget.live) return;
-    if (_loading || _fetched) return;
+    if (_offlineSubtitle != null && !force) return;
+    if (_loading || _fetched && !force) return;
     final p = widget.playback;
     if (p == null) return;
     setState(() {
@@ -1034,7 +1053,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       ));
     }
     final seen = <String>{};
-    for (final s in [...widget.subtitles, ..._catalogue]) {
+    for (final s in [?_offlineSubtitle?.subtitle, ...widget.subtitles, ..._catalogue]) {
       if (!seen.add(s.url)) continue;
       final lang = subtitleLanguage(s.lang);
       // Subtitle records carry no release metadata; only show a supplied URL filename.
@@ -1051,10 +1070,10 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         track: SubtitleTrack(_added[s.url] ?? s.url, s.id, s.lang),
         url: s.url,
         lang: lang,
-        label: filename
+        label: s.url == _offlineSubtitle?.subtitle.url ? 'Saved offline · ${_offlineSubtitle!.label}' : filename
             ? name
             : '${subtitleLanguageName(lang)} · File ${result.where((c) => c.lang == lang).length + 1}',
-        detail: filename ? subtitleLanguageName(lang) : '',
+        detail: s.url == _offlineSubtitle?.subtitle.url ? 'Available offline' : filename ? subtitleLanguageName(lang) : '',
       ));
     }
     return result;
@@ -1127,7 +1146,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     final locale = PlatformDispatcher.instance.locale.languageCode;
     final caption = preferredCaption(_captions, preference: preference, choice: choice,
       deviceLanguage: locale, audioLanguage: _player.state.track.audio.language,
-      selectedId: _player.state.track.subtitle.id, streamUrls: widget.subtitles.map((s) => s.url).toSet());
+      selectedId: _player.state.track.subtitle.id, streamUrls: widget.subtitles.map((s) => s.url).toSet(),
+      savedUrl: _offlineSubtitle?.subtitle.url);
     if (caption != null) {
       _autoPicked = true;
       _choose(caption, automatic: true);
@@ -1145,6 +1165,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (_pending != null) return;
     final generation = _trackGeneration;
     final previous = _selected ?? _player.state.track.subtitle;
+    final previousTiming = _timing.key;
     _applicationError = null;
     setState(() {
       _selected = previous;
@@ -1185,6 +1206,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         return;
       }
       if (!mounted) return;
+      await _timing.select(track.id == 'no' || track.id == 'auto' ? null :
+          caption.url == null ? 'track:${track.id}' : 'file:${caption.url}');
+      if (!mounted || generation != _trackGeneration) return;
       setState(() {
         _selected = track;
         _failed = null;
@@ -1200,6 +1224,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       debugPrint('subtitle: $e');
       try {
         await _player.setSubtitleTrack(previous);
+        if (!mounted || generation != _trackGeneration) return;
+        await _timing.select(previousTiming);
       } catch (e) {
         debugPrint('subtitle restore: $e');
       }
@@ -1215,21 +1241,73 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
   }
 
+  String? get _timingKey {
+    final track = _selected ?? _player.state.track.subtitle;
+    if (track.id == 'no' || track.id == 'auto') return null;
+    final url = _added.entries.where((entry) => entry.value == track.id).firstOrNull?.key;
+    return url == null ? 'track:${track.id}' : 'file:$url';
+  }
+
+  void _syncTiming() {
+    if (!mounted || !_started || _pending != null || _timing.key == _timingKey) return;
+    _timing.select(_timingKey).then((_) {
+      if (mounted) setState(() {});
+    }).catchError((Object _) {
+      if (mounted) setState(() => _subtitleError = 'Could not restore subtitle timing. Select the subtitle again to retry.');
+    });
+  }
+
+  Future<void> _setSubtitleDelay(int value) async {
+    await _timing.set(value);
+    if (mounted) { setState(() {}); _tvRefresh.value++; }
+  }
+
+  Future<void> _setSubtitleAppearance(SubtitleAppearance value) async {
+    if (!mounted) return;
+    setState(() => _appearance = value);
+    _video.currentState?.update(subtitleViewConfiguration: subtitleView(value));
+    _tvRefresh.value++;
+    await settings.saveSubtitleAppearance(value);
+  }
+
+  Widget _subtitleAdjustments() => SubtitleAdjustments(
+    key: ValueKey(_timing.key),
+    appearance: _appearance, delay: _timing.milliseconds,
+    timingEnabled: _started && _pending == null && _timing.key != null,
+    onDelay: _setSubtitleDelay, onAppearance: _setSubtitleAppearance,
+  );
+
+  Widget _offlineSubtitleControls() {
+    final active = (_selected ?? _player.state.track.subtitle).id;
+    final external = _captions.where((c) => c.url != null && c.url != _offlineSubtitle?.subtitle.url &&
+      _added[c.url] == active).firstOrNull;
+    return OfflineSubtitleControls(
+      key: ValueKey(external?.url), saved: _offlineSubtitle != null,
+      save: external == null || _pending != null ? null : () async {
+        final text = await _subtitleText(external.url!);
+        final saved = await downloads.saveSubtitle(widget.downloadId!, text: text, label: external.label, lang: external.lang);
+        if (mounted) setState(() => _offlineSubtitle = saved);
+      },
+      remove: () async {
+        await downloads.removeSubtitle(widget.downloadId!);
+        if (mounted) setState(() => _offlineSubtitle = null);
+      },
+      findOnline: () => _fetchSubtitles(force: true),
+    );
+  }
+
+  Future<void> _openTracks() async {
+    // The track panel belongs to this route, below media_kit's separate fullscreen route.
+    if (_video.currentState?.isFullscreen() == true) await _video.currentState?.exitFullscreen();
+    if (mounted) _togglePanel();
+  }
+
   /// Fetched here rather than by mpv, which would send the stream's request
   /// headers (e.g. a debrid token) to the third-party subtitle host.
   Future<String> _subtitleText(String url) async {
     if (_subtitleFiles[url] case final text?) return text;
-    final r = await http
-        .get(Uri.parse(url))
-        .timeout(const Duration(seconds: 20));
-    if (r.statusCode ~/ 100 != 2) throw StateError('HTTP ${r.statusCode}');
-    String text;
-    try {
-      text = utf8.decode(r.bodyBytes);
-    } on FormatException {
-      text = latin1.decode(r.bodyBytes); // older .srt files are often Latin-1
-    }
-    return _subtitleFiles[url] = text;
+    return _subtitleFiles[url] = url == _offlineSubtitle?.subtitle.url
+        ? await _offlineSubtitle!.read() : await readExternalSubtitle(url);
   }
 
   void _togglePanel([bool? open]) {
@@ -1239,6 +1317,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _languages = false;
       _search = '';
     });
+    _tvRefresh.value++;
     if (_panel) _fetchSubtitles();
     // Closing the panel releases a held countdown or a completion waiting on it.
     _upNext();
@@ -1310,7 +1389,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     await _open(_pos);
   }
 
-  Future<void> _open(Duration start) {
+  Future<void> _open(Duration start) async {
     _trackGeneration++;
     _started = false;
     _manual = false;
@@ -1321,7 +1400,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _liveRange.value = null;
     _openedAt = start;
     _beginEpisode(opening: true);
-    return _player.open(
+    try {
+      await _timing.select(null);
+    } catch (_) {
+      _subtitleError = 'Could not reset subtitle timing. Select the subtitle again to retry.';
+    }
+    if (!mounted) return;
+    await _player.open(
       Media(_source.url, start: start, httpHeaders: _source.headers),
     );
   }
@@ -1383,7 +1468,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (widget.live || p == null || !_started || _opening || _savedPosition == _pos) return;
     _savedPosition = _pos;
     history.save(WatchProgress(
-      type: p.type, videoId: p.videoId, title: p.title, subtitle: p.subtitle, poster: p.poster,
+      type: p.type, videoId: p.videoId, scope: p.scope, title: p.title, subtitle: p.subtitle, poster: p.poster,
       position: _pos, duration: _duration,
     )).catchError((Object e) {
       _savedPosition = null;
@@ -1568,7 +1653,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
               foregroundColor: FlickTokens.textPrimary,
               textStyle: FlickText.button,
             ),
-            onPressed: _togglePanel,
+            onPressed: _openTracks,
             icon: const Icon(Icons.closed_caption_outlined, size: 20),
             label: const Text('Subtitles'),
           ),
@@ -1636,7 +1721,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ),
         IconButton(
           tooltip: 'Subtitles',
-          onPressed: _togglePanel,
+          onPressed: _openTracks,
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
           icon: const Icon(Icons.closed_caption_outlined),
         ),
@@ -1699,6 +1784,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   child: Video(
                     key: _video,
                     controller: _controller,
+                    subtitleViewConfiguration: subtitleView(_appearance),
                     // Android onStop pauses playback after PiP is dismissed.
                     pauseUponEnteringBackgroundMode: !_androidPip,
                     controls: _controls,
@@ -1855,6 +1941,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         Video(
           key: _video,
           controller: _controller,
+          subtitleViewConfiguration: subtitleView(_appearance),
           controls: NoVideoControls,
           onExitFullscreen: _immersive,
         ),
@@ -2024,6 +2111,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   Text('No subtitle languages available', style: FlickTv.body),
               ] else ...[
                 Text('Audio and subtitle choices are remembered for future videos.', style: FlickTv.meta),
+                _subtitleAdjustments(),
+                if (widget.downloadId != null) _offlineSubtitleControls(),
                 row(
                   'Off',
                   _pending == null
@@ -2435,6 +2524,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                     padding: EdgeInsets.fromLTRB(20, 8, 20, 8),
                                     child: Text('Audio and subtitle choices are remembered for future videos.', style: FlickText.metadata),
                                   ),
+                                  _subtitleAdjustments(),
+                                  if (widget.downloadId != null) _offlineSubtitleControls(),
                                   if (_loading) ...[
                                     for (var i = 0; i < 2; i++)
                                       const Padding(

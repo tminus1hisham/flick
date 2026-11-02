@@ -94,11 +94,9 @@ class _LiveQueuePanelState extends State<LiveQueuePanel> {
           Expanded(child: Text('Live', style: FlickText.railHeading)),
           QueueIconButton(focusNode: _close, autofocus: context.tv, tooltip: 'Close live queue', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
         ])),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Row(children: [
-          Expanded(child: _tab('Queue', !_server, () { setState(() => _server = false); _loadEvents(); })),
-          Expanded(child: _tab('Server', _server, () { setState(() => _server = true); _loadChannels(_current); })),
-        ])),
-        Expanded(child: ListView(padding: const EdgeInsets.all(16), children: [
+        if (context.tv) _tabs(),
+        Expanded(child: ListView(primary: true, padding: const EdgeInsets.all(16), children: [
+          if (!context.tv) _tabs(),
           if (_notice != null) Semantics(liveRegion: true, child: Text(_notice!, style: FlickText.metadata)),
           if (_switching) const Text('Switching live source…', style: FlickText.body),
           if (!_server) ...[
@@ -158,6 +156,11 @@ class _LiveQueuePanelState extends State<LiveQueuePanel> {
       ])),
     ));
   }
+
+  Widget _tabs() => Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), child: Row(children: [
+    Expanded(child: _tab('Queue', !_server, () { setState(() => _server = false); _loadEvents(); })),
+    Expanded(child: _tab('Server', _server, () { setState(() => _server = true); _loadChannels(_current); })),
+  ]));
 
   Widget _tab(String label, bool selected, VoidCallback onPressed) => Semantics(selected: selected,
     child: QueueTextButton(onPressed: _switching ? null : onPressed,

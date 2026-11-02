@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import 'focus.dart';
+import 'sheet.dart';
 
 /// A modal route owns focus and Back even above media_kit's fullscreen route.
 Future<T?> showPlaybackSidebar<T>(BuildContext context, WidgetBuilder builder) {
   final focus = FocusManager.instance.primaryFocus;
+  if (!context.tv) {
+    return showFlickSheet<T>(context, builder, draggable: true)
+      .whenComplete(() { if (focus?.context != null) focus!.requestFocus(); });
+  }
   final duration = MediaQuery.disableAnimationsOf(context) ? Duration.zero : FlickTokens.sheetDuration;
   return Navigator.of(context).push<T>(PageRouteBuilder<T>(
     opaque: false, barrierDismissible: true, barrierLabel: 'Close playback queue',

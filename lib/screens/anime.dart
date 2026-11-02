@@ -478,7 +478,7 @@ class _AnimeSourcesScreenState extends State<AnimeSourcesScreen> {
       title: widget.card.title, subtitle: widget.episode.title, logo: null,
       poster: widget.card.poster, type: 'anime',
       videoId: 'anilist:${widget.card.id}:${widget.episode.number}',
-      season: null, episode: widget.episode.number, meta: null,
+      season: null, episode: widget.episode.number, scope: null, meta: null,
     );
     final token = ++_generation;
     setState(() {
