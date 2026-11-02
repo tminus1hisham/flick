@@ -61,6 +61,7 @@ void main() {
     addons = _Addons();
     downloads = _Downloads();
     await saved.load();
+    await settings.load();
     device.tv = tv;
     if (tv) FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
     tester.view.physicalSize = tv ? const Size(1920, 1080) : const Size(1080, 1920);

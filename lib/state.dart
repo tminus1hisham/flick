@@ -33,6 +33,11 @@ class Settings {
   bool get autoplayNext => _prefs.getBool('autoplayNext') ?? true;
   set autoplayNext(bool on) => _prefs.setBool('autoplayNext', on);
 
+  bool get autoplayPreviews => _prefs.getBool('autoplayPreviews') ?? true;
+  Future<void> saveAutoplayPreviews(bool on) async {
+    if (!await _prefs.setBool('autoplayPreviews', on)) throw StateError('Could not save preview preference');
+  }
+
   String? get audioLanguage => _prefs.getString('audioLanguage');
   /// A language code, 'off', or null to use the device-language default.
   String? get subtitleLanguage => _prefs.getString('subtitleLanguage');

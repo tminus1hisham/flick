@@ -315,6 +315,8 @@ void main() {
             'name': 'The Simpsons',
             'genres': ['Animation'],
             'imdbRating': '8.7',
+            'trailers': [{'source': 'P6AaSMfXHbA', 'type': 'Trailer'}],
+            'trailerStreams': [{'ytId': 'P6AaSMfXHbA'}, {'url': 'https://example.test/trailer.mp4'}],
             'videos': [
               {'id': 'tt0096697:1:1', 'name': 'Pilot', 'season': 1, 'episode': 1, 'released': '1989-12-17T00:00:00.000Z'},
             ],
@@ -350,6 +352,7 @@ void main() {
     });
     final m = await a.meta('series', 'tt0096697:1:1');
     expect(m.name, 'The Simpsons');
+    expect(m.trailers, [(source: 'P6AaSMfXHbA', youtube: true), (source: 'https://example.test/trailer.mp4', youtube: false)]);
     expect(m.videos.single.season, 1);
     expect(m.videos.single.released, DateTime.utc(1989, 12, 17));
     expect(seen.single, 'https://v3-cinemeta.strem.io/meta/series/tt0096697:1:1.json');

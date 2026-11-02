@@ -30,6 +30,8 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await history.load();
+    await saved.load();
+    await settings.load();
   });
   tearDown(() {
     device.tv = false;
@@ -108,8 +110,9 @@ void main() {
   for (final tv in [false, true]) {
     testWidgets('Discover opens history and Back returns (${tv ? 'TV' : 'phone'})', (tester) async {
       await saved.load();
+    await settings.load();
       await pump(tester, tv: tv, discover: true);
-      await tester.tap(tv ? find.bySemanticsLabel('Viewing history') : find.byTooltip('Viewing history'));
+      await tester.tap(find.byTooltip('Viewing history'));
       await tester.pumpAndSettle();
       expect(find.byType(HistoryScreen), findsOneWidget);
       expect(find.text('No unfinished videos'), findsOneWidget);

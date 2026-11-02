@@ -129,6 +129,7 @@ class _Catalogs extends Addons {
       runtime: null,
       imdbRating: null,
       genres: const <String>[],
+      trailers: const <Trailer>[],
       videos: const <Video>[],
     );
   }

@@ -36,7 +36,7 @@ class _Addons extends Addons {
   @override
   Future<Meta> meta(String type, String id) async => (id: id, type: type, name: 'Movie $id',
     poster: null, background: null, logo: null, description: null, scope: null, releaseInfo: null,
-    runtime: null, imdbRating: null, genres: <String>[], videos: <Video>[]);
+    runtime: null, imdbRating: null, genres: <String>[], trailers: const <Trailer>[], videos: <Video>[]);
   @override
   Future<List<AddonStream>> streams(Addon addon, String type, String videoId) async {
     requests++;

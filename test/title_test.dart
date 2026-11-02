@@ -105,6 +105,7 @@ Meta _meta(String type, [List<Video> videos = const [], bool artwork = false]) =
       runtime: null,
       imdbRating: null,
       genres: const ['Animation'],
+      trailers: const <Trailer>[],
       videos: videos,
     );
 

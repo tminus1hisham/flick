@@ -255,16 +255,7 @@ class _TvTitleScreenState extends State<_TvTitleScreen> {
           child: Text(meta?.description ?? '', maxLines: lines, overflow: TextOverflow.ellipsis, style: FlickTv.body));
       })),
       const SizedBox(height: 12),
-      ListenableBuilder(listenable: saved, builder: (context, _) => Row(children: [
-        _TvTitleAction(
-          saved.isFavourite(p.id) ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          saved.isFavourite(p.id) ? 'Remove from favourites' : 'Add to favourites',
-          () => saved.toggleFavourite(p), selected: saved.isFavourite(p.id)),
-        const SizedBox(width: 16),
-        _TvTitleAction(saved.isLiked(p.id) ? Icons.thumb_up_rounded : Icons.thumb_up_outlined,
-          saved.isLiked(p.id) ? 'Unlike title' : 'Like title',
-          () => saved.toggleLike(p.id), selected: saved.isLiked(p.id)),
-      ])),
+      _Saving(p),
     ]);
   }
 
@@ -421,38 +412,47 @@ class _TvPaneFocusState extends State<_TvPaneFocus> {
 }
 
 /// Favourite + like for a Discover title, saved on this device.
-class _Saving extends StatelessWidget {
+class _Saving extends StatefulWidget {
   const _Saving(this.preview);
   final MetaPreview preview;
+  @override
+  State<_Saving> createState() => _SavingState();
+}
+
+class _SavingState extends State<_Saving> {
+  String? _error;
+
+  Future<bool> _save(Future<void> Function() change) async {
+    try {
+      await change();
+      if (mounted) setState(() => _error = null);
+      return true;
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not save. Try the action again.');
+      return false;
+    }
+  }
+
+  Widget _action(bool on, IconData icon, IconData onIcon, String label, String onLabel, Future<void> Function() change) =>
+    context.tv ? _TvTitleAction(on ? onIcon : icon, on ? onLabel : label, () => _save(change), selected: on)
+      : ToggleAction(on: on, icon: icon, onIcon: onIcon, label: label, onLabel: onLabel, onPressed: () => _save(change));
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
-        listenable: saved,
-        builder: (context, _) => Wrap(spacing: FlickTokens.grid * 2, runSpacing: FlickTokens.grid * 2, children: [
-          ToggleAction(
-            on: saved.isFavourite(preview.id),
-            icon: Icons.favorite_border_rounded,
-            onIcon: Icons.favorite_rounded,
-            label: 'Add to favourites',
-            onLabel: 'Remove from favourites',
-            onPressed: () async {
-              saved.toggleFavourite(preview);
-              return true;
-            },
-          ),
-          ToggleAction(
-            on: saved.isLiked(preview.id),
-            icon: Icons.thumb_up_outlined,
-            onIcon: Icons.thumb_up_rounded,
-            label: 'Like title',
-            onLabel: 'Unlike title',
-            onPressed: () async {
-              saved.toggleLike(preview.id);
-              return true;
-            },
-          ),
+  Widget build(BuildContext context) {
+    final p = widget.preview;
+    return ListenableBuilder(listenable: saved, builder: (context, _) => Column(
+      mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          _action(saved.isFavourite(p.id, scope: p.scope, type: p.type), Icons.favorite_border_rounded, Icons.favorite_rounded,
+            'Add to favourites', 'Remove from favourites', () => saved.toggleFavourite(p)),
+          _action(saved.isLiked(p.id), Icons.thumb_up_outlined, Icons.thumb_up_rounded,
+            'Like title', 'Unlike title', () => saved.toggleLike(p.id)),
+          _action(saved.inMyList(p), Icons.playlist_add, Icons.playlist_add_check,
+            'Add to My List', 'Remove from My List', () => saved.toggleMyList(p)),
         ]),
-      );
+        if (_error != null) Semantics(liveRegion: true, child: Text(_error!, style: context.tv ? FlickTv.meta : FlickText.body)),
+      ]));
+  }
 }
 
 /// D3 Streams for one episode.

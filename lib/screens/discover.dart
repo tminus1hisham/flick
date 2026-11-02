@@ -14,6 +14,7 @@ import 'title.dart';
 import 'history.dart';
 import 'movie_queue.dart';
 import 'continue_watching.dart';
+export 'home.dart' show DiscoverScreen;
 
 (String, String, String) _key(Catalog c) => (c.addon.base, c.type, c.id);
 const _favourites = ('', '', 'favourites');
@@ -22,18 +23,19 @@ const _favourites = ('', '', 'favourites');
 bool _offline(Object? e) => e is AddonException && e.kind == AddonError.unreachable;
 
 /// D1: addon catalogs as a poster wall, with search over the current type.
-class DiscoverScreen extends StatefulWidget {
-  const DiscoverScreen({this.onAddSources, super.key});
+class BrowseScreen extends StatefulWidget {
+  const BrowseScreen({this.onAddSources, this.initialCatalog, super.key});
+  final Catalog? initialCatalog;
 
   /// The shell can select its Sources destination without opening another route.
   /// Otherwise the app's named Sources route is used.
   final VoidCallback? onAddSources;
 
   @override
-  State<DiscoverScreen> createState() => _DiscoverScreenState();
+  State<BrowseScreen> createState() => _DiscoverScreenState();
 }
 
-class _DiscoverScreenState extends State<DiscoverScreen> {
+class _DiscoverScreenState extends State<BrowseScreen> {
   final _search = TextEditingController();
   final _typeSwitchFocus = FocusNode(debugLabel: 'Discover Movies');
   final _searchActionFocus = FocusNode(debugLabel: 'Discover Search');
@@ -69,6 +71,16 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   bool _searchOpen = false;
   String _type = 'movie', _query = '';
   (String, String, String)? _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    final catalog = widget.initialCatalog;
+    if (catalog != null) {
+      _type = catalog.type;
+      _selected = _key(catalog);
+    }
+  }
 
   @override
   void dispose() {

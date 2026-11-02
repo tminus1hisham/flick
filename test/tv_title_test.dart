@@ -21,7 +21,7 @@ const _stream = (name: 'Test release', title: '1080p Blu-ray', infoHash: 'abc', 
 Meta _meta({String type = 'series', List<Video> videos = const [_video]}) => (
   id: 'kitsu:1', type: type, name: 'A very long title that takes two lines on television',
   poster: null, background: null, logo: null, description: 'A description of this title. ' * 40,
-  scope: null, releaseInfo: '2026', runtime: '24 min', imdbRating: null, genres: ['Animation'], videos: videos,
+  scope: null, releaseInfo: '2026', runtime: '24 min', imdbRating: null, genres: ['Animation'], trailers: const <Trailer>[], videos: videos,
 );
 
 class _Addons extends Addons {

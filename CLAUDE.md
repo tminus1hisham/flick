@@ -6,8 +6,8 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze lib test`: no issues after validation gate cleanup. Scope to app/test rather than the nested worktree in `.claude`.
-- `flutter test --concurrency=1`: 436 tests pass in the shared working tree after validation gate cleanup (five new control/progress/feedback regressions).
-- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 45 tests pass (18 HttpTest, 4 MiruroPolicyTest, 6 DownloadsTest, 7 FctvTest, 7 FctvMediaTest, 3 LiveMediaSessionTest).
+- `flutter test --concurrency=1`: 447 tests pass after the Discover home redesign; final compact-toolbar checks also pass (14 home/history tests).
+- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 46 tests pass, including the native trailer trust-boundary check.
 - `flutter build apk --debug`: passes after validation gate cleanup; APK at `build/app/outputs/flutter-apk/app-debug.apk`.
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: zero stock-control/colour violations and zero suppressions after cleanup. `design/gates.json` identifies the actual token file, `lib/theme.dart`.
 - `PlayerScreen` cannot be pumped in widget tests without native libmpv. Test pure helpers and the independent TvPlayerControls instead.
@@ -31,12 +31,12 @@ This file is the shared source for continuing the work in a new session. Read it
 | `android/.../StreamServer.kt` | Loopback HTTP server: Range requests and hash verification of each piece before serving it. Classifies each request (seek vs tail probe, `isSeek` in Http.kt) and advances the entry's reader; a waiting request ends only when its own client hangs up. Piece deadlines come from `Entry.reschedule()` in Torrents.kt (bitrate-aware window, 1 s tick, `bitrate` channel method). |
 | `lib/stall.dart` | `StallDetector`, `PauseWait` (adaptive `cache-pause-wait`, genuine stalls, `repeated`), and `bufferView` (the buffering panel's state rules). |
 | `lib/screens/buffering.dart` | `BufferingPanel` over the player for addon playback: Starting / Buffering / Waiting for connection, segmented rail from mpv `bufferingPercentage`, torrent peers Â· speed, "Try another source". Spec: design/buffering.md. |
-| `lib/screens/discover.dart` | D1 Discover tab (landing tab): phone = 3-column poster grid, Movies/Series switch, catalog chips, search on submit, paging with skip=n, Hero to Title; hidden feeds sit inside `HeroMode(enabled: visible)`. TV (`context.tv`, visual by Codex) = header (48 dp row, Search action â†’ field), segmented Movies/Series track, slash chips, 5-column `FocusFrame(lift)` grid wrapped in `RevealArea`, grid top at y 179 dp; initial focus is the switch (`InitialFocus`); header kept across feeds (GlobalKey) so filters keep focus; lazy-grid Up/Down fallback; Back closes search via `DismissIntent`; Add sources selects the Sources tab. Tests: test/tv_discover_test.dart. |
+| `lib/screens/home.dart`, `lib/screens/discover.dart` | Discover landing carousel, isolated previews and horizontal personal/catalog rows; BrowseScreen retains the phone/TV catalog/search/filter/pagination UI. Active-tab and route lifecycle suspend previews. See `design/home.md`. |
 | `lib/kit/focus.dart` | TV focus kit: `device`/`context.tv`, `tvShortcuts` (Select/Enter never repeat), `FocusRing` (3 dp, 3 dp gap, 0 ms), `FocusFrame` (single focus owner; ring computed from its node + highlight mode; `lift` 1.03/100 ms; `.button`), `SlashMarker` (selected), `FocusMemory`, `InitialFocus` + `enterScope` (never a text field), `RevealArea` + `tvReveal` (scroll the whole cell in, gridPad beside, 27 dp safe area above/below; jump on key repeat). Tokens: `FlickTv` in theme.dart. Tests: test/focus_test.dart. |
 | `lib/screens/title.dart` | D2 Title (movie: streams inline; series: season chips and episodes) and D3 Streams (one episode). Shared stream list: one group per source, each resolving on its own, per-source Retry, filter chips when there are 2 or more sources, WatchHub "Where to watch" rows. `describeStream` is a test seam. |
 | `lib/screens/sources.dart` | D4 Sources at route `/sources`: bundled switches, add by manifest URL with inline errors, remove with an inline Undo row. |
 | `lib/screens/torrent.dart` | Torrent start screen (stage spine, peers and speed): auto-opens `fileIdx` or a sure guess, otherwise the file list with "Suggested"; Retry / Choose another source; releases (not removes) the torrent on exit. |
-| `lib/saved.dart` | `Saved`: device favourites and likes for Discover titles (shared_preferences), open to everyone. |
+| `lib/saved.dart` | `Saved`: local My List, favourites and likes. My List/favourites compare custom catalog ownership and shared canonical IDs; legacy custom records remain unscoped. |
 | `lib/history.dart` | `ViewingHistory`: on-device unfinished-video checkpoints, canonical content IDs, 95% completion removal, bounded retention and corruption-tolerant loading. `watchPosition` distinguishes a real seek to zero from mpv open/close resets. |
 | `lib/kit/toggle.dart` | `ToggleAction` (favourite/like; `onPressed` answers whether state changed, haptics only then). |
 | `lib/kit/sheet.dart` | `showFlickSheet`: the first kit piece (themed, content-sized, reduced-motion aware). New sheets go through it. |
@@ -64,7 +64,15 @@ This file is the shared source for continuing the work in a new session. Read it
 - In a `Stack`, `Row` or `Column`, an `if (...)` child placed before stateful siblings needs a `key` on those siblings, or they are rebuilt from scratch when the condition flips (lost focus/ring state; the TV rail ring bug of 2026-10-31).
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
-## Status (2026-11-02)
+## Status (2026-11-03)
+
+### Discover home and trailer previews
+
+Discover now opens a Netflix-style movie carousel and horizontal rows on phone and TV. Continue Watching retains its existing source/resume flow; separate My List and Favourites persist locally. Provider-aware favourite/My List identity preserves canonical sharing and leaves legacy custom entries unscoped. Likes and queue identity remain backlog item 9. Browse/Search and See all retain the existing type/genre/search/pagination browser; See all selects the requested catalog. Phone uses compact accessible toolbar icons; TV keeps labelled house focus controls. Mobile queue management still uses the house sheet.
+
+Metadata parses validated YouTube/direct HTTP(S) trailers from both Cinemeta trailer fields. A separate Android platform WebView uses the official YouTube IFrame API or direct HTML video, muted startup, unobstructed controls/branding and external-link/artwork fallback. Active tab, route coverage, foreground lifecycle and video visibility after scroll layout govern playback; previews do not enter history, PiP or Up Next. Carousel rotation pauses for focus/hover/touch and respects reduced motion. Catalog pages are lazy/shared, with independent Retry and source-change invalidation. No packages were added.
+
+Verification: the full Flutter suite passes 447 tests; the affected subsystem run passes 75 tests. After the final compact-toolbar change, all 14 home/history tests and two phone/TV layout exports pass. All 46 Android unit tests pass. A public Cinemeta response confirmed the supported trailer formats. Final analysis reports no issues, both design gates pass with zero violations/suppressions, and the final debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. Layout exports in `build/home-phone.png` and `build/home-tv.png` use a fake preview with a decoded public catalog backdrop; they are not native-video evidence. Device acceptance remains in `improvements.md` item 10: no device or emulator was connected, and no physical device or paid data was used. Details: `design/home.md`.
 
 ### Sources button icons
 
@@ -307,6 +315,7 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
+- Discover home is implemented. Complete physical phone/TV preview, lifecycle, remote/TalkBack and saved-list acceptance from backlog item 10; do not rebuild the home rows or embedded player.
 - Verify queue playback on physical phone/TV: mobile sheet dragging, dismissal, TalkBack resize actions, rotation and live-search keyboard; movie completion/manual next through direct, torrent, fullscreen and offline playback; changed/missing providers; live Server/game switching, Retry and cancellation without leaked proxies. See `design/playback-queue.md` and backlog item 4.
 - Download network/storage controls are implemented. Finish physical phone/TV metered/unmetered switching, background/restart transfers, disk-full/cleanup/Retry and accessibility acceptance in `improvements.md` item 6; do not rebuild the controls.
 - Audio/subtitle preferences, timing/readability controls and saved offline captions are implemented; finish their physical phone/TV acceptance in `improvements.md` items 2, 3 and 5. The next numbered implementation item is saved-title/queue ownership scoping (item 9). Validation gate cleanup is implemented; physical acceptance of its migrated controls remains in item 8.

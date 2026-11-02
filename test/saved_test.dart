@@ -25,6 +25,7 @@ class _Addons extends Addons {
         runtime: null,
         imdbRating: null,
         genres: const <String>[],
+        trailers: const <Trailer>[],
         videos: const <Video>[],
       );
   @override
@@ -62,6 +63,39 @@ void main() {
     await third.load();
     expect(third.favourites, isEmpty);
     expect(third.isLiked(_kid.id), isFalse);
+  });
+
+  test('My List is independent, scopes custom titles, and survives reload/removal', () async {
+    final a = (id: 'custom', type: 'movie', name: 'A', poster: null, releaseInfo: null,
+      scope: (provider: 'a', titleId: 'custom'));
+    final b = (id: 'custom', type: 'movie', name: 'B', poster: null, releaseInfo: null,
+      scope: (provider: 'b', titleId: 'custom'));
+    await saved.toggleMyList(a);
+    await saved.toggleFavourite(b);
+    expect(saved.inMyList(b), isFalse);
+    expect(saved.isFavourite(a.id, scope: a.scope), isFalse);
+    expect(saved.isFavourite(b.id, scope: b.scope), isTrue);
+    final again = Saved(); await again.load();
+    expect(again.inMyList(a), isTrue);
+    expect(again.isFavourite(b.id, scope: b.scope), isTrue);
+    await again.toggleFavourite(a);
+    await again.toggleFavourite(b);
+    expect(again.isFavourite(a.id, scope: a.scope), isTrue);
+    expect(again.isFavourite(b.id, scope: b.scope), isFalse);
+    await again.toggleMyList(a);
+    final third = Saved(); await third.load();
+    expect(third.myList, isEmpty);
+    expect(third.isFavourite(a.id, scope: a.scope), isTrue);
+  });
+
+  test('legacy custom favourites remain unscoped and canonical IDs stay shared', () async {
+    SharedPreferences.setMockInitialValues({'favourites': '[{"id":"custom","type":"movie","name":"Legacy"}]'});
+    final store = Saved(); await store.load();
+    expect(store.favourites.single.scope, isNull);
+    expect(store.isFavourite('custom', scope: (provider: 'a', titleId: 'custom')), isFalse);
+    await store.toggleFavourite(_kid);
+    expect(store.isFavourite(_kid.id, scope: (provider: 'a', titleId: _kid.id)), isTrue);
+    expect(store.myList, isEmpty);
   });
 
   test('autoplay next defaults on and persists', () async {

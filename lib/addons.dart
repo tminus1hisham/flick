@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'history.dart';
+import 'trailers.dart';
+export 'trailers.dart' show Trailer, parseTrailers;
 
 typedef MetaPreview = ({String id, String type, String name, String? poster, String? releaseInfo, ContentScope? scope});
 Object previewKey(MetaPreview p) => videoScope(p.id, p.scope) == null ? p.id : (p.type, p.id, p.scope);
@@ -26,6 +28,7 @@ typedef Meta = ({
   String? runtime,
   String? imdbRating,
   List<String> genres,
+  List<Trailer> trailers,
   List<Video> videos,
 });
 typedef Catalog = ({Addon addon, String type, String id, String name, bool searchable, List<String> genres});
@@ -318,6 +321,7 @@ class Addons extends ChangeNotifier {
       runtime: _str(m['runtime']),
       imdbRating: _str(m['imdbRating']),
       genres: [for (final g in (m['genres'] ?? m['genre'] ?? const []) as List) '$g'],
+      trailers: {...parseTrailers(m['trailers']), ...parseTrailers(m['trailerStreams'])}.toList(),
       videos: [
         for (final v in (m['videos'] as List?) ?? const [])
           if (v is Map && v['id'] is String)

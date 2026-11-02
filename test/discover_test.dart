@@ -65,7 +65,7 @@ Future<void> _pump(WidgetTester tester) async {
   tester.view.physicalSize = const Size(1080, 1920);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(MaterialApp(theme: flickTheme(), home: const Scaffold(body: DiscoverScreen())));
+  await tester.pumpWidget(MaterialApp(theme: flickTheme(), home: const Scaffold(body: BrowseScreen())));
 }
 
 void main() {

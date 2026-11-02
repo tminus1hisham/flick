@@ -90,13 +90,16 @@ void main() {
     addons = with_ ?? _Addons();
     downloads = _Downloads();
     await saved.load();
+    await settings.load();
     device.tv = true;
     FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
     tester.view.physicalSize = const Size(1920, 1080);
     tester.view.devicePixelRatio = 2;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(const FlickApp());
-    if (settle) await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Browse / Search'));
+    await tester.pumpAndSettle();
   }
 
   Future<void> key(WidgetTester tester, LogicalKeyboardKey key) async {
@@ -161,19 +164,6 @@ void main() {
     await pumpApp(tester);
     expect(focusedText(), 'Movies', reason: 'launch is the first entry');
 
-    // Search open, the tab's memory cleared, then in from the rail.
-    await key(tester, LogicalKeyboardKey.arrowUp);
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(focused(), 'Search titles');
-    await key(tester, LogicalKeyboardKey.select);
-    expect(textFocused(), isTrue);
-    FocusManager.instance.primaryFocus!.unfocus();
-    await tester.pumpAndSettle();
-    await systemBack(tester);
-    expect(railFocused(), isTrue);
-
-    await key(tester, LogicalKeyboardKey.arrowRight);
-    expect(focusedText(), 'Movies');
     expect(textFocused(), isFalse);
   });
 
@@ -338,7 +328,7 @@ void main() {
 
   testWidgets('9: rings at the content edges stay inside the viewport', (tester) async {
     await pumpApp(tester);
-    final viewport = tester.getRect(find.descendant(of: find.byType(DiscoverScreen), matching: find.byType(Scrollable)).first);
+    final viewport = tester.getRect(find.descendant(of: find.byType(BrowseScreen), matching: find.byType(Scrollable)).first);
     void inside(String what) {
       final box = FocusManager.instance.primaryFocus!.context!.findRenderObject()! as RenderBox;
       final ring = (box.localToGlobal(Offset.zero) & box.size).inflate(FlickTv.ringWidth + FlickTv.ringGap);
@@ -489,6 +479,8 @@ void main() {
   }
 
   Future<void> openAnime(WidgetTester tester) async {
+    await systemBack(tester);
+    await systemBack(tester);
     await key(tester, LogicalKeyboardKey.arrowLeft);
     await key(tester, LogicalKeyboardKey.arrowDown);
     await key(tester, LogicalKeyboardKey.select);

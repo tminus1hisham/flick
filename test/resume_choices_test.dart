@@ -17,7 +17,7 @@ const _video = (id: 'tt1:2:3', title: 'Third episode', season: 2, episode: 3,
   released: null, thumbnail: null);
 Meta _meta(String type) => (id: 'tt1', type: type, name: 'Test title', poster: null,
   background: null, logo: null, description: null, scope: null, releaseInfo: null, runtime: null,
-  imdbRating: null, genres: <String>[], videos: [_video]);
+  imdbRating: null, genres: <String>[], trailers: const <Trailer>[], videos: [_video]);
 final _source = Addon({'id': 'test', 'name': 'Test source', 'types': ['movie', 'series'],
   'resources': ['stream'], 'catalogs': []}, 'https://example.test');
 AddonStream _stream(bool torrent) => (name: 'Test release', title: '1080p',

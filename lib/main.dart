@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'kit/focus.dart';
 import 'kit/rail.dart';
 import 'screens/discover.dart';
+import 'screens/home.dart' show homeRouteObserver;
 import 'screens/anime.dart';
 import 'screens/downloads.dart';
 import 'screens/live.dart';
@@ -36,6 +37,7 @@ class FlickApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
         title: 'Flick',
+        navigatorObservers: [homeRouteObserver],
         routes: {'/sources': (_) => const SourcesScreen()},
         debugShowCheckedModeBanner: false,
         theme: flickTheme(tv: device.tv),
@@ -112,7 +114,7 @@ class _ShellState extends State<Shell> {
               padding: const EdgeInsets.only(left: FlickTv.railColumn + FlickTv.contentGap),
               child: IndexedStack(index: _tab, children: [
                 for (final (i, tab) in [
-                  DiscoverScreen(onAddSources: () => _select(4)),
+                  DiscoverScreen(active: _tab == 0, onAddSources: () => _select(4)),
                   AnimeTab(onAddSources: () => _select(4)),
                   LiveTab(active: _tab == 2),
                   const DownloadsScreen(),
@@ -148,7 +150,7 @@ class _ShellState extends State<Shell> {
   Widget _phone() => Scaffold(
         // Discover and Anime draw their own headers.
         appBar: _tab == 3 ? _downloadsBar() : null,
-        body: IndexedStack(index: _tab, children: [const DiscoverScreen(), const AnimeTab(), LiveTab(active: _tab == 2), const DownloadsScreen()]),
+        body: IndexedStack(index: _tab, children: [DiscoverScreen(active: _tab == 0), const AnimeTab(), LiveTab(active: _tab == 2), const DownloadsScreen()]),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (i) => setState(() => _tab = i),

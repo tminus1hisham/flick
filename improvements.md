@@ -1,6 +1,6 @@
 # Improvements
 
-Audited against the current source and recorded verification on 2026-11-02. One implementation item remains. Implemented features with outstanding physical-device checks are listed separately; they are not new feature work. Source inspection does not establish device acceptance. Item numbers remain stable for existing references in `CLAUDE.md` and design documents.
+Audited against the current source and recorded verification on 2026-11-03. One implementation item remains. Implemented features with outstanding physical-device checks are listed separately; they are not new feature work. Source inspection does not establish device acceptance. Item numbers remain stable for existing references in `CLAUDE.md` and design documents.
 
 ## How agents maintain this list
 
@@ -13,16 +13,16 @@ Audited against the current source and recorded verification on 2026-11-02. One 
 
 ## Implementation work — next item is 9
 
-### 9. Scope custom title actions in favourites, likes and queue deduplication
+### 9. Scope custom title likes and queue deduplication
 
-- **Gap:** Playback/history and catalog navigation now retain custom content ownership, but `Saved.isFavourite`, `Saved.isLiked` and toggle/remove operations still compare raw IDs. `QueuedMovie.sameMovie` scopes custom IDs to the selected stream provider rather than the owning catalog, so different custom titles using one stream addon can collapse into one queue entry.
-- **Benefit:** Saving or queuing one custom title must not select, remove or hide another provider's title with the same ID.
+- **Gap:** `Saved.isLiked` and like toggles still compare raw IDs. My List/favourites now retain custom content ownership and are no longer part of this gap. `QueuedMovie.sameMovie` scopes custom IDs to the selected stream provider rather than the owning catalog, so different custom titles using one stream addon can collapse into one queue entry.
+- **Benefit:** Liking or queuing one custom title must not select, remove or hide another provider's title with the same ID.
 - **Complete when:** Use content ownership for these comparisons while preserving shared canonical IDs. Retain existing saved data without guessing ownership for legacy custom entries; test colliding custom IDs, different stream providers, removal and restart.
-- **Evidence:** `lib/saved.dart`, title favourite/like callers in `lib/screens/title.dart`, and `QueuedMovie.sameMovie`/`MovieQueue.contains` in `lib/queue.dart`. This is separate from the completed resume-scoping work.
+- **Evidence:** `lib/saved.dart`, title like callers in `lib/screens/title.dart`, and `QueuedMovie.sameMovie`/`MovieQueue.contains` in `lib/queue.dart`. This is separate from the completed resume-scoping work.
 
 ## Device verification only — features already implemented
 
-Do not rebuild these features when asked for the next implementation item. The current shared tree passes 436 Flutter tests and the Android unit-test gate (45 tests); analysis/design gates are clean and the debug APK builds, as recorded in `CLAUDE.md`. That evidence is not physical-device acceptance. Reuse existing tests and acceptance scenarios. Record device/app versions and results, and retain only failing or unverified scenarios below.
+Do not rebuild these features when asked for the next implementation item. The current shared tree passes 447 Flutter tests and the Android unit-test gate (46 tests); analysis/design gates are clean and the debug APK builds, as recorded in `CLAUDE.md`. That evidence is not physical-device acceptance. Reuse existing tests and acceptance scenarios. Record device/app versions and results, and retain only failing or unverified scenarios below.
 
 For every relevant scenario, check phone/TV accessibility: TalkBack, larger text, physical remote navigation, visible focus/reveal and focus restoration. Ask before controlling the user's physical phone or using paid mobile data, as required by `CLAUDE.md`.
 
@@ -73,6 +73,12 @@ For every relevant scenario, check phone/TV accessibility: TalkBack, larger text
 - **Already implemented:** Clean analyzer/design gates, explicit token-file configuration, house speed/volume sheets, persistent inline player feedback and a shared download track with an unknown-size skeleton. No gate suppressions or new dependencies. Widget checks cover touch/remote selection, large text, reduced motion, semantics, focus rings and restoration.
 - **Remaining:** Physical phone/TV TalkBack and remote checks for speed/volume sheets, Back and focus restoration, including fullscreen playback. Force speed/PiP failures and check feedback visibility, announcement and dismissal; verify known/unknown-size HTTP download progress. Native player mounting/fullscreen behavior is outside widget-test coverage.
 - **Evidence:** `design/gates.json`, `lib/screens/player_feedback.dart`, `lib/kit/progress.dart`, `test/validation_controls_test.dart`, existing speed/volume/TV player tests and the gate results in `CLAUDE.md`.
+
+### 10. Discover home and inline previews: device acceptance
+
+- **Implemented:** Featured carousel, lazy catalog rows, separate My List/Favourites, provider-aware saved actions and existing Browse/search routes. Isolated Android trailer previews parse Cinemeta trailer references and use the official YouTube embed or direct HTTP(S) video, with muted startup and artwork/external-link fallback.
+- **Remaining:** Physical phone/TV video and muted autoplay, player controls/branding and TV remote access, blocked/restricted trailers and unavailable WebView fallback. Verify offscreen/tab/route/background teardown, return/resume and repeated carousel changes without background audio or leaked views. Check My List persistence, horizontal remote traversal, focus restoration, TalkBack and 1.3× text. No device was connected during implementation; native builds and fake-player tests do not establish this acceptance.
+- **Evidence:** `design/home.md`, `lib/screens/home.dart`, `lib/trailers.dart`, native `TrailerView.kt` and home/trailer/saved tests.
 
 ## Scope notes
 

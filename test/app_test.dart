@@ -39,7 +39,7 @@ class _Addons extends Addons {
   @override
   Future<Meta> meta(String type, String id) async => (
         id: 'tt1', type: 'movie', name: 'The Kid', poster: null, background: null, logo: null,
-        description: null, scope: null, releaseInfo: '1921', runtime: null, imdbRating: null, genres: <String>[], videos: <Video>[],
+        description: null, scope: null, releaseInfo: '1921', runtime: null, imdbRating: null, genres: <String>[], trailers: const <Trailer>[], videos: <Video>[],
       );
   @override
   List<Addon> streamSources(String type, String videoId) => const [];
@@ -60,6 +60,7 @@ void main() {
     addons = _Addons();
     downloads = _Downloads();
     await saved.load();
+    await settings.load();
     tester.view.physicalSize = const Size(1080, 1920);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -70,11 +71,13 @@ void main() {
     for (final tab in ['Discover', 'Anime', 'Live', 'Downloads']) {
       expect(find.text(tab), findsWidgets);
     }
-    expect(find.text('The Kid'), findsOneWidget);
+    expect(find.text('The Kid'), findsWidgets);
     expect(find.textContaining('Sign in'), findsNothing);
     expect(find.textContaining('Continue as guest'), findsNothing);
 
-    await tester.tap(find.text('The Kid'));
+    await tester.ensureVisible(find.text('More Info'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('More Info'));
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.favorite_border_rounded));
     await tester.pumpAndSettle();

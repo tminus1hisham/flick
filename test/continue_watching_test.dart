@@ -34,7 +34,7 @@ class _Addons extends Addons {
     if (fail) throw StateError('Offline');
     return (id: id, type: type, name: 'Saved title', poster: null,
       background: null, logo: null, description: null, scope: null, releaseInfo: null, runtime: null,
-      imdbRating: null, genres: <String>[], videos: missing ? <Video>[] : <Video>[
+      imdbRating: null, genres: <String>[], trailers: const <Trailer>[], videos: missing ? <Video>[] : <Video>[
         _video, (id: 'kitsu:42:3', title: 'Kitsu episode', season: 1, episode: 3,
           released: null, thumbnail: null)]);
   }
@@ -72,6 +72,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await history.load();
     await saved.load();
+    await settings.load();
     addons = fake = _Addons();
   });
   tearDown(() {
@@ -98,6 +99,7 @@ void main() {
       final semantics = tester.ensureSemantics();
       await history.save(progress());
       await pump(tester, const Scaffold(body: DiscoverScreen()), tv: tv);
+      await tester.scrollUntilVisible(find.text('Continue Watching'), 250, scrollable: find.byType(Scrollable).first);
       expect(find.text('Continue Watching'), findsOneWidget);
       final target = find.bySemanticsLabel('Saved title, Saved episode, resume at 2:03');
       if (tv) {

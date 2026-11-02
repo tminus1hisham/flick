@@ -12,6 +12,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var miruroBrowser: MiruroBrowser? = null
     private var fctv: Fctv? = null
+    private var trailers: TrailerViewFactory? = null
     private var pip: MethodChannel? = null
     private var pipPlaying = false
     private val supportsPip: Boolean
@@ -39,6 +40,9 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        trailers = TrailerViewFactory(flutterEngine.dartExecutor.binaryMessenger).also {
+            flutterEngine.platformViewsController.registry.registerViewFactory("flick/trailer", it)
+        }
         flutterEngine.plugins.add(Torrents())
         miruroBrowser = MiruroBrowser(this, flutterEngine.dartExecutor.binaryMessenger)
         fctv = Fctv(flutterEngine.dartExecutor.binaryMessenger)
@@ -68,12 +72,19 @@ class MainActivity : FlutterActivity() {
         pip?.invokeMethod("changed", inPip)
     }
 
+    override fun onPause() {
+        trailers?.pauseAll()
+        super.onPause()
+    }
+
     override fun onStop() {
         super.onStop()
         pip?.invokeMethod("stopped", null)
     }
 
     override fun onDestroy() {
+        trailers?.dispose()
+        trailers = null
         pip?.setMethodCallHandler(null)
         pip = null
         miruroBrowser?.dispose()
