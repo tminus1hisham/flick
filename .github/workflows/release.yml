@@ -14,7 +14,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Read version
         id: v
-        run: echo "name=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "name=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_OUTPUT"
       - name: Skip if already released
         id: check
         env: { GH_TOKEN: "${{ github.token }}" }
