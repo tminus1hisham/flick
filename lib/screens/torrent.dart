@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../addons.dart' show Subtitle;
 import '../kit/route.dart';
 import '../kit/sheet.dart';
+import '../kit/focus.dart';
+import '../kit/tv_surface.dart';
 import '../playback.dart';
 import '../state.dart';
 import '../theme.dart';
@@ -40,11 +42,11 @@ class MagnetButton extends StatelessWidget {
   const MagnetButton({super.key});
 
   @override
-  Widget build(BuildContext context) => IconButton(
+  Widget build(BuildContext context) => TvControl(child: IconButton(
       icon: const Icon(Icons.add_link),
       tooltip: 'Stream a link',
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      onPressed: () => openMagnet(context));
+      onPressed: () => openMagnet(context)));
 }
 
 class _MagnetDialog extends StatefulWidget {
@@ -93,25 +95,25 @@ class _MagnetDialogState extends State<_MagnetDialog> {
             Text('Paste a magnet link to choose a video.',
                 style: FlickText.body.copyWith(color: FlickTokens.textSecondary)),
             const SizedBox(height: 16),
-            TextField(
+            TvControl(child: TextField(
               controller: _text,
               autofocus: true,
               keyboardType: TextInputType.url,
               decoration: InputDecoration(hintText: 'magnet:?xt=urn:btih:…', errorText: _error),
               onSubmitted: (_) => _submit(),
-            ),
+            )),
             const SizedBox(height: 16),
             Wrap(spacing: 12, children: [
-              TextButton(
+              TvControl(child: TextButton(
                 style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 onPressed: _close,
                 child: const Text('Cancel'),
-              ),
-              FilledButton(
+              )),
+              TvControl(child: FilledButton(
                 style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
                 onPressed: _submit,
                 child: const Text('Continue'),
-              ),
+              )),
             ]),
           ],
         ),
@@ -350,21 +352,22 @@ class _TorrentScreenState extends State<TorrentScreen> {
           ],
         );
     return Scaffold(
-      appBar: AppBar(title: Text(widget.download ? 'Download' : widget.title ?? 'Stream a link')),
-      body: error != null
+      appBar: context.tv ? null : AppBar(title: Text(widget.download ? 'Download' : widget.title ?? 'Stream a link')),
+      body: TvSurface(title: widget.download ? 'Download' : widget.title ?? 'Stream a link', back: true,
+        child: error != null
           ? _Notice(
               icon: Icons.report_outlined,
               title: widget.download ? "Couldn't download this torrent" : "Couldn't play this torrent",
               detail: error is PlatformException ? error.message ?? error.code : '$error',
               danger: true,
               action: Wrap(spacing: 12, children: [
-                OutlinedButton(
+                TvControl(child: OutlinedButton(
                     style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
-                    onPressed: _retry, child: const Text('Retry')),
-                TextButton(
+                    onPressed: _retry, child: const Text('Retry'))),
+                TvControl(child: TextButton(
                     style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Choose another source')),
+                    child: const Text('Choose another source'))),
               ]),
             )
           : files != null && files.isEmpty
@@ -388,10 +391,10 @@ class _TorrentScreenState extends State<TorrentScreen> {
                     ),
                     _Stage(
                         _autoAttempted && _openingFile != null
-                            ? '${widget.download ? 'Queuing' : 'Opening'} ${files!.firstWhere((f) => f.index == _openingFile).name}'
+                            ? '${widget.download ? 'Queuing' : 'Opening'} ${widget.playback?.subtitle ?? widget.title ?? files!.firstWhere((f) => f.index == _openingFile).name.split(RegExp(r'[/\\]')).last}'
                             : widget.download ? 'Choose a video to download' : 'Choose a video',
                         files == null ? _Step.pending : _Step.now),
-                    if (i != null && i.name.isNotEmpty) ...[
+                    if (i != null && i.name.isNotEmpty && widget.title == null) ...[
                       const SizedBox(height: 20),
                       Text(i.name, style: t.titleMedium),
                     ],
@@ -410,6 +413,8 @@ class _TorrentScreenState extends State<TorrentScreen> {
                       for (final (n, f) in files.indexed) ...[
                         if (n > 0) const Divider(),
                         _FileRow(f,
+                            label: _autoAttempted && f.index == _openingFile
+                                ? widget.playback?.subtitle ?? widget.title : null,
                             suggested: f.index == _suggested,
                             opening: _openingFile == f.index,
                             download: widget.download,
@@ -417,7 +422,7 @@ class _TorrentScreenState extends State<TorrentScreen> {
                       ],
                     ],
                   ],
-                ),
+                )),
     );
   }
 }
@@ -491,11 +496,12 @@ class _Stage extends StatelessWidget {
 /// A flat, tappable video row: marker, wrapping name, size.
 class _FileRow extends StatelessWidget {
   const _FileRow(this.file, {
-    required this.suggested, required this.opening, required this.onTap, this.download = false,
+    required this.suggested, required this.opening, required this.onTap, this.download = false, this.label,
   });
   final TorrentFile file;
   final bool suggested, opening, download;
   final VoidCallback? onTap;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -504,11 +510,11 @@ class _FileRow extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: onTap != null,
-      label: '${download ? 'Download' : 'Play'} ${file.name}, ${_size(file.size)}${suggested ? ', suggested' : ''}',
-      child: InkWell(
+      label: '${download ? 'Download' : 'Play'} ${label ?? file.name}, ${_size(file.size)}${suggested ? ', suggested' : ''}',
+      child: RevealArea(child: TvControl(child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 56),
+          constraints: BoxConstraints(minHeight: context.tv ? 88 : 56),
           child: IntrinsicHeight(
             child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Container(width: 3, color: opening ? scheme.primary : null),
@@ -539,7 +545,7 @@ class _FileRow extends StatelessWidget {
                             ),
                           ),
                         ),
-                      Text(file.name, style: t.bodyMedium),
+                      Text(label ?? file.name, style: context.tv ? FlickTv.card : t.bodyMedium),
                       if (opening)
                         Text(download ? 'Queuing…' : 'Opening…',
                             style: t.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
@@ -555,7 +561,7 @@ class _FileRow extends StatelessWidget {
             ]),
           ),
         ),
-      ),
+      ))),
     );
   }
 }

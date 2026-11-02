@@ -14,7 +14,9 @@ LiveSeekRange? liveSeekRange(String cache, Duration position) {
       if (range is! Map) continue;
       final start = range['start'], end = range['end'];
       if (start is! num || end is! num || !start.isFinite || !end.isFinite ||
-          start < 0 || end <= start) continue;
+          start < 0 || end <= start) {
+        continue;
+      }
       final bounds = (
         start: Duration(microseconds: (start * 1000000).round()),
         end: Duration(microseconds: (end * 1000000).round()),

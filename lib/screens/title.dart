@@ -73,10 +73,11 @@ class _TitleScreenState extends State<TitleScreen> {
           child: Row(children: [
             BackButton(style: IconButton.styleFrom(backgroundColor: _glass)),
             const Spacer(),
-            TextButton(
-              style: TextButton.styleFrom(backgroundColor: _glass),
+            IconButton(
+              tooltip: 'Sources',
+              style: IconButton.styleFrom(backgroundColor: _glass),
               onPressed: () => _openSources(context),
-              child: const Text('Sources'),
+              icon: const Icon(Icons.settings_outlined),
             ),
           ]),
         ),
@@ -469,7 +470,7 @@ class StreamsScreen extends StatelessWidget {
     final ep = episodeLabel(video.season, video.episode);
     return Scaffold(
       appBar: AppBar(title: const Text('Streams'), actions: [
-        TextButton(onPressed: () => _openSources(context), child: const Text('Sources')),
+        IconButton(tooltip: 'Sources', onPressed: () => _openSources(context), icon: const Icon(Icons.settings_outlined)),
         const SizedBox(width: 8),
       ]),
       body: CustomScrollView(slivers: [

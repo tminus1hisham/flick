@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flick/kit/focus.dart';
+import 'package:flick/kit/sheet.dart';
 import 'package:flick/screens/speed.dart';
 
 void main() {
@@ -14,9 +15,7 @@ void main() {
           body: Builder(
             builder: (context) => TextButton(
               onPressed: () async => selected(
-                await showDialog<double>(
-                  context: context,
-                  builder: (_) => const SpeedPanel(rate: 1),
+                await showFlickSheet<double>(context, (_) => const SpeedPanel(rate: 1),
                 ),
               ),
               child: const Text('Speed'),

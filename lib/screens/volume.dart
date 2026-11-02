@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../kit/tv_surface.dart';
+import '../kit/focus.dart';
+import '../theme.dart';
+
 class VolumePanel extends StatelessWidget {
   const VolumePanel({
     required this.stream,
@@ -21,40 +25,41 @@ class VolumePanel extends StatelessWidget {
       // Read current state even when reopened before another stream event.
       final volume = readVolume().clamp(0.0, 100.0);
       final muted = volume == 0;
-      return AlertDialog(
-        title: const Text('Volume'),
-        scrollable: true,
-        content: SizedBox(
-          width: 280,
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(FlickTokens.pageGutter),
+        child: SizedBox(
+          width: 360,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${volume.round()}%'),
+              Text('Volume', style: context.tv ? FlickTv.railHeading : FlickText.railHeading),
+              const SizedBox(height: FlickTokens.railGap),
+              Text('${volume.round()}%', style: context.tv ? FlickTv.body : FlickText.body),
               Semantics(
                 label: 'Volume',
-                child: Slider(
+                child: TvControl(child: Slider(
                   autofocus: true,
                   value: volume,
                   max: 100,
                   divisions: 100,
                   semanticFormatterCallback: (value) => '${value.round()}%',
                   onChanged: onChanged,
-                ),
+                )),
               ),
+              Wrap(spacing: FlickTokens.railGap, children: [
+                TvControl(child: TextButton.icon(
+                  onPressed: onMute,
+                  icon: Icon(muted ? Icons.volume_off : Icons.volume_up),
+                  label: Text(muted ? 'Unmute' : 'Mute'),
+                )),
+                TvControl(child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Done'),
+                )),
+              ]),
             ],
           ),
         ),
-        actions: [
-          TextButton.icon(
-            onPressed: onMute,
-            icon: Icon(muted ? Icons.volume_off : Icons.volume_up),
-            label: Text(muted ? 'Unmute' : 'Mute'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
-          ),
-        ],
       );
     },
   );

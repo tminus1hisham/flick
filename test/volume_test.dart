@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flick/screens/volume.dart';
 import 'package:flick/theme.dart';
+import 'package:flick/kit/sheet.dart';
 
 void main() {
   late double volume, unmutedVolume;
@@ -30,9 +31,7 @@ void main() {
         home: Builder(
           builder: (context) => Scaffold(
             body: TextButton(
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => VolumePanel(
+              onPressed: () => showFlickSheet<void>(context, (_) => VolumePanel(
                   stream: changes.stream,
                   readVolume: () => volume,
                   onChanged: setVolume,

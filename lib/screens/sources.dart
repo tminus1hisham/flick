@@ -6,6 +6,8 @@ import '../addons.dart';
 import '../state.dart';
 import '../theme.dart';
 import '../widgets.dart';
+import '../kit/focus.dart';
+import '../kit/tv_surface.dart';
 
 /// D4 Sources: installed addons (bundled with switches, user-added with remove + inline Undo)
 /// and an inline field to add one by its link.
@@ -88,8 +90,8 @@ class _SourcesScreenState extends State<SourcesScreen> {
   Widget build(BuildContext context) {
     final fade = MediaQuery.disableAnimationsOf(context) ? Duration.zero : FlickTokens.artworkFadeDuration;
     return Scaffold(
-      appBar: AppBar(title: const Text('Sources'), toolbarHeight: 48),
-      body: ListenableBuilder(
+      appBar: context.tv ? null : AppBar(title: const Text('Sources'), toolbarHeight: 48),
+      body: TvSurface(title: 'Sources', back: Navigator.canPop(context), child: ListenableBuilder(
         listenable: addons,
         builder: (context, _) {
           final all = addons.all;
@@ -106,7 +108,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
                 if (_toggleError case (:final addon, :final on, :final error) when addon == a)
                   _Inline(
                     message: friendlyError(error),
-                    action: TextButton(onPressed: () => _toggle(a, on), child: const Text('Retry')),
+                    action: TvControl(child: TextButton(onPressed: () => _toggle(a, on), child: const Text('Retry'))),
                   ),
               ],
               const SizedBox(height: 8),
@@ -117,7 +119,13 @@ class _SourcesScreenState extends State<SourcesScreen> {
                   title: 'No user-added sources',
                 ),
               for (final (i, a) in user.indexed)
-                AnimatedSwitcher(
+                if (context.tv)
+                  RevealArea(child: TvControl(key: ValueKey(a.scopeId), child: TextButton(
+                    onPressed: () => _removed.containsKey(a) ? _undo(a) : _remove(a, i),
+                    child: _Row(title: _removed.containsKey(a) ? '${a.name} removed' : a.name,
+                      subtitle: a.capability, trailing: Text(_removed.containsKey(a) ? 'Undo' : 'Remove')),
+                  )))
+                else AnimatedSwitcher(
                   duration: fade,
                   child: _removed.containsKey(a)
                       ? _UndoRow(a, key: ValueKey('undo ${a.id}'), onUndo: () => _undo(a))
@@ -127,11 +135,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
                           child: _Row(
                             title: a.name,
                             subtitle: a.capability,
-                            trailing: IconButton(
+                            trailing: TvControl(child: IconButton(
                               tooltip: 'Remove ${a.name}',
                               icon: const Icon(Icons.remove_circle_outline),
                               onPressed: () => _remove(a, i),
-                            ),
+                            )),
                           ),
                         ),
                 ),
@@ -143,17 +151,17 @@ class _SourcesScreenState extends State<SourcesScreen> {
             ],
           );
         },
-      ),
+      )),
     );
   }
 
   Widget _switchRow(Addon a) {
     final on = _pending[a.id] ?? addons.isEnabled(a);
     return MergeSemantics(
-      child: InkWell(
+      child: TvControl(child: InkWell(
         onTap: () => _toggle(a, !on),
         child: _Row(title: a.name, subtitle: 'Built-in · ${a.capability}', trailing: _Toggle(on)),
-      ),
+      )),
     );
   }
 
@@ -166,7 +174,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
         const SizedBox(height: 4),
         Semantics(
           label: 'Addon link',
-          child: TextField(
+          child: TvControl(child: TextField(
             controller: _url,
             readOnly: _busy,
             keyboardType: TextInputType.url,
@@ -175,7 +183,7 @@ class _SourcesScreenState extends State<SourcesScreen> {
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _busy ? null : _add(),
             decoration: const InputDecoration(hintText: 'https://…/manifest.json'),
-          ),
+          )),
         ),
         const SizedBox(height: 4),
         Semantics(
@@ -199,11 +207,11 @@ class _SourcesScreenState extends State<SourcesScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        FilledButton(
+        TvControl(child: FilledButton(
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           onPressed: _busy ? null : _add,
           child: Text(_busy ? 'Checking link…' : 'Add source'),
-        ),
+        )),
       ],
     ),
   );
@@ -218,7 +226,7 @@ class _Label extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 0, FlickTokens.pageGutter, 4),
     child: Semantics(
       header: true,
-      child: Text(text, style: FlickText.smallLabel.copyWith(color: FlickTokens.textSecondary)),
+      child: Text(text, style: (context.tv ? FlickTv.railHeading : FlickText.smallLabel).copyWith(color: FlickTokens.textSecondary)),
     ),
   );
 }
@@ -232,8 +240,8 @@ class _Row extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(minHeight: 64),
-    padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 8, FlickTokens.pageGutter, 8),
+    constraints: BoxConstraints(minHeight: context.tv ? 88 : 64),
+    padding: EdgeInsets.fromLTRB(FlickTokens.pageGutter, context.tv ? 16 : 8, FlickTokens.pageGutter, context.tv ? 16 : 8),
     decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: FlickTokens.outline))),
     child: Row(
       children: [
@@ -243,9 +251,9 @@ class _Row extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(title, style: FlickText.cardTitle.copyWith(color: FlickTokens.textPrimary)),
+              Text(title, style: (context.tv ? FlickTv.card : FlickText.cardTitle).copyWith(color: FlickTokens.textPrimary)),
               if (subtitle != null)
-                Text(subtitle!, style: FlickText.metadata.copyWith(color: FlickTokens.textSecondary)),
+                Text(subtitle!, style: (context.tv ? FlickTv.body : FlickText.metadata).copyWith(color: FlickTokens.textSecondary)),
             ],
           ),
         ),
@@ -285,10 +293,10 @@ class _UndoRow extends StatelessWidget {
     liveRegion: true,
     child: _Row(
       title: '${addon.name} removed',
-      trailing: TextButton(
+      trailing: TvControl(child: TextButton(
         onPressed: onUndo,
         child: Text('Undo', semanticsLabel: 'Undo removing ${addon.name}'),
-      ),
+      )),
     ),
   );
 }
@@ -454,10 +462,10 @@ class _UpdateRowState extends State<_UpdateRow> {
           _Row(
             title: r == null ? 'Check for updates' : 'Update to ${r.version}',
             subtitle: subtitle,
-            trailing: TextButton(
+            trailing: TvControl(child: TextButton(
               onPressed: _busy ? null : (r == null ? _check : _install),
               child: Text(r == null ? 'Check' : (_failed ? 'Retry' : 'Install')),
-            ),
+            )),
           ),
         ],
       ),

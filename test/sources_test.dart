@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flick/addons.dart';
+import 'package:flick/kit/focus.dart';
 import 'package:flick/screens/sources.dart';
 import 'package:flick/state.dart';
 import 'package:flick/theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Addon implements Addon {
@@ -69,13 +71,15 @@ class _Addons extends Addons {
 
 late _Addons _fake;
 
-Future<void> _pump(WidgetTester tester, {double textScale = 1}) async {
+Future<void> _pump(WidgetTester tester, {double textScale = 1, bool tv = false}) async {
+  device.tv = tv;
+  addTearDown(() => device.tv = false);
   tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = const Size(360, 640);
+  tester.view.physicalSize = tv ? const Size(960, 540) : const Size(360, 640);
   tester.view.padding = const FakeViewPadding(top: 24, bottom: 24);
   addTearDown(tester.view.reset);
   await tester.pumpWidget(MaterialApp(
-    theme: flickTheme(),
+    theme: flickTheme(tv: tv), shortcuts: tv ? tvShortcuts : null,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(textScale)),
       child: child!,
@@ -102,6 +106,31 @@ void main() {
       _Addon('atlas', 'Atlas'),
     ]);
     addons = _fake;
+  });
+
+  testWidgets('TV remote reveals rows and keeps focus through Remove and Undo at larger text', (tester) async {
+    await _pump(tester, tv: true, textScale: 1.3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(_fake.calls, ['setEnabled pdm false']);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    final before = FocusManager.instance.primaryFocus;
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(find.text('Northstar removed'), findsOneWidget);
+    expect(FocusManager.instance.primaryFocus, same(before));
+    final row = tester.getRect(find.text('Northstar removed'));
+    expect(row.top, greaterThan(0));
+    expect(row.bottom, lessThan(540));
+    await tester.sendKeyEvent(LogicalKeyboardKey.select);
+    await tester.pumpAndSettle();
+    expect(_fake.calls.last, 'restore northstar');
+    expect(FocusManager.instance.primaryFocus, same(before));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('bundled rows have switches; Cinemeta is locked on', (tester) async {

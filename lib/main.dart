@@ -115,7 +115,7 @@ class _ShellState extends State<Shell> {
                   DiscoverScreen(onAddSources: () => _select(4)),
                   AnimeTab(onAddSources: () => _select(4)),
                   LiveTab(active: _tab == 2),
-                  Scaffold(appBar: _downloadsBar(), body: const DownloadsScreen()),
+                  const DownloadsScreen(),
                   const SourcesScreen(),
                 ].indexed)
                   // Only the visible tab's posters fly: a title in two tabs' grids would be two Heroes with one tag.

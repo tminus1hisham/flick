@@ -46,6 +46,7 @@ void main() {
       expect(find.text('Wi-Fi only: Off'), findsOneWidget);
       if (tv) {
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
         await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       } else {
         await tester.tap(find.text('Wi-Fi only: Off'));

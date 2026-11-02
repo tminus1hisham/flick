@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flick/kit/focus.dart';
+import 'package:flick/kit/sheet.dart';
 import 'package:flick/player_keys.dart';
 import 'package:flick/screens/tv_player.dart';
 import 'package:flick/screens/volume.dart';
@@ -58,7 +59,7 @@ class _HarnessState extends State<_Harness> {
     position: const Duration(minutes: 2), duration: widget.duration, buffer: const Duration(minutes: 3),
     playing: playing, panel: panel, error: error,
     muted: muted, onVolume: () async {
-      await showDialog<void>(context: context, builder: (_) => VolumePanel(
+      await showFlickSheet<void>(context, (_) => VolumePanel(
         stream: volumeChanges.stream, readVolume: () => volume, onChanged: setVolume,
         onMute: () {
           setVolume(muted ? unmutedVolume : 0);

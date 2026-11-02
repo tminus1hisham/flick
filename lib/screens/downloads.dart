@@ -6,18 +6,22 @@ import 'package:flutter/material.dart';
 import '../downloads.dart';
 import '../playback.dart';
 import '../kit/sheet.dart';
+import '../kit/progress.dart';
+import '../kit/focus.dart';
+import '../kit/tv_surface.dart';
 import '../state.dart';
 import '../theme.dart';
 import 'player.dart';
 import 'resume.dart';
 import 'native_downloads.dart' as native;
 import 'download_controls.dart';
+import 'torrent.dart' show MagnetButton;
 
 class DownloadsScreen extends StatelessWidget {
   const DownloadsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => ListenableBuilder(
+  Widget build(BuildContext context) => TvSurface(title: 'Downloads', action: const MagnetButton(), child: ListenableBuilder(
         listenable: downloads,
         builder: (context, _) {
           // Only stream downloads play; a record without stream metadata is skipped.
@@ -40,22 +44,22 @@ class DownloadsScreen extends StatelessWidget {
                     child: Text("Couldn't update torrent downloads. Check your connection and try again.",
                         style: FlickText.metadata.copyWith(color: context.flick.warning)),
                   ),
-                  TextButton(
+                  TvControl(child: TextButton(
                     style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                     onPressed: downloads.restoreTorrents,
                     child: const Text('Try again'),
-                  ),
+                  )),
                 ]),
               ),
             for (final d in downloads.items)
-              native.DownloadRow(download: d, onPlay: (d) => _playNative(context, d)),
+              native.DownloadRow(key: ValueKey(d.taskId), download: d, onPlay: (d) => _playNative(context, d)),
             for (final r in torrents)
-              DownloadRow.torrent(download: r, poster: downloads.posterOf(r.taskId)),
+              DownloadRow.torrent(key: ValueKey(r.taskId), download: r, poster: downloads.posterOf(r.taskId)),
             for (final (r, stream) in records)
-              DownloadRow(record: r, poster: downloads.posterOf(r.taskId), stream: stream),
+              DownloadRow(key: ValueKey(r.taskId), record: r, poster: downloads.posterOf(r.taskId), stream: stream),
           ]);
         },
-      );
+      ));
 }
 
 /// One download row. Public only so previews can render it without the manager.
@@ -127,6 +131,20 @@ class _DownloadRowState extends State<DownloadRow> {
     }
   }
 
+  Future<void> _more() async {
+    final remove = await showFlickSheet<bool>(context, (sheet) => SingleChildScrollView(
+      padding: const EdgeInsets.all(FlickTokens.pageGutter),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(_stream.title, style: FlickTv.railHeading),
+        const SizedBox(height: FlickTokens.railGap),
+        TvControl(child: TextButton.icon(onPressed: () => Navigator.pop(sheet, true),
+          icon: const Icon(Icons.delete_outline), label: const Text('Delete download'))),
+        TvControl(child: TextButton(onPressed: () => Navigator.pop(sheet, false), child: const Text('Cancel'))),
+      ]),
+    ));
+    if (remove == true && mounted) await _delete();
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.record;
@@ -159,7 +177,9 @@ class _DownloadRowState extends State<DownloadRow> {
     final waiting = torrent?.info?.waiting == true || (!downloads.networkAllowed && running);
     final error = _error ?? torrent?.info?.error ?? r?.exception?.description;
 
-    return InkWell(
+    return RevealArea(child: Padding(
+      padding: EdgeInsets.symmetric(vertical: context.tv ? FlickTv.gridPad : 0),
+      child: TvControl(child: InkWell(
       onTap: done && !_deleting ? _playStream : null,
       child: Container(
         padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 16, 4, 16),
@@ -168,8 +188,8 @@ class _DownloadRowState extends State<DownloadRow> {
           ClipRRect(
             borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
             child: SizedBox(
-              width: 56,
-              height: 84,
+              width: context.tv ? 88 : 56,
+              height: context.tv ? 132 : 84,
               child: poster.existsSync()
                   ? Image.file(poster, fit: BoxFit.cover)
                   : ColoredBox(
@@ -186,7 +206,7 @@ class _DownloadRowState extends State<DownloadRow> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(stream.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: t.titleSmall),
+                  Text(stream.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: context.tv ? FlickTv.railHeading : t.titleSmall),
                   if (stream.playback.subtitle case final String subtitle) ...[
                     const SizedBox(height: 2),
                     Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -208,12 +228,8 @@ class _DownloadRowState extends State<DownloadRow> {
                   ],
                   if (showBar) ...[
                     const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: known ? progress : MediaQuery.disableAnimationsOf(context) ? 0 : null,
-                      minHeight: 3,
-                      color: paused ? fc.warning : cs.primary,
-                      backgroundColor: cs.surfaceContainerHigh,
-                    ),
+                    Semantics(label: 'Download progress', value: known ? '${(progress * 100).round()} percent' : 'Size unknown',
+                      child: FlickProgress(value: known ? progress : null, color: paused ? fc.warning : cs.primary)),
                   ],
                   if (error != null) ...[
                     const SizedBox(height: 6),
@@ -227,22 +243,22 @@ class _DownloadRowState extends State<DownloadRow> {
             ),
           ),
           if (running && r != null && r.task.allowPause)
-            IconButton(
+            TvControl(child: IconButton(
               tooltip: 'Pause download',
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.pause),
               onPressed: () => downloads.pause(r),
-            ),
+            )),
           // Tasks keep their own request headers, so they resume as they were queued.
           if (paused && r != null)
-            IconButton(
+            TvControl(child: IconButton(
               tooltip: 'Resume download',
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               icon: const Icon(Icons.play_arrow),
               onPressed: () => downloads.resume(r),
-            ),
+            )),
           if (status == TaskStatus.failed)
-            IconButton(
+            TvControl(child: IconButton(
               tooltip: 'Retry download',
               icon: const Icon(Icons.refresh),
               onPressed: () async {
@@ -256,8 +272,11 @@ class _DownloadRowState extends State<DownloadRow> {
                   if (mounted) setState(() => _error = 'Could not retry this download. Try again.');
                 }
               },
-            ),
-          SizedBox(
+            )),
+          if (context.tv)
+            TvControl(child: IconButton(tooltip: 'More actions', onPressed: _deleting ? null : _more,
+              icon: const Icon(Icons.more_vert)))
+          else SizedBox(
             width: 48,
             height: 48,
             child: PopupMenuButton<void>(
@@ -271,7 +290,7 @@ class _DownloadRowState extends State<DownloadRow> {
           ),
         ]),
       ),
-    );
+    ))));
   }
 }
 

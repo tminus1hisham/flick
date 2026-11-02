@@ -18,6 +18,8 @@ import '../pip.dart';
 import '../live.dart';
 import '../queue.dart';
 import '../kit/sidebar.dart';
+import '../kit/sheet.dart';
+import 'player_feedback.dart';
 import 'live_queue.dart';
 import 'movie_queue.dart';
 import '../player_keys.dart' show LiveSeekRange, liveSeekRange;
@@ -501,6 +503,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   // (its updateShouldNotify is inverted), so the Next button listens itself.
   final _nextBar = ValueNotifier(0);
   final _tvRefresh = ValueNotifier(0);
+  final _controlNotice = ValueNotifier<String?>(null);
   final _liveRange = ValueNotifier<LiveSeekRange?>(null);
   final _video = GlobalKey<VideoState>();
   late final _pip = PictureInPicture(
@@ -711,13 +714,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     }
     if (!mounted) return;
     if (!await _pip.enter() && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Picture-in-picture is unavailable. Check the app’s picture-in-picture permission in Android settings.',
-          ),
-        ),
-      );
+      _controlNotice.value = 'Picture-in-picture is unavailable. Check the app’s picture-in-picture permission in Android settings.';
     }
   }
 
@@ -1446,6 +1443,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     _token++;
     _nextBar.dispose();
     _tvRefresh.dispose();
+    _controlNotice.dispose();
     for (final s in _subs) {
       s.cancel();
     }
@@ -1491,30 +1489,22 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
   }
 
   Future<void> _showVolume(BuildContext context) async {
-    await showDialog<void>(
-      context: context,
-      builder: (_) => VolumePanel(
+    await showFlickSheet<void>(context, (_) => VolumePanel(
         stream: _player.stream.volume,
         readVolume: () => _player.state.volume,
         onChanged: _setVolume,
         onMute: _toggleMute,
-      ),
-    );
+      ));
   }
 
   Future<void> _showSpeed(BuildContext context) async {
-    final rate = await showDialog<double>(
-      context: context,
-      builder: (_) => SpeedPanel(rate: _player.state.rate),
-    );
+    final rate = await showFlickSheet<double>(context, (_) => SpeedPanel(rate: _player.state.rate));
     if (rate == null || !mounted) return;
     try {
       await _player.setRate(rate);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(this.context).showSnackBar(
-          const SnackBar(content: Text('Could not change playback speed. Try again.')),
-        );
+        _controlNotice.value = 'Could not change playback speed. Try again.';
       }
     }
   }
@@ -1630,7 +1620,14 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           ),
         ),
       ),
+      Positioned.fill(child: _controlFeedback()),
     ],
+  );
+
+  Widget _controlFeedback() => ValueListenableBuilder<String?>(
+    valueListenable: _controlNotice,
+    builder: (_, message, _) => message == null ? const SizedBox.shrink()
+      : PlayerFeedback(message: message, onDismiss: () => _controlNotice.value = null),
   );
 
   @override
@@ -1696,7 +1693,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             stream: _player.stream.rate,
             builder: (context, _) => TextButton(
               style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
+                foregroundColor: FlickTokens.textPrimary,
                 minimumSize: const Size(48, 48),
               ),
               onPressed: () => _showSpeed(context),
@@ -1750,8 +1747,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                 ),
         ),
       ],
-      seekBarColor: Colors.white.withValues(alpha: 0.2),
-      seekBarBufferColor: Colors.white.withValues(alpha: 0.45),
+      seekBarColor: FlickTokens.textPrimary.withValues(alpha: 0.2),
+      seekBarBufferColor: FlickTokens.textPrimary.withValues(alpha: 0.45),
       seekBarPositionColor: FlickTokens.accent,
       seekBarThumbColor: FlickTokens.accent,
       // Addon playback shows BufferingPanel instead.
@@ -1771,7 +1768,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         }
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: FlickTokens.background,
         body: MaterialVideoControlsTheme(
           normal: theme,
           fullscreen: theme,
@@ -1947,7 +1944,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ),
         Positioned.fill(
           child: ListenableBuilder(
-            listenable: _tvRefresh,
+            listenable: Listenable.merge([_tvRefresh, _controlNotice]),
             builder: (context, _) {
               final next = _next;
               final view = next == null
@@ -1955,7 +1952,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   : _upNextView(next, _player.state.position);
               return TvPlayerControls(
                 onQueue: _hasQueue ? () => _showQueue(context) : null,
-                modal: _queueShowing,
+                modal: _queueShowing || _controlNotice.value != null,
                 onChooseSource: widget.live && _hasQueue ? () => _showQueue(context) : null,
                 onSpeed: widget.live ? null : () => _showSpeed(context),
                 live: widget.live,
@@ -2010,6 +2007,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             },
           ),
         ),
+        Positioned.fill(child: _controlFeedback()),
       ],
     ),
   );
@@ -2718,13 +2716,13 @@ class _BufferAhead extends StatelessWidget {
       final s = ahead.isNegative ? Duration.zero : ahead;
       return Text.rich(
         TextSpan(
-          style: const TextStyle(color: Colors.white70, fontSize: 12),
+          style: const TextStyle(color: FlickTokens.textSecondary, fontSize: 12),
           children: [
             const TextSpan(text: 'Buffered '),
             TextSpan(
               text:
                   '${s.inMinutes}:${(s.inSeconds % 60).toString().padLeft(2, '0')}',
-              style: monoStyle.copyWith(color: Colors.white70, fontSize: 12),
+              style: monoStyle.copyWith(color: FlickTokens.textSecondary, fontSize: 12),
             ),
           ],
         ),
@@ -2751,11 +2749,11 @@ class _TopBar extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     return Expanded(
       child: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xB3000000), Color(0x00000000)],
+            colors: [FlickTokens.background.withValues(alpha: 0.7), FlickTokens.background.withValues(alpha: 0)],
           ),
         ),
         child: Row(
@@ -2764,7 +2762,7 @@ class _TopBar extends StatelessWidget {
             SizedBox.square(
               dimension: 48,
               child: BackButton(
-                color: Colors.white,
+                color: FlickTokens.textPrimary,
                 style: IconButton.styleFrom(minimumSize: const Size.square(48)),
               ),
             ),
@@ -2777,14 +2775,14 @@ class _TopBar extends StatelessWidget {
                     title,
                     maxLines: subtitle == null ? 2 : 1,
                     overflow: TextOverflow.ellipsis,
-                    style: t.titleSmall?.copyWith(color: Colors.white),
+                    style: t.titleSmall?.copyWith(color: FlickTokens.textPrimary),
                   ),
                   if (subtitle != null)
                     Text(
                       subtitle!,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: t.labelMedium?.copyWith(color: Colors.white70),
+                      style: t.labelMedium?.copyWith(color: FlickTokens.textSecondary),
                     ),
                   buffer,
                 ],

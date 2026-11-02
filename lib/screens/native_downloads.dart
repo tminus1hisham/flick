@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 
 import '../downloads.dart';
 import '../kit/sheet.dart';
+import '../kit/progress.dart';
+import '../kit/focus.dart';
+import '../kit/tv_surface.dart';
 import '../state.dart' show downloads;
 import '../theme.dart';
 import '../widgets.dart' show NetImage, Skeleton;
@@ -178,7 +181,7 @@ class _DownloadRowState extends State<DownloadRow> {
       (sheetContext) => _sheet(
         title: d.playback.title,
         children: [
-          TextButton.icon(
+          TvControl(child: TextButton.icon(
             style: TextButton.styleFrom(
               foregroundColor: FlickTokens.danger,
               animationDuration: _duration(sheetContext),
@@ -186,15 +189,15 @@ class _DownloadRowState extends State<DownloadRow> {
             onPressed: () => Navigator.pop(sheetContext, true),
             icon: const Icon(Icons.delete_outline_rounded),
             label: const Text('Delete download'),
-          ),
-          TextButton(
+          )),
+          TvControl(child: TextButton(
             style: TextButton.styleFrom(
               foregroundColor: FlickTokens.textSecondary,
               animationDuration: _duration(sheetContext),
             ),
             onPressed: () => Navigator.pop(sheetContext, false),
             child: const Text('Cancel'),
-          ),
+          )),
         ],
       ),
     );
@@ -219,7 +222,7 @@ class _DownloadRowState extends State<DownloadRow> {
                   style: monoStyle,
                 ),
                 const TextSpan(
-                  text: ' on this phone. You’ll need to download it again '
+                  text: ' on this device. You’ll need to download it again '
                       'to watch offline.',
                 ),
               ],
@@ -229,7 +232,7 @@ class _DownloadRowState extends State<DownloadRow> {
             ),
           ),
           const SizedBox(height: FlickTokens.grid * 6),
-          FilledButton(
+          TvControl(child: FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: FlickTokens.danger,
               foregroundColor: FlickTokens.background,
@@ -237,16 +240,16 @@ class _DownloadRowState extends State<DownloadRow> {
             ),
             onPressed: () => Navigator.pop(sheetContext, true),
             child: const Text('Delete download'),
-          ),
+          )),
           const SizedBox(height: FlickTokens.grid * 2),
-          TextButton(
+          TvControl(child: TextButton(
             style: TextButton.styleFrom(
               foregroundColor: FlickTokens.textSecondary,
               animationDuration: _duration(sheetContext),
             ),
             onPressed: () => Navigator.pop(sheetContext, false),
             child: const Text('Cancel'),
-          ),
+          )),
         ],
       ),
     );
@@ -298,7 +301,9 @@ class _DownloadRowState extends State<DownloadRow> {
         'Failed: ${(d.error ?? '').trim().isEmpty ? 'Couldn’t download this file.' : d.error!.trim()}',
     };
 
-    return Material(
+    return RevealArea(child: Padding(
+      padding: EdgeInsets.symmetric(vertical: context.tv ? FlickTv.gridPad : 0),
+      child: Material(
       color: FlickTokens.surface1,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(FlickTokens.controlRadius),
@@ -328,7 +333,7 @@ class _DownloadRowState extends State<DownloadRow> {
                     ].join(', '),
                     onTap: ready ? () => widget.onPlay(d) : null,
                     excludeSemantics: true,
-                    child: InkWell(
+                    child: TvControl(child: InkWell(
                       borderRadius: BorderRadius.circular(
                         FlickTokens.artworkRadius,
                       ),
@@ -349,7 +354,7 @@ class _DownloadRowState extends State<DownloadRow> {
                                 children: [
                                   Text(
                                     d.playback.title,
-                                    style: FlickText.cardTitle,
+                                    style: context.tv ? FlickTv.railHeading : FlickText.cardTitle,
                                   ),
                                   if (secondary.isNotEmpty) ...[
                                     const SizedBox(
@@ -379,17 +384,17 @@ class _DownloadRowState extends State<DownloadRow> {
                           ],
                         ),
                       ),
-                    ),
+                    )),
                   ),
                 ),
-                IconButton(
+                TvControl(child: IconButton(
                   tooltip: 'More actions for ${d.playback.title}',
                   style: IconButton.styleFrom(
                     animationDuration: _duration(context),
                   ),
                   onPressed: _busy ? null : _more,
                   icon: const Icon(Icons.more_horiz_rounded),
-                ),
+                )),
               ],
             ),
             const SizedBox(height: FlickTokens.railGap),
@@ -429,13 +434,13 @@ class _DownloadRowState extends State<DownloadRow> {
             ),
             if (active || paused) ...[
               const SizedBox(height: FlickTokens.railGap),
-              _ProgressTrack(value: progress, color: tint),
+              FlickProgress(value: progress, color: tint),
             ],
             if (active || paused || failed) ...[
               const SizedBox(height: FlickTokens.grid * 2),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(
+                child: TvControl(child: TextButton.icon(
                   style: TextButton.styleFrom(
                     foregroundColor: failed
                         ? context.flick.danger
@@ -482,7 +487,7 @@ class _DownloadRowState extends State<DownloadRow> {
                                 ? 'Retry download'
                                 : 'Resume download',
                   ),
-                ),
+                )),
               ),
             ],
             if (_actionError != null) ...[
@@ -500,7 +505,7 @@ class _DownloadRowState extends State<DownloadRow> {
           ],
         ),
       ),
-    );
+    )));
   }
 }
 
@@ -517,8 +522,8 @@ class _Poster extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(FlickTokens.artworkRadius),
         child: SizedBox(
-          width: FlickTokens.grid * 14,
-          height: FlickTokens.grid * 21,
+          width: context.tv ? 88 : FlickTokens.grid * 14,
+          height: context.tv ? 132 : FlickTokens.grid * 21,
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -558,39 +563,6 @@ class _Poster extends StatelessWidget {
   }
 }
 
-class _ProgressTrack extends StatelessWidget {
-  const _ProgressTrack({required this.value, required this.color});
-
-  final double value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(FlickTokens.grid),
-          child: SizedBox(
-            height: FlickTokens.grid,
-            child: ColoredBox(
-              color: FlickTokens.surface2,
-              child: TweenAnimationBuilder<double>(
-                tween: Tween<double>(begin: value, end: value),
-                duration: _duration(context),
-                curve: FlickTokens.curveIn,
-                builder: (context, current, _) => Align(
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: current,
-                    heightFactor: 1,
-                    child: ColoredBox(color: color),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-}
-
 class _EmptyDownloads extends StatelessWidget {
   const _EmptyDownloads();
 
@@ -628,9 +600,9 @@ class _EmptyDownloads extends StatelessWidget {
               ),
               const SizedBox(height: FlickTokens.grid * 2),
               Text(
-                'Tap ⤓ on a torrent to keep it on your phone.',
+                context.tv ? 'Choose Download on a source to watch it offline.' : 'Tap ⤓ on a torrent to keep it on your phone.',
                 semanticsLabel:
-                    'Tap Download on a torrent to keep it on your phone.',
+                    context.tv ? 'Choose Download on a source to watch it offline.' : 'Tap Download on a torrent to keep it on your phone.',
                 textAlign: TextAlign.center,
                 style: FlickText.body.copyWith(
                   color: FlickTokens.textSecondary,

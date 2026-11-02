@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../kit/focus.dart';
+import '../kit/tv_surface.dart';
 import '../state.dart';
 import '../theme.dart';
 
@@ -82,7 +83,7 @@ class _DownloadControlsState extends State<DownloadControls> with WidgetsBinding
         Text('Unknown sizes may run out of space. Delete chosen files from their download menus to free space.', style: text),
         if (error != null) ...[
           Semantics(liveRegion: true, child: Text(error, style: text.copyWith(color: context.flick.danger))),
-          TextButton(onPressed: downloads.refreshEnvironment, child: const Text('Refresh download storage')),
+          TvControl(child: TextButton(onPressed: downloads.refreshEnvironment, child: const Text('Refresh download storage'))),
         ],
       ]),
     );
