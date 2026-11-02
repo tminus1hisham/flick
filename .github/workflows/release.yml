@@ -1,0 +1,48 @@
+# Push a commit that raises `version:` in pubspec.yaml to main and this builds a signed APK
+# and publishes release v<version> (the tag is created for you). Flick's Updates row reads it.
+name: release
+on:
+  push:
+    branches: [main]
+    paths: [pubspec.yaml]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: v
+        run: echo "name=$(grep '^version:' pubspec.yaml | sed 's/version: *//; s/+.*//')" >> "$GITHUB_OUTPUT"
+      - name: Skip if already released
+        id: check
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if gh release view "v${{ steps.v.outputs.name }}" >/dev/null 2>&1; then echo "skip=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-java@v4
+        if: steps.check.outputs.skip != 'true'
+        with: { distribution: temurin, java-version: 17 }
+      - uses: subosito/flutter-action@v2
+        if: steps.check.outputs.skip != 'true'
+        with: { channel: stable, cache: true }
+      - name: Signing key
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/upload.jks"
+            echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}"
+            echo "keyAlias=${{ secrets.KEY_ALIAS }}"
+            echo "keyPassword=${{ secrets.KEY_PASSWORD }}"
+          } > android/key.properties
+      - name: Build
+        if: steps.check.outputs.skip != 'true'
+        run: flutter build apk --release
+      - name: Publish
+        if: steps.check.outputs.skip != 'true'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk flick-${{ steps.v.outputs.name }}.apk
+          gh release create "v${{ steps.v.outputs.name }}" "flick-${{ steps.v.outputs.name }}.apk" \
+            --title "Flick ${{ steps.v.outputs.name }}" --generate-notes
