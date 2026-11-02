@@ -13,6 +13,7 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Network
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -52,6 +53,9 @@ class Entry(val th: TorrentHandle, var dir: String, val hash: String, val magnet
     var pinned: Int? = null
     var pinConfigured = false
     var paused = false
+    var networkWaiting = false
+    var downloadNetworkApplied = false
+    var downloadError: String? = null
     var keptFile: Int? = null
     var titleJson = ""
     var keptName = ""
@@ -109,15 +113,59 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
     private var serviceOn = false
     private var activity: ActivityPluginBinding? = null
     private var permission: MethodChannel.Result? = null
+    private val downloadPrefs by lazy { context.getSharedPreferences("download-controls", Context.MODE_PRIVATE) }
+    private val connectivity by lazy { context.getSystemService(ConnectivityManager::class.java) }
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) = networkChanged()
+        override fun onLost(network: Network) = networkChanged()
+        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = networkChanged()
+    }
+
+    private fun networkChanged() {
+        if (!ctl.isShutdown) ctl.execute(::updateDownloadNetworks)
+    }
+
+    private fun updateDownloadNetworks() {
+        for (e in entries.values) runCatching { synchronized(e) { applyDownloadNetwork(e) } }
+            .onFailure { Log.w("torrent", "download network update failed", it) }
+    }
+
+    private fun downloadAllowed(): Boolean {
+        val caps = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+        return downloadNetworkAllowed(downloadPrefs.getBoolean("wifiOnly", false),
+            caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
+            caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true)
+    }
+
+    private fun applyDownloadNetwork(e: Entry) {
+        if (!e.alive || (e.keptFile == null && e.pinned == null)) return
+        val waiting = !downloadAllowed()
+        val changed = waiting != e.networkWaiting
+        e.networkWaiting = waiting
+        if (e.activeFile == null && (changed || !e.downloadNetworkApplied)) {
+            if (waiting || e.paused || e.done || e.downloadError != null) e.th.pause() else e.th.resume()
+        } else if (changed && e.pinned != null) {
+            want(e)
+        }
+        e.downloadNetworkApplied = true
+    }
+
+    private fun checkSpace(required: Long, dir: File) {
+        check(downloadFits(required, dir.usableSpace)) {
+            "Not enough storage for this download. Delete selected files in Downloads and try again."
+        }
+    }
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
         channel = MethodChannel(binding.binaryMessenger, "flick/torrent")
         channel.setMethodCallHandler(this)
+        connectivity.registerDefaultNetworkCallback(networkCallback)
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
+        connectivity.unregisterNetworkCallback(networkCallback)
         timer.shutdownNow()
         ctl.execute {
             server?.close()
@@ -196,7 +244,24 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
     private fun handle(call: MethodCall): Any? {
         val id = call.argument<Int>("id")
         return when (call.method) {
-            "add" -> add(call.argument<String>("magnet")!!, call.argument<String>("dir")!!)
+            "downloadEnvironment" -> mapOf(
+                "wifiOnly" to downloadPrefs.getBoolean("wifiOnly", false),
+                "allowed" to downloadAllowed(), "free" to context.filesDir.usableSpace,
+                "used" to listOf(File(context.filesDir, "downloads"),
+                    File(context.applicationInfo.dataDir, "app_flutter/videos"),
+                    File(context.applicationInfo.dataDir, "app_flutter/posters")).sumOf { root ->
+                    if (root.exists()) root.walkTopDown().filter { it.isFile }.sumOf { it.length() } else 0L
+                } + listOf(context.filesDir, context.cacheDir).sumOf { root ->
+                    root.listFiles()?.filter { it.isFile && it.name.startsWith("com.bbflight.background_downloader") }
+                        ?.sumOf { it.length() } ?: 0L
+                })
+            "setDownloadWifiOnly" -> {
+                check(downloadPrefs.edit().putBoolean("wifiOnly", call.argument<Boolean>("on")!!).commit())
+                updateDownloadNetworks()
+                null
+            }
+            "add" -> add(call.argument<String>("magnet")!!, call.argument<String>("dir")!!,
+                call.argument<Boolean>("downloadOnly") == true)
             "keep" -> keep(id!!, call.argument<Int>("file")!!, call.argument<String>("titleJson")!!)
             "resumeKept" -> resumeKept()
             "status" -> entries[id]?.let { e -> synchronized(e) { if (e.alive) status(e) else null } }
@@ -245,7 +310,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         timer.scheduleWithFixedDelay({ ctl.execute(::tick) }, 1, 1, TimeUnit.SECONDS)
     }
 
-    private fun add(magnet: String, dir: String): Int {
+    private fun add(magnet: String, dir: String, downloadOnly: Boolean = false): Int {
         val ec = error_code()
         val p = libtorrent.parse_magnet_uri(magnet, ec)
         if (ec.value() != 0) throw IllegalArgumentException(ec.message())
@@ -266,13 +331,14 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         p.setSave_path(dir)
         // Nothing downloads until a file is picked.
         p.setFlags(p.getFlags().or_(TorrentFlags.DEFAULT_DONT_DOWNLOAD).or_(TorrentFlags.DUPLICATE_IS_ERROR))
+        if (downloadOnly && !downloadAllowed()) p.setFlags(p.getFlags().or_(TorrentFlags.PAUSED))
         val th = TorrentHandle(sm.swig().add_torrent(p, ec))
         if (ec.value() != 0) throw IllegalStateException(ec.message())
         val e = Entry(th, dir, hash, magnet)
         synchronized(e) {
             check(e.alive) { "torrent was removed" }
             e.th.unsetFlags(TorrentFlags.AUTO_MANAGED)
-            e.th.resume()
+            if (!downloadOnly || downloadAllowed()) e.th.resume() else e.th.pause()
         }
         val id = nextId.getAndIncrement()
         entries[id] = e
@@ -330,6 +396,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
             require(e.activeFile == null) { "Stop playback before downloading this torrent" }
             val dir = keptDir(e.hash)
             dir.mkdirs()
+            checkSpace((fs.fileSize(file) - e.th.fileProgress()[file]).coerceAtLeast(0), dir)
             e.keptName = fs.filePath(file)
             e.keptSize = fs.fileSize(file)
             val previousDir = e.dir
@@ -367,7 +434,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
                 require(File(r.getString("dir")).canonicalPath == dir.canonicalPath) { "invalid download directory" }
                 val title = r.getString("titleJson")
                 JSONObject(title)
-                val id = add(r.getString("magnet"), dir.path)
+                val id = add(r.getString("magnet"), dir.path, downloadOnly = true)
                 val e = entries[id]!!
                 synchronized(e) {
                     check(e.alive) { "torrent was removed" }
@@ -407,13 +474,15 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         val fs = ti.files()
         require(file in 0 until fs.numFiles() && !fs.padFileAt(file)) { "no file $file" }
         require(fs.filePath(file) == e.keptName && fs.fileSize(file) == e.keptSize) { "download file changed" }
+        if (!checkRemainingSpace(e, fs.fileSize(file) - e.th.fileProgress()[file])) return
         e.th.clearPieceDeadlines()
         e.due.clear()
         // Reset streaming piece priorities before applying the single selected file.
         e.th.prioritizePieces(Array(ti.numPieces()) { Priority.DEFAULT })
         e.th.prioritizeFiles(Array(fs.numFiles()) { if (it == file) Priority.DEFAULT else Priority.IGNORE })
         e.th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-        e.th.resume()
+        e.downloadNetworkApplied = false
+        applyDownloadNetwork(e)
         e.keptConfigured = true
     }
 
@@ -443,10 +512,12 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
             "hasMetadata" to s.hasMetadata(),
             "error" to when {
                 e.done && !complete -> "Downloaded file is missing"
+                e.downloadError != null -> e.downloadError
                 err.isError -> err.message
                 else -> null
             },
             "downloaded" to downloaded, "total" to e.keptSize, "done" to complete,
+            "waiting" to e.networkWaiting,
             "path" to if (complete) dataFile(e)?.path else null)
     }
 
@@ -514,6 +585,8 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
                 e.th.clearPieceDeadlines()
                 e.due.clear()
                 want(e)
+                e.downloadNetworkApplied = false
+                applyDownloadNetwork(e)
             }
         }
     }
@@ -524,6 +597,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
             try {
                 synchronized(e) {
                     if (e.alive) {
+                        applyDownloadNetwork(e)
                         if (e.keptFile != null) keptBytes(e)
                         if (e.activeFile != null) e.reschedule()
                     }
@@ -539,8 +613,10 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
     private fun want(e: Entry) {
         val ti = e.th.torrentFile() ?: return
         val fs = ti.files()
-        val selected = listOfNotNull(e.activeFile, e.pinned)
-        require(selected.all { validDownloadFile(it, fs.numFiles()) && !fs.padFileAt(it) }) { "invalid download file" }
+        val selected = listOfNotNull(e.activeFile, e.pinned.takeUnless { e.networkWaiting || e.paused })
+        require(listOfNotNull(e.activeFile, e.pinned).all { validDownloadFile(it, fs.numFiles()) && !fs.padFileAt(it) }) { "invalid download file" }
+        if (!e.pinConfigured && e.pinned != null &&
+            !checkRemainingSpace(e, fs.fileSize(e.pinned!!) - e.th.fileProgress()[e.pinned!!])) return
         e.th.prioritizeFiles(Array(fs.numFiles()) { Priority.DEFAULT })
         val wanted = selected.map { pieceRange(fs.fileOffset(it), fs.fileSize(it), ti.pieceLength()) }
         e.th.prioritizePieces(Array(ti.numPieces()) { p -> if (wanted.any { p in it }) Priority.DEFAULT else Priority.IGNORE })
@@ -557,6 +633,7 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
             require(ti == null || !ti.files().padFileAt(file)) { "no file $file" }
             require(e.keptFile == null) { "This torrent is already saved in Downloads" }
             require(e.pinned == null || e.pinned == file) { "Delete the existing download before choosing another file from this torrent" }
+            if (ti != null) checkSpace((ti.files().fileSize(file) - e.th.fileProgress()[file]).coerceAtLeast(0), context.filesDir)
             // A hash already live from streaming sits in the cache, which Android may clear.
             val root = File(context.filesDir, "downloads")
             if (!isUnder(File(e.dir), root)) {
@@ -565,8 +642,12 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
                 e.dir = to
             }
             if (e.pinned != file) e.done = false
+            e.downloadError = null
+            e.th.swig().clear_error()
             e.pinned = file
             e.pinConfigured = false
+            e.downloadNetworkApplied = false
+            applyDownloadNetwork(e)
             want(e)
         }
         tick()
@@ -599,21 +680,34 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         }
         val state = when {
             e.done -> "done"
+            e.downloadError != null -> "error"
             err.isError -> "error"
             e.paused -> "paused"
+            e.networkWaiting -> "waiting"
             else -> "downloading"
         }
         return mapOf("bytes" to bytes, "total" to total, "rate" to s.downloadRate(), "peers" to s.numPeers(),
-            "state" to state, "error" to if (err.isError) err.message else null, "path" to path)
+            "state" to state, "error" to (e.downloadError ?: if (err.isError) err.message else null), "path" to path)
     }
 
     private fun setPaused(e: Entry, paused: Boolean) {
         synchronized(e) {
             if (!e.alive || e.done) return // a done torrent stays paused
             e.paused = paused
-            if (paused) e.th.pause() else e.th.resume()
+            e.downloadError = null
+            if (!paused) e.th.swig().clear_error()
+            e.downloadNetworkApplied = false
+            applyDownloadNetwork(e)
+            if (e.activeFile != null) want(e)
         }
         tick()
+    }
+
+    private fun checkRemainingSpace(e: Entry, remaining: Long): Boolean {
+        if (downloadFits(remaining, context.filesDir.usableSpace)) return true
+        e.downloadError = "Not enough storage. Delete selected files in Downloads, then retry."
+        if (e.activeFile == null) e.th.pause()
+        return false
     }
 
     private fun delete(id: Int) {
@@ -625,11 +719,24 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         tick()
     }
 
-    /** Runs the foreground service while a download is running, and refreshes its notification. */
+    /** Network waits keep the engine alive so a background transfer can resume. Manual pauses do not. */
     private fun downloadTick() {
         val running = entries.values.mapNotNull { e ->
-            synchronized(e) { if (e.alive && e.pinned != null) progress(e) else null }
-        }.filter { it["state"] == "downloading" }
+            synchronized(e) {
+                if (!e.alive) null
+                else if (e.pinned != null) progress(e)
+                else if (e.keptFile != null) {
+                    val p = status(e)
+                    p + mapOf("bytes" to p["downloaded"], "state" to when {
+                        p["done"] == true -> "done"
+                        p["error"] != null -> "error"
+                        e.paused -> "paused"
+                        e.networkWaiting -> "waiting"
+                        else -> "downloading"
+                    })
+                } else null
+            }
+        }.filter { downloadServiceActive(it["state"] as String) }
         val intent = Intent(context, DownloadService::class.java)
         if (running.isEmpty()) {
             if (serviceOn) context.stopService(intent)
@@ -638,14 +745,15 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
         }
         val total = running.sumOf { it["total"] as Long }
         val percent = if (total > 0) (running.sumOf { it["bytes"] as Long } * 100 / total).toInt() else 0
+        val waiting = running.all { it["state"] == "waiting" }
         if (!serviceOn) {
-            intent.putExtra("count", running.size).putExtra("percent", percent)
+            intent.putExtra("count", running.size).putExtra("percent", percent).putExtra("waiting", waiting)
             // Android 12+ refuses to start a foreground service from the background; the next tick retries.
             serviceOn = runCatching {
                 if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
             }.isSuccess
         }
-        if (serviceOn) DownloadService.show(context, running.size, percent)
+        if (serviceOn) DownloadService.show(context, running.size, percent, waiting)
     }
 
     private fun release(id: Int) {
@@ -705,3 +813,11 @@ class Torrents : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware,
 }
 
 internal fun validDownloadFile(file: Int, count: Int?): Boolean = file >= 0 && (count == null || file < count)
+
+// Match background_downloader's Android UNMETERED constraint, including TV Ethernet.
+internal fun downloadNetworkAllowed(wifiOnly: Boolean, online: Boolean, unmetered: Boolean): Boolean =
+    online && (!wifiOnly || unmetered)
+
+internal fun downloadFits(required: Long, free: Long): Boolean = required <= 0 || required <= free
+
+internal fun downloadServiceActive(state: String): Boolean = state == "downloading" || state == "waiting"

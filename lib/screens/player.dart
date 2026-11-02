@@ -17,6 +17,10 @@ import '../addons.dart' show Subtitle;
 import '../playback.dart';
 import '../pip.dart';
 import '../live.dart';
+import '../queue.dart';
+import '../kit/sidebar.dart';
+import 'live_queue.dart';
+import 'movie_queue.dart';
 import '../player_keys.dart' show LiveSeekRange, liveSeekRange;
 import '../stall.dart';
 import '../state.dart';
@@ -371,12 +375,17 @@ class PlayerScreen extends StatefulWidget {
     this.next,
     this.live = false,
     this.resolveLive,
+    this.liveEvent, this.liveChannel, this.liveClient, this.onStarted,
     super.key,
   });
   final Playback? playback;
   /// Explicit start for this open; Retry continues from the current position.
   final Duration? start;
   final bool live;
+  final LiveEvent? liveEvent;
+  final LiveChannel? liveChannel;
+  final LiveClient? liveClient;
+  final VoidCallback? onStarted;
   final Future<LiveSource> Function()? resolveLive;
   final String? filename, hash;
   final int? size;
@@ -400,6 +409,13 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver {
+  late LiveEvent? _currentEvent = widget.liveEvent;
+  late LiveChannel? _currentChannel = widget.liveChannel;
+  bool _queueShowing = false, _movieAdvancing = false;
+  final _queueProgress = MovieQueueProgress();
+  String get _displayTitle => widget.live && _currentEvent != null
+    ? '${_currentEvent!.name} · ${_currentChannel!.name}' : widget.playback?.title ?? widget.title;
+  bool get _hasQueue => widget.playback?.type == 'movie' || widget.liveClient != null;
   late LiveSource _source = (url: widget.source, headers: widget.headers);
   final _player = Player(
     configuration: const PlayerConfiguration(bufferSize: 400 * 1024 * 1024),
@@ -508,6 +524,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           if (!_started) {
             // Errors before playback started weren't fatal after all.
             _started = true;
+            if (_queueProgress.started()) {
+              widget.onStarted?.call();
+              if (widget.onStarted == null && widget.playback?.type == 'movie') {
+                final pending = movieQueue.items.where((m) => m.sameMovie(widget.playback!.videoId, null)).firstOrNull;
+                if (pending != null) movieQueue.remove(pending);
+              }
+            }
             _lastPlaybackError = null;
             if (_error != null && mounted) setState(() => _error = null);
           }
@@ -535,6 +558,11 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
           _endedEarly = done && _stoppedEarly;
           if (_endedEarly) _fatalError();
           _upNext();
+          if (widget.playback?.type == 'movie' && _queueProgress.completed(done: done,
+              stoppedEarly: _endedEarly, failed: !_started || _opening || _error != null || _lastPlaybackError != null, hasNext: movieQueue.items.isNotEmpty,
+              panelOpen: _queueShowing || _panel)) {
+            if (mounted && !_queueShowing) _showQueue(context, automatic: true);
+          }
         }),
       )
       ..add(
@@ -580,6 +608,79 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
       _nextBar.value++;
       _upNext();
     }, onError: (Object e) => debugPrint('up next: $e'));
+  }
+
+  Future<void> _showQueue(BuildContext routeContext, {bool automatic = false}) async {
+    if (_queueShowing || _movieAdvancing || _retrying) return;
+    if (_panel) _togglePanel(false);
+    _queueShowing = true;
+    _tvRefresh.value++;
+    try {
+      if (widget.live) {
+        final event = _currentEvent, channel = _currentChannel, client = widget.liveClient;
+        if (event == null || channel == null || client == null) return;
+        await showPlaybackSidebar<void>(routeContext, (_) => LiveQueuePanel(
+          client: client, event: event, channel: channel, onSwitch: _switchLive));
+      } else {
+        final choice = await showPlaybackSidebar<MovieChoice>(routeContext, (_) => MovieQueueScreen(
+          picking: true, initial: automatic ? movieQueue.items.firstOrNull : null));
+        if (choice != null && mounted) await _leaveForMovie(choice);
+      }
+    } finally {
+      _queueShowing = false;
+      if (widget.liveClient != null) widget.liveClient!.cancelPrepared().catchError((_) {});
+      if (mounted) _tvRefresh.value++;
+      _resumeMovieQueue();
+    }
+  }
+
+  void _resumeMovieQueue() {
+    if (!_queueProgress.release(panelOpen: _panel || _queueShowing)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _completed && movieQueue.items.isNotEmpty && ModalRoute.of(context)?.isCurrent == true) {
+        _showQueue(context, automatic: true);
+      }
+    });
+  }
+
+  Future<void> _leaveForMovie(MovieChoice choice) async {
+    if (_movieAdvancing || !mounted) return;
+    _movieAdvancing = true;
+    try {
+      await _player.pause();
+      if (_video.currentState?.isFullscreen() == true) await _video.currentState?.exitFullscreen();
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        popForNext(context, MovieNext(choice));
+      }
+    } catch (e) { if (mounted) _showError(e); }
+    finally { _movieAdvancing = false; }
+  }
+
+  Future<bool> _switchLive(LiveEvent event, LiveChannel channel) async {
+    if (_retrying || !mounted) return false;
+    setState(() => _retrying = true);
+    var handedOff = false;
+    try {
+      final source = await widget.liveClient!.prepare(channel);
+      if (!mounted || !_queueShowing) return false;
+      await widget.liveClient!.commit(source);
+      if (!mounted) return false;
+      handedOff = true;
+      _source = source;
+      _currentEvent = event;
+      _currentChannel = channel;
+      _liveRange.value = null;
+      _added.clear();
+      _selected = null;
+      _lastPlaybackError = null;
+      setState(() => _error = null);
+      await _open(Duration.zero);
+      _tvRefresh.value++;
+      return true;
+    } catch (e) {
+      if (mounted && handedOff) _showError(e);
+      return false;
+    } finally { if (mounted) setState(() => _retrying = false); }
   }
 
   void _pipChanged() {
@@ -1141,8 +1242,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (_panel) _fetchSubtitles();
     // Closing the panel releases a held countdown or a completion waiting on it.
     _upNext();
+    _resumeMovieQueue();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !device.tv) {
+      if (mounted && !device.tv && !_queueShowing) {
         (_panel ? _headingFocus : _entryFocus).requestFocus();
       }
     });
@@ -1152,8 +1254,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (_retrying) return;
     setState(() => _retrying = true);
     try {
-      if (widget.resolveLive != null) {
-        final source = await widget.resolveLive!();
+      if (widget.resolveLive != null || widget.liveClient != null) {
+        final source = widget.liveClient != null && _currentChannel != null
+          ? await widget.liveClient!.resolve(_currentChannel!) : await widget.resolveLive!();
         if (!mounted) return;
         _source = source;
       }
@@ -1450,8 +1553,8 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
     if (context.tv) return _buildTv();
     final next = _next;
     final bar = <Widget>[
-      _TopBar(
-        title: widget.playback?.title ?? widget.title,
+      ListenableBuilder(listenable: _tvRefresh, builder: (_, _) => _TopBar(
+        title: _displayTitle,
         subtitle: widget.playback?.subtitle,
         buffer: _BufferAhead(_player),
         subtitles: Semantics(
@@ -1470,7 +1573,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
             label: const Text('Subtitles'),
           ),
         ),
-      ),
+      )),
     ];
     final theme = MaterialVideoControlsThemeData(
       displaySeekBar: !widget.live,
@@ -1498,6 +1601,9 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
         ),
       ],
       bottomButtonBar: [
+        if (_hasQueue) Builder(builder: (routeContext) => IconButton(
+          tooltip: widget.live ? 'Live queue and servers' : 'Playback queue',
+          onPressed: () => _showQueue(routeContext), icon: const Icon(Icons.playlist_play))),
         if (widget.live) const Text('Live', style: FlickText.button) else const MaterialPositionIndicator(),
         const Spacer(),
         if (!widget.live)
@@ -1610,7 +1716,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                       child: BufferingPanel(
                         view: _bufferView,
                         waiting: _since != null,
-                        title: widget.playback?.title ?? widget.title,
+                        title: _displayTitle,
                         logo: widget.playback?.logo,
                         poster: widget.playback?.poster,
                         onSwitch: () => Navigator.pop(context),
@@ -1687,7 +1793,7 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                                   style: TextButton.styleFrom(
                                     minimumSize: const Size(48, 48),
                                   ),
-                                  onPressed: () => Navigator.pop(context),
+                                  onPressed: widget.live && _hasQueue ? () => _showQueue(context) : () => Navigator.pop(context),
                                   child: const Text('Choose another source'),
                                 ),
                               ],
@@ -1761,10 +1867,13 @@ class _PlayerScreenState extends State<PlayerScreen> with WidgetsBindingObserver
                   ? null
                   : _upNextView(next, _player.state.position);
               return TvPlayerControls(
+                onQueue: _hasQueue ? () => _showQueue(context) : null,
+                modal: _queueShowing,
+                onChooseSource: widget.live && _hasQueue ? () => _showQueue(context) : null,
                 onSpeed: widget.live ? null : () => _showSpeed(context),
                 live: widget.live,
                 liveRange: _liveRange.value,
-                title: widget.playback?.title ?? widget.title,
+                title: _displayTitle,
                 subtitle: widget.playback?.subtitle,
                 position: _player.state.position,
                 duration: _player.state.duration,

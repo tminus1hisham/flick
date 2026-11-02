@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'addons.dart';
 import 'kit/route.dart';
 import 'live.dart';
+import 'queue.dart';
+import 'screens/movie_queue.dart';
 import 'screens/player.dart';
 import 'screens/title.dart';
 import 'screens/torrent.dart';
@@ -22,10 +24,28 @@ typedef Playback = ({
   Meta? meta,
 });
 
-Future<void> playLive(BuildContext context, String title, LiveSource source, Future<LiveSource> Function() resolve) =>
+Future<void> playLive(BuildContext context, String title, LiveSource source, Future<LiveSource> Function() resolve,
+    {LiveEvent? event, LiveChannel? channel, LiveClient? client}) =>
     Navigator.push<void>(context, EpisodeRoute(builder: (_) => PlayerScreen(
       title: title, source: source.url, headers: source.headers, live: true, resolveLive: resolve,
+      liveEvent: event, liveChannel: channel, liveClient: client,
     )));
+
+Playback moviePlayback(QueuedMovie item) => (title: item.title, subtitle: null, logo: null,
+  poster: item.poster, type: 'movie', videoId: item.id, season: null, episode: null, meta: null);
+
+class MovieNext {
+  MovieNext(this.choice);
+  final MovieChoice choice;
+}
+
+/// Direct offline player routes use the same queue handoff as addon playback.
+Future<void> continueMovieQueue(BuildContext context, Object? result) async {
+  if (result is! MovieNext || !context.mounted) return;
+  final choice = result.choice;
+  await play(context, choice.stream, moviePlayback(choice.item), addon: choice.addon,
+    start: choice.item.start, queued: choice.item);
+}
 
 /// One episode's [Playback]; the Streams screen and Up Next both build it here so they stay identical.
 Playback episodePlayback(Meta meta, Video video) {
@@ -64,7 +84,8 @@ final class PickStream extends AddonNext {
 /// Plays [s]: url → player, infoHash → torrent start (fileIdx, else a guessed file),
 /// externalUrl → the service's app or site. [addon] (the source of [s]) lets Up Next find the next episode's
 /// stream in the same binge group. Returns when the user is back on a stream list.
-Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon, Duration? start}) async {
+Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon, Duration? start, QueuedMovie? queued}) async {
+  queued ??= movieQueue.items.where((m) => m.sameMovie(p.videoId, addon?.base) && p.type == 'movie').firstOrNull;
   for (var moved = false;; moved = true) {
     final external = s.externalUrl, url = s.url;
     if (external != null) {
@@ -73,24 +94,32 @@ Future<void> play(BuildContext context, AddonStream s, Playback p, {Addon? addon
     }
     final title = p.subtitle == null ? p.title : '${p.title} · ${p.subtitle}';
     final next = _nextUp(s, p, addon);
+    final pending = queued;
+    void started() {
+      if (pending != null) movieQueue.remove(pending);
+    }
     final Widget screen;
     if (url != null) {
       screen = PlayerScreen(
           title: title, source: url, headers: s.headers, subtitles: s.subtitles,
-          playback: p, start: start, filename: s.filename, size: s.videoSize, hash: s.videoHash, next: next);
+          playback: p, start: start, onStarted: started, filename: s.filename, size: s.videoSize, hash: s.videoHash, next: next);
     } else if (s.infoHash != null) {
       screen = TorrentScreen(magnetFor(s), fileIdx: s.fileIdx,
           season: p.season, episode: p.episode, title: title,
-          playback: p, start: start, subtitles: s.subtitles, hash: s.videoHash, next: next);
+          playback: p, start: start, onStarted: started, subtitles: s.subtitles, hash: s.videoHash, next: next);
     } else {
       throw ArgumentError('Stream has no playable source');
     }
     final result = await Navigator.push<Object?>(context, EpisodeRoute(builder: (_) => screen, next: moved));
     if (!context.mounted) return;
     switch (result) {
+      case MovieNext r:
+        final choice = r.choice;
+        (s, p, addon, queued, start) = (choice.stream, moviePlayback(choice.item), choice.addon, choice.item, choice.item.start);
       case NextStream r:
         (s, p, addon) = (r.stream, r.playback, r.addon);
         start = null;
+        queued = null;
       case PickStream r:
         Navigator.push(context, EpisodeRoute(builder: (_) => StreamsScreen(r.meta, r.video), next: true));
         return;

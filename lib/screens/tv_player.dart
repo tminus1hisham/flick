@@ -17,11 +17,12 @@ class TvPlayerControls extends StatefulWidget {
     required this.buffering, required this.onToggle, required this.onSeek, required this.onExit,
     required this.muted, required this.onVolume, this.onSpeed,
     required this.onTracks, required this.onCloseTracks, required this.onRetry,
-    this.logo, this.poster, this.waiting = false, this.live = false, this.liveRange, this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.upNext, this.upNextVisible = false, super.key});
+    this.logo, this.poster, this.waiting = false, this.live = false, this.liveRange, this.error, this.retrying = false, this.subtitlesOn = false, this.onNext, this.onQueue, this.onChooseSource, this.modal = false, this.upNext, this.upNextVisible = false, super.key});
   final String title;
   final String? subtitle, error, logo, poster;
   final bool waiting;
   final bool live;
+  final bool modal;
   final LiveSeekRange? liveRange;
   final Duration position, duration, buffer;
   final bool playing, panel, retrying, upNextVisible, subtitlesOn, muted;
@@ -31,7 +32,7 @@ class TvPlayerControls extends StatefulWidget {
   final VoidCallback onToggle, onExit, onTracks, onCloseTracks, onRetry;
   final Future<void> Function() onVolume;
   final Future<void> Function()? onSpeed;
-  final VoidCallback? onNext;
+  final VoidCallback? onNext, onQueue, onChooseSource;
   final ValueChanged<Duration> onSeek;
   @override
   State<TvPlayerControls> createState() => _TvPlayerControlsState();
@@ -53,19 +54,19 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
 
   void _arm() {
     _timer?.cancel();
-    if (!_bar || !widget.playing || widget.panel || _card.hasFocus || _waiting.hasFocus || widget.error != null) return;
+    if (widget.modal || !_bar || !widget.playing || widget.panel || _card.hasFocus || _waiting.hasFocus || widget.error != null) return;
     _timer = Timer(const Duration(seconds: 4), _hide);
   }
 
   void _show() {
     setState(() => _bar = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !widget.panel) _play.requestFocus(); });
+    WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !widget.modal && !widget.panel) _play.requestFocus(); });
     _arm();
   }
 
   void _hide() {
     _timer?.cancel();
-    if (!mounted || widget.panel || widget.error != null) return;
+    if (!mounted || widget.modal || widget.panel || widget.error != null) return;
     setState(() => _bar = false);
     _keys.requestFocus();
   }
@@ -73,7 +74,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   void _panelFocus() {
     if (_panel.hasPrimaryFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && widget.panel && _panel.hasPrimaryFocus) enterScope(_panel);
+        if (mounted && !widget.modal && widget.panel && _panel.hasPrimaryFocus) enterScope(_panel);
       });
     }
   }
@@ -96,7 +97,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     setState(() => _hint = target);
     widget.onSeek(target);
     _hintTimer?.cancel();
-    _hintTimer = Timer(const Duration(seconds: 1), () { if (mounted) setState(() => _hint = null); });
+    _hintTimer = Timer(const Duration(seconds: 1), () { if (mounted && !widget.modal) setState(() => _hint = null); });
   }
 
   KeyEventResult _key(FocusNode node, KeyEvent event) {
@@ -109,6 +110,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
       return KeyEventResult.ignored;
     }
     _arm();
+    if (widget.modal) return KeyEventResult.ignored;
     final key = event.logicalKey;
     if (widget.error != null && !widget.panel) {
       if (key == LogicalKeyboardKey.escape || key == LogicalKeyboardKey.goBack) {
@@ -166,12 +168,14 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
   @override
   void didUpdateWidget(TvPlayerControls oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.modal) { _timer?.cancel(); return; }
+    if (oldWidget.modal) _arm();
     if (oldWidget.playing != widget.playing) _arm();
     if (oldWidget.panel != widget.panel) {
       _timer?.cancel();
       if (widget.panel) _bar = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+        if (!mounted || widget.modal) return;
         if (widget.panel) { enterScope(_panel); }
         else if (widget.error != null) { _retry.requestFocus(); }
         else { _tracks.requestFocus(); _arm(); }
@@ -179,18 +183,18 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
     }
     if (oldWidget.error == null && widget.error != null && !widget.panel) {
       _timer?.cancel();
-      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _retry.requestFocus(); });
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !widget.modal) _retry.requestFocus(); });
     } else if (oldWidget.error != null && widget.error == null && !widget.panel) {
       _bar = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _keys.requestFocus(); });
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !widget.modal) _keys.requestFocus(); });
     }
     if (oldWidget.buffering.offerSwitch && !widget.buffering.offerSwitch && _waiting.hasFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) { (_bar ? _play : _keys).requestFocus(); }
+        if (mounted && !widget.modal) { (_bar ? _play : _keys).requestFocus(); }
       });
     }
     if (oldWidget.upNextVisible && !widget.upNextVisible && _card.hasFocus) {
-      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted) _play.requestFocus(); });
+      WidgetsBinding.instance.addPostFrameCallback((_) { if (mounted && !widget.modal) _play.requestFocus(); });
     }
   }
 
@@ -236,7 +240,13 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
         _button(Icons.speed, 'Speed', () async {
           _timer?.cancel();
           await widget.onSpeed!();
-          if (mounted) _arm();
+          if (mounted && !widget.modal) _arm();
+        }, disc: true),
+      ],
+      if (widget.onQueue != null) ...[
+        const SizedBox(width: 16), _button(Icons.playlist_play, widget.live ? 'Live queue and servers' : 'Playback queue', () {
+          _timer?.cancel();
+          widget.onQueue!();
         }, disc: true),
       ],
       if (widget.onNext != null) ...[
@@ -247,7 +257,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
         widget.muted ? 'Volume (muted)' : 'Volume', () async {
           _timer?.cancel();
           await widget.onVolume();
-          if (mounted) _arm();
+          if (mounted && !widget.modal) _arm();
         }, disc: true),
     ]),
   ]);
@@ -297,7 +307,7 @@ class _TvPlayerControlsState extends State<TvPlayerControls> {
                 const SizedBox(height: 8), Text("The source didn't respond or the file can't be played.", style: FlickTv.body),
                 const SizedBox(height: 24), Wrap(spacing: 16, runSpacing: 16, children: [
                   _button(Icons.refresh, widget.retrying ? 'Retrying…' : 'Retry', widget.retrying ? null : widget.onRetry, node: _retry),
-                  _button(Icons.arrow_back, 'Choose another source', widget.onExit),
+                  _button(Icons.arrow_back, 'Choose another source', widget.onChooseSource ?? widget.onExit),
                 ]),
               ]),
             ))))),

@@ -185,7 +185,8 @@ class _ChannelsState extends State<_Channels> {
     try {
       final source = await widget.client.resolve(channel);
       if (!mounted) return;
-      await playLive(context, '${widget.event.name} · ${channel.name}', source, () => widget.client.resolve(channel));
+      await playLive(context, '${widget.event.name} · ${channel.name}', source, () => widget.client.resolve(channel),
+        event: widget.event, channel: channel, client: widget.client);
     } catch (e) {
       if (mounted) setState(() => _notice = liveError(e));
     } finally {

@@ -6,8 +6,8 @@ This file is the shared source for continuing the work in a new session. Read it
 
 ## Gates (run before calling anything done)
 - `flutter analyze lib test`: target no issues. Current committed baseline has one missing-braces lint at `lib/player_keys.dart:17`; viewing-history files analyze clean. Scope to app/test rather than the nested worktree in `.claude`.
-- `flutter test`: 348 tests pass in the shared working tree after language preferences and Miruro/offline resume choices.
-- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 39 tests pass (18 HttpTest, 4 MiruroPolicyTest, 3 DownloadsTest, 7 FctvTest, 7 FctvMediaTest).
+- `flutter test`: 385 tests pass in the shared working tree after playback queues and the concurrent download controls work.
+- Kotlin unit tests: `cd android; ./gradlew :app:testDebugUnitTest`: 45 tests pass (18 HttpTest, 4 MiruroPolicyTest, 6 DownloadsTest, 7 FctvTest, 7 FctvMediaTest, 3 LiveMediaSessionTest).
 - `flutter build apk --debug`: verify Android packaging and native compilation.
 - Design rules: `python ~/.claude/skills/build-mobile/scripts/gates.py .`: current baseline is 34 existing hits (27 colour uses, 7 stock controls), confirmed against committed source on 2026-11-01; viewing-history changes add none. The older 27-total baseline is superseded. See `improvements.md` for cleanup.
 - `PlayerScreen` cannot be pumped in widget tests without native libmpv. Test pure helpers and the independent TvPlayerControls instead.
@@ -65,6 +65,21 @@ This file is the shared source for continuing the work in a new session. Read it
 - `lib/addons.dart` has one `// ignore: valid_regexps` on the emoji regex. The lint parses it without `unicode: true`; the regex is valid and pinned by tests.
 
 ## Status (2026-11-02)
+
+### Movie queue and live Queue/Server sidebar
+
+Added a persisted movie playback queue and a separate in-memory live game queue. Movie source rows have a queue action distinct from Download; Discover and movie player controls open ordered queue management. Fresh provider lookup preserves an unambiguous selected release, failed resolution/startup keeps the item, and genuine completion advances once after any open panel closes. Queue handoff uses existing direct/torrent transitions and both offline movie callers; episode Up Next remains unchanged.
+
+Live playback now carries event/channel/client identity into a translucent right sidebar. Queue searches by sport/team/game/league and switches explicitly through channel selection; Server lists the current game's channels. Native prepare/commit/cancel keeps the outgoing proxy active during candidate preflight and discards cancelled work. Retry targets the current channel. Phone/fullscreen and TV controls expose the panel; TV shortcuts/focus timers suspend behind it, with house rings and pinned Back/Close controls.
+
+Design, source matching, data retention and acceptance limits: `design/playback-queue.md`. Queue unit/widget tests and native session regressions were added. The final shared-tree full Flutter suite passes all 385 tests; all 45 Android unit tests pass, and the final debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. All 19 changed queue/playback/test files analyze cleanly. Full analysis retains only the existing `player_keys.dart:17` missing-braces lint; design gates retain their existing 7 stock-control and 27 colour findings, with none added by queue files. Provider-scoped custom IDs, failed-start retention, source refresh/ambiguity, direct/torrent/offline handoff, completion deferral and phone/TV focus/dismissal are covered by the queue regressions. Widget-rendered phone/TV previews at 1.3× text use a fake background; physical playback/accessibility remains in backlog item 4. No new dependencies or physical-device interaction.
+
+
+### Download network and storage controls
+
+Downloads now has a persisted Wi-Fi-only/unmetered choice shared by HTTP and native torrents, including restored tasks and network-change waits. HTTP uses background_downloader's global constraint and capacity check; torrent-only adds respect the policy before metadata starts. Native network waits retain the foreground service and show a waiting notification, while manual pauses remain separate. Explicit playback can use its own network connection. The scrollable header shows download-file sizes/free capacity, warns about known shortfalls and explains unknown sizes; existing per-file deletion remains explicit. Failed HTTP/kept downloads expose Retry, and native disk errors can be cleared after cleanup. Design delta: `design/download-controls.md`.
+
+Validation: all 13 download-specific Flutter tests pass, including overlapping refresh/policy changes, persistence routing, headers/Retry, capacity estimates, network waits and phone/TV controls at 1.3× text. Android unit tests pass and the debug APK builds at `build/app/outputs/flutter-apk/app-debug.apk`. The full Flutter run recorded 373 passes and one unrelated compile failure in the concurrently edited `test/movie_queue_test.dart` (`continueMovieQueue` missing). Full analysis reports only the existing `player_keys.dart:17` lint; design gates retain 7 stock-control/27 colour hits, with none in the new controls. Remaining physical phone/TV acceptance is tracked in `improvements.md` item 6, including long waits under Android foreground-service limits. The shared working tree also contains unrelated queue and Live edits; preserve those when reviewing this task's changes.
 
 ### Miruro and offline resume choices
 
@@ -244,6 +259,8 @@ Phase 4, phone pass (2026-10-30, Redmi Note 11 Pro 2201116TG, Android 13, 8 GB, 
 - Not tested: Wi-Fi â†’ LTE switch (paid data, needs the user's go-ahead), Jellyfin (no server reachable), a dead source in the player, a low-RAM phone.
 
 ## Next
+- Verify queue playback on physical phone/TV: movie completion/manual next through direct, torrent, fullscreen and offline playback; changed/missing providers; live Server/game switching, Retry and cancellation without leaked proxies. See `design/playback-queue.md` and backlog item 4.
+- Download network/storage controls are implemented. Finish physical phone/TV metered/unmetered switching, background/restart transfers, disk-full/cleanup/Retry and accessibility acceptance in `improvements.md` item 6; do not rebuild the controls.
 - Audio/subtitle preference implementation is complete; finish its native phone/TV restart, Retry, episode-change, offline and accessibility acceptance in `improvements.md` item 2. The next numbered implementation item is subtitle timing/readability controls; do not rebuild language persistence.
 - Next backlog implementation: finish `improvements.md` item 1: safe scoping for custom addon IDs, and real-provider/physical phone/TV restart/offline/accessibility checks. Continue Watching, progress persistence, history controls and addon/Miruro/offline playback choices are implemented; do not rebuild them.
 - Maintain `improvements.md` as the current improvement backlog: remove completed/already implemented items after verification, retain unfinished portions, and add concrete useful ideas discovered during work. See `AGENTS.md` for the shared agent rule.

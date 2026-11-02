@@ -124,23 +124,35 @@ internal class Fctv(messenger: BinaryMessenger) {
     private var mediaHeaders: Map<String, String>? = null
     private var cdnSalt = "00"
     private var cdnEnabled = false
-    private var media: FctvMedia? = null
+    private val media = LiveMediaSession<FctvMedia>()
+    private var selectionGeneration = 0
     private var base = "https://apis-data10.tcpwe138stya.ru"
     private var configCheckedAt = 0L
     private val userAgent = "rbapp/--dg-foth-app-323/3.0.323/android_${Build.VERSION.SDK_INT}_${Build.VERSION.RELEASE}/Flick_Android_${Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"}/UTC/en"
 
     init {
         channel.setMethodCallHandler { call, result ->
+            if (call.method == "cancelPrepared") {
+                synchronized(this) { selectionGeneration++; media.cancel() }
+                result.success(null)
+                return@setMethodCallHandler
+            }
+            val generation = synchronized(this) {
+                if (call.method in setOf("resolve", "prepare", "stop")) selectionGeneration++
+                selectionGeneration
+            }
             worker.execute {
                 try {
-                    if (call.method != "stop") configure()
+                    if (call.method !in setOf("stop", "commit")) configure()
                     val sport = call.argument<Number>("sport")?.toInt() ?: 1
                     val value: Any? = when (call.method) {
-                        "stop" -> { synchronized(this) { media?.close(); media = null }; null }
+                        "stop" -> { synchronized(this) { media.close() }; null }
+                        "commit" -> { synchronized(this) { media.commit(call.argument<String>("url")!!) }; null }
                         "events" -> events(sport)
                         "channels" -> channels(sport, call.argument<Number>("eventId")!!.toLong())
-                        "resolve" -> resolve(sport, call.argument<Number>("eventId")!!.toLong(),
-                            call.argument<Number>("id")!!.toLong(), call.argument<Number>("site")!!.toInt())
+                        "resolve", "prepare" -> resolve(sport, call.argument<Number>("eventId")!!.toLong(),
+                            call.argument<Number>("id")!!.toLong(), call.argument<Number>("site")!!.toInt(),
+                            generation, call.method == "prepare")
                         else -> throw IllegalArgumentException("Unknown live operation")
                     }
                     main.post { if (!disposed) result.success(value) }
@@ -288,7 +300,7 @@ internal class Fctv(messenger: BinaryMessenger) {
         return all.also { mediaHeaders = it }
     }
 
-    private fun resolve(sport: Int, event: Long, id: Long, site: Int): Map<String, Any> {
+    private fun resolve(sport: Int, event: Long, id: Long, site: Int, generation: Int, prepare: Boolean): Map<String, Any> {
         require(event > 0 && id > 0 && site >= 0)
         val response = request("/api/stream/detail", mapOf("matchId" to event, "sportType" to sport,
             // Empty region fields produce placeholder streams; use the APK's bundled fallback without a location lookup.
@@ -299,22 +311,24 @@ internal class Fctv(messenger: BinaryMessenger) {
         val supplied = stream.messages(20).associate { it.text(1) to it.text(2) }
         val all = TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER).apply { putAll(headers()); putAll(supplied) }
         require(all.all { (k, v) -> k.matches(Regex("[!#$%&'*+.^_`|~0-9A-Za-z-]+")) && !v.contains('\r') && !v.contains('\n') })
+        fun publish(key: String, candidate: FctvMedia?) {
+            synchronized(this) {
+                check(!disposed && generation == selectionGeneration) { "Live selection cancelled" }
+                media.stage(key, candidate)
+                if (!prepare) media.commit(key)
+            }
+        }
         if (!URI(url).path.endsWith(".m3u8", ignoreCase = true)) {
-            synchronized(this) { media?.close(); media = null }
+            publish(url, null)
             return mapOf("url" to url, "headers" to all)
         }
         val candidate = FctvMedia(url, all, cdnSalt, cdnEnabled)
         try {
-            synchronized(this) {
-                check(!disposed)
-                media?.close()
-                media = candidate
-            }
+            // Preflight and user cancellation leave the active broadcast untouched.
             candidate.checkPlaylist()
-            check(!disposed)
+            publish(candidate.url, candidate)
             return mapOf("url" to candidate.url, "headers" to emptyMap<String, String>())
         } catch (e: Exception) {
-            synchronized(this) { if (media === candidate) media = null }
             candidate.close()
             throw e
         }
@@ -323,8 +337,8 @@ internal class Fctv(messenger: BinaryMessenger) {
     fun dispose() {
         synchronized(this) {
             disposed = true
-            media?.close()
-            media = null
+            selectionGeneration++
+            media.close()
         }
         channel.setMethodCallHandler(null)
         connection?.disconnect()

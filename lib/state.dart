@@ -3,10 +3,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'addons.dart';
 import 'downloads.dart';
 import 'history.dart';
+import 'queue.dart';
 import 'saved.dart';
 
 final saved = Saved();
 final history = ViewingHistory();
+final movieQueue = MovieQueue();
+final liveQueue = LiveQueue();
 
 /// Device settings.
 final settings = Settings();

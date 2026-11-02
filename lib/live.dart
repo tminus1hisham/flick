@@ -37,8 +37,13 @@ class LiveClient {
     )];
   }
 
-  Future<LiveSource> resolve(LiveChannel channel) async {
-    final result = await _channel.invokeMapMethod<String, dynamic>('resolve', {
+  Future<LiveSource> resolve(LiveChannel channel) => _source('resolve', channel);
+  Future<LiveSource> prepare(LiveChannel channel) => _source('prepare', channel);
+  Future<void> commit(LiveSource source) => _channel.invokeMethod<void>('commit', {'url': source.url});
+  Future<void> cancelPrepared() => _channel.invokeMethod<void>('cancelPrepared');
+
+  Future<LiveSource> _source(String method, LiveChannel channel) async {
+    final result = await _channel.invokeMapMethod<String, dynamic>(method, {
       'sport': channel.sport, 'eventId': channel.eventId, 'id': channel.id, 'site': channel.site,
     });
     if (result == null) throw const FormatException('Missing live source');

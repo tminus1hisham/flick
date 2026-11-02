@@ -65,10 +65,11 @@ class KeptTorrent {
 /// Progress counts bytes in the selected file, never bytes in the whole season pack.
 class TorrentProgress {
   const TorrentProgress({
-    required this.downloaded, required this.total, required this.done, this.path, this.error,
+    required this.downloaded, required this.total, required this.done, this.path, this.error, this.waiting = false,
   });
   final int downloaded, total;
   final bool done;
+  final bool waiting;
   final String? path, error;
 
   double get progress => total > 0 ? (downloaded / total).clamp(0.0, 1.0).toDouble() : 0;
@@ -87,6 +88,7 @@ class TorrentProgress {
       done: done,
       path: done ? path : null,
       error: error,
+      waiting: m['waiting'] == true,
     );
   }
 }
@@ -96,8 +98,13 @@ class TorrentEngine {
   const TorrentEngine._();
   static const _ch = MethodChannel('flick/torrent');
 
-  Future<int> add(String magnet, String dir) async =>
-      (await _ch.invokeMethod<int>('add', {'magnet': magnet, 'dir': dir}))!;
+  Future<int> add(String magnet, String dir, {bool downloadOnly = false}) async =>
+      (await _ch.invokeMethod<int>('add', {'magnet': magnet, 'dir': dir, 'downloadOnly': downloadOnly}))!;
+
+  Future<Map<String, Object?>> downloadEnvironment() async =>
+      (await _ch.invokeMapMethod<String, Object?>('downloadEnvironment'))!;
+
+  Future<void> setDownloadWifiOnly(bool on) => _ch.invokeMethod('setDownloadWifiOnly', {'on': on});
 
   /// Null once the torrent has been removed.
   Future<TorrentStatus?> status(int id) async {

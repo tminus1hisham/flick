@@ -1,0 +1,14 @@
+# Download network and storage controls
+
+Delta to the existing Downloads screen; reuse Afterglow type, colours, inline feedback and per-file deletion. No new dependency or download registry.
+
+- Show download-file sizes (including HTTP temporary files and cached posters) and current internal-storage free capacity in the list header, even when empty. File sizes are logical sizes; free capacity is the filesystem's usable space, including sparse-file behavior.
+- Wi-Fi only is an explicit on/off action with a spoken toggle state. It uses Android's unmetered-network rule, including TV Ethernet. Retain the previous unrestricted default until the user changes it. Explicit playback has its own network use.
+- The native preference persists before acknowledging a change. HTTP uses background_downloader's persistent global override, rescheduling running and queued tasks; new tasks also carry the choice. On startup, reconcile HTTP with the native setting before starting the Dart download manager.
+- Torrent-only adds start paused on a disallowed network, including metadata restoration. Connectivity callbacks and the existing native tick enforce the policy. A network wait is separate from a manual pause. If the same torrent is explicitly streaming, retain the played file's priorities and suppress the separately pinned download file.
+- Both native registries keep the foreground service alive during network waits, with a waiting notification. Manual pauses and terminal states release it. Android's existing foreground-service limits still apply.
+- Known HTTP lengths use the installed worker's capacity check with a 1 MiB reserve. Known torrent sizes are checked before saving and after restored metadata arrives. Show insufficient known remaining capacity inline. Unknown sizes remain allowed; expose worker/native write errors and Retry.
+- Never delete automatically. Users choose individual files through existing Delete download menus. Show available capacity again on returning to the app and every ten seconds while the header is mounted.
+- Header content scrolls with the list. The network action uses the TV focus kit and 48 dp targets. Loading/unavailable capacity never reads as zero; unavailable environment reads and failed setting changes have inline retry feedback. No new motion.
+
+Verification: download-manager tests cover policy propagation/reload, failure rollback, overlapping refreshes, task metadata/headers, Retry, known/unknown remaining sizes and network-wait transitions. Widget tests cover empty phone/TV lists, remote activation, failed changes and 1.3× text. Android tests cover network and capacity decisions. Native network switching, background/restart transfers, real disk-full recovery, TalkBack and physical remote acceptance remain device checks in `improvements.md` item 6.

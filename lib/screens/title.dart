@@ -7,7 +7,9 @@ import '../downloads.dart' show DownloadState;
 import '../kit/download_button.dart';
 import '../kit/toggle.dart';
 import '../kit/focus.dart';
+import '../kit/queue_controls.dart';
 import '../playback.dart';
+import '../queue.dart';
 import '../player_keys.dart' show playerTime;
 import '../state.dart';
 import '../theme.dart';
@@ -692,6 +694,7 @@ class _StreamRow extends StatefulWidget {
 }
 
 class _StreamRowState extends State<_StreamRow> {
+  String? _playbackQueueNotice;
   var _queuing = false;
   var _queued = false;
   var _failed = false;
@@ -762,8 +765,20 @@ class _StreamRowState extends State<_StreamRow> {
       if (i.origin != null) [TextSpan(text: i.origin)],
     ];
     final downloadable = (stream.url != null || stream.infoHash != null) && stream.externalUrl == null;
+    final queueAction = playback.type == 'movie' && downloadable
+      ? ListenableBuilder(listenable: movieQueue, builder: (context, _) => QueueIconButton(
+          tooltip: movieQueue.contains(playback.videoId, provider: addon.base) ? 'Already in playback queue' : 'Add to playback queue',
+          onPressed: () async {
+            final added = await movieQueue.add(QueuedMovie.fromStream(playback.videoId, playback.title,
+              playback.poster ?? widget.poster, addon, stream, start: widget.start));
+            if (mounted) {
+              setState(() => _playbackQueueNotice = movieQueue.error ??
+                (added ? 'Added to playback queue.' : 'Already in playback queue.'));
+            }
+          }, icon: Icon(movieQueue.contains(playback.videoId, provider: addon.base) ? Icons.playlist_add_check : Icons.playlist_add)))
+      : null;
     final downloadLabel = stream.infoHash != null ? 'Download torrent' : 'Download';
-    final status = _queued ? 'Queued' : _queuing ? 'Queuing…' : _failed ? "Couldn't queue download. Try again." : null;
+    final status = _playbackQueueNotice ?? (_queued ? 'Queued' : _queuing ? 'Queuing…' : _failed ? "Couldn't queue download. Try again." : null);
     if (context.tv) { return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Expanded(child: _Press(
         label: [i.quality, release, if (seeders != null) '$seeders seeders', ?i.size].join(', '),
@@ -793,6 +808,7 @@ class _StreamRowState extends State<_StreamRow> {
         _TvTitleAction(_queued ? Icons.check : Icons.download_outlined,
           status ?? downloadLabel, _queuing || _queued ? null : _download),
       ],
+      ?queueAction,
     ]); }
     return Container(
       constraints: const BoxConstraints(minHeight: 60),
@@ -858,6 +874,7 @@ class _StreamRowState extends State<_StreamRow> {
               ),
           ]),
         ),
+        ?queueAction,
         if (downloadable && stream.infoHash == null)
           Semantics(
             container: true,

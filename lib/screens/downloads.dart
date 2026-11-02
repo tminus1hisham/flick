@@ -4,12 +4,14 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/material.dart';
 
 import '../downloads.dart';
+import '../playback.dart';
 import '../kit/sheet.dart';
 import '../state.dart';
 import '../theme.dart';
 import 'player.dart';
 import 'resume.dart';
 import 'native_downloads.dart' as native;
+import 'download_controls.dart';
 
 class DownloadsScreen extends StatelessWidget {
   const DownloadsScreen({super.key});
@@ -24,25 +26,11 @@ class DownloadsScreen extends StatelessWidget {
               if (downloads.streamOf(r) case final stream?) (r, stream),
           ];
           final torrents = downloads.torrentRecords;
-          if (records.isEmpty && torrents.isEmpty && !downloads.torrentError) return native.NativeDownloadsScreen(onPlay: (d) => _playNative(context, d));
-          final cs = Theme.of(context).colorScheme;
+          if (records.isEmpty && torrents.isEmpty && !downloads.torrentError) {
+            return native.NativeDownloadsScreen(controls: const DownloadControls(), onPlay: (d) => _playNative(context, d));
+          }
           return ListView(children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(FlickTokens.pageGutter, 16, FlickTokens.pageGutter, 8),
-              child: FutureBuilder<int>(
-                future: downloads.bytesUsed(),
-                builder: (_, s) => Text.rich(
-                  TextSpan(children: [
-                    const TextSpan(text: 'Flick downloads · '),
-                    TextSpan(
-                      text: '${((s.data ?? 0) / (1 << 30)).toStringAsFixed(2)} GB',
-                      style: monoStyle.copyWith(color: cs.onSurface),
-                    ),
-                  ]),
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
-                ),
-              ),
-            ),
+            const DownloadControls(),
             if (downloads.torrentError)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: FlickTokens.pageGutter),
@@ -107,9 +95,10 @@ class _DownloadRowState extends State<DownloadRow> {
       final over = await chooseStartOver(context, p);
       if (!mounted || over == null) return;
       final title = p.subtitle == null ? stream.title : '${stream.title} · ${p.subtitle}';
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+      final result = await Navigator.push<Object?>(context, MaterialPageRoute(builder: (_) => PlayerScreen(
         title: title, source: path, headers: const {}, playback: p, start: over ? Duration.zero : null,
       )));
+      if (mounted) await continueMovieQueue(context, result);
     } catch (_) {
       if (mounted) setState(() => _error = "Couldn't open this download. Try again.");
     }
@@ -164,7 +153,8 @@ class _DownloadRowState extends State<DownloadRow> {
     final showBytes = known && total > 0 && !done;
     String gb(num b) => (b / (1 << 30)).toStringAsFixed(2);
     final showBar = status == TaskStatus.running || ((running || paused) && known);
-    final error = _error ?? torrent?.info?.error;
+    final waiting = torrent?.info?.waiting == true || (!downloads.networkAllowed && running);
+    final error = _error ?? torrent?.info?.error ?? r?.exception?.description;
 
     return InkWell(
       onTap: done && !_deleting ? _playStream : null,
@@ -204,7 +194,8 @@ class _DownloadRowState extends State<DownloadRow> {
                     Icon(icon, size: 16, color: color),
                     const SizedBox(width: 4),
                     Flexible(
-                      child: Text(label, style: t.labelMedium?.copyWith(color: color), overflow: TextOverflow.ellipsis),
+                      child: Text(waiting ? (downloads.wifiOnly ? 'Waiting for Wi-Fi / unmetered network' : 'Waiting for connection')
+                        : label, style: t.labelMedium?.copyWith(color: color), overflow: TextOverflow.ellipsis),
                     ),
                   ]),
                   if (showBytes) ...[
@@ -247,6 +238,22 @@ class _DownloadRowState extends State<DownloadRow> {
               icon: const Icon(Icons.play_arrow),
               onPressed: () => downloads.resume(r),
             ),
+          if (status == TaskStatus.failed)
+            IconButton(
+              tooltip: 'Retry download',
+              icon: const Icon(Icons.refresh),
+              onPressed: () async {
+                try {
+                  if (r != null) {
+                    await downloads.retry(r);
+                  } else {
+                    await downloads.retryTorrent(torrent!);
+                  }
+                } catch (_) {
+                  if (mounted) setState(() => _error = 'Could not retry this download. Try again.');
+                }
+              },
+            ),
           SizedBox(
             width: 48,
             height: 48,
@@ -275,7 +282,8 @@ Future<void> _playNative(BuildContext context, Download d) async {
   }
   final over = await chooseStartOver(context, d.playback);
   if (!context.mounted || over == null) return;
-  await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+  final result = await Navigator.push<Object?>(context, MaterialPageRoute(builder: (_) => PlayerScreen(
     title: d.playback.title, source: d.path, playback: d.playback, start: over ? Duration.zero : null,
   )));
+  if (context.mounted) await continueMovieQueue(context, result);
 }

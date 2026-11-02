@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../widgets.dart';
 import 'title.dart';
 import 'history.dart';
+import 'movie_queue.dart';
 import 'continue_watching.dart';
 
 (String, String, String) _key(Catalog c) => (c.addon.base, c.type, c.id);
@@ -115,6 +116,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
+  void _queue() => Navigator.push(context, MaterialPageRoute(builder: (_) => const MovieQueueScreen()));
+
   void _history() => Navigator.push(context, MaterialPageRoute(builder: (_) => HistoryScreen(history)));
 
   Widget _tvHeader(
@@ -201,6 +204,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     Text('Search', style: FlickTv.body),
                   ]),
                 ),
+              ),
+              FocusFrame.button(
+                key: const ValueKey('queue-open'),
+                semanticLabel: 'Playback queue',
+                onActivate: _queue,
+                child: const SizedBox(width: FlickTokens.minTouchTarget, height: FlickTokens.minTouchTarget,
+                  child: Icon(Icons.playlist_play)),
               ),
             ],
           ]))),
@@ -388,6 +398,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       ),
                     ),
                   ),
+                  IconButton(tooltip: 'Playback queue', onPressed: _queue, icon: const Icon(Icons.playlist_play)),
                   IconButton(tooltip: 'Viewing history', onPressed: _history, icon: const Icon(Icons.history)),
                 ]),
               ),

@@ -17,11 +17,13 @@ class NativeDownloadsScreen extends StatelessWidget {
     required this.onPlay,
     this.isLoading = false,
     this.isOffline = false,
+    this.controls,
   });
 
   final ValueChanged<Download> onPlay;
   final bool isLoading;
   final bool isOffline;
+  final Widget? controls;
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -38,14 +40,14 @@ class NativeDownloadsScreen extends StatelessWidget {
             child: CustomScrollView(
               slivers: [
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
+                  padding: controls != null ? EdgeInsets.zero : const EdgeInsets.fromLTRB(
                     FlickTokens.pageGutter,
                     FlickTokens.grid * 4,
                     FlickTokens.pageGutter,
                     FlickTokens.grid * 5,
                   ),
                   sliver: SliverToBoxAdapter(
-                    child: isLoading
+                    child: controls ?? (isLoading
                         ? Semantics(
                             label: 'Loading downloads',
                             child: const ExcludeSemantics(
@@ -73,7 +75,7 @@ class NativeDownloadsScreen extends StatelessWidget {
                             style: FlickText.metadata.copyWith(
                               color: FlickTokens.textSecondary,
                             ),
-                          ),
+                          )),
                   ),
                 ),
                 if (isLoading)
@@ -263,7 +265,7 @@ class _DownloadRowState extends State<DownloadRow> {
         d.state == DownloadState.queued;
     final paused = d.state == DownloadState.paused;
     final failed = d.state == DownloadState.failed;
-    final waiting = widget.waitingForConnection && active;
+    final waiting = (widget.waitingForConnection || d.waiting) && active;
     final progress = d.total > 0
         ? (d.bytes / d.total).clamp(0.0, 1.0).toDouble()
         : 0.0;
@@ -285,9 +287,9 @@ class _DownloadRowState extends State<DownloadRow> {
 
     final status = switch (d.state) {
       DownloadState.queued =>
-        waiting ? 'Waiting for connection' : 'Queued',
+        waiting ? (downloads.wifiOnly ? 'Waiting for Wi-Fi / unmetered network' : 'Waiting for connection') : 'Queued',
       DownloadState.downloading => waiting
-          ? 'Waiting for connection'
+          ? (downloads.wifiOnly ? 'Waiting for Wi-Fi / unmetered network' : 'Waiting for connection')
           : '${d.total > 0 ? '${(progress * 100).floor()}%' : 'Downloading'}'
               ' · ${_size(d.rate)}/s · ${d.peers} peers',
       DownloadState.paused => 'Paused',

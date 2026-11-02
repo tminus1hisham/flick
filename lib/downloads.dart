@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' show max;
 
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter/foundation.dart';
@@ -113,6 +114,7 @@ class Download {
   DownloadState state;
   int bytes = 0, total, rate = 0, peers = 0;
   String? error;
+  bool waiting = false;
 
   Map<String, Object?> toJson() => {
         'hash': hash, 'magnet': magnet, 'file': file, 'poster': poster, 'path': path, 'state': state.name,
@@ -152,7 +154,8 @@ class Download {
 // shortcut: legacy kept records coexist with the native registry; consolidate only with a data migration.
 class Downloads extends ChangeNotifier {
   /// [engine] and [dirFor] are seams for tests.
-  Downloads({TorrentEngine? engine, this.dirFor = downloadDir}) : _engine = engine;
+  Downloads({TorrentEngine? engine, FileDownloader? downloader, this.dirFor = downloadDir})
+      : _engine = engine, _fd = downloader ?? FileDownloader();
   TorrentEngine? _engine;
   final Future<String> Function(String hash) dirFor;
   late SharedPreferences _prefs;
@@ -199,7 +202,7 @@ class Downloads extends ChangeNotifier {
   /// Adds the torrent (the engine reuses a live one with the same hash) and pins [Download.file].
   Future<void> _register(Download d) async {
     final e = await _e;
-    final id = await e.add(d.magnet, await dirFor(d.hash));
+    final id = await e.add(d.magnet, await dirFor(d.hash), downloadOnly: true);
     _ids[d.hash] = id;
     await e.download(id, d.file);
   }
@@ -296,6 +299,7 @@ class Downloads extends ChangeNotifier {
         if (state == DownloadState.done) HapticFeedback.lightImpact();
         persist |= state != d.state || (p != null && (p.total != d.total || (p.path ?? d.path) != d.path));
         d.state = state;
+        d.waiting = p?.state == 'waiting';
         if (p == null) {
           d.error = 'Download stopped';
           continue;
@@ -318,7 +322,55 @@ class Downloads extends ChangeNotifier {
   }
 
   bool _directReady = false;
-  final _fd = FileDownloader();
+  bool wifiOnly = false, networkAllowed = true;
+  int? freeBytes, storedBytes;
+  String? environmentError;
+  Future<void>? _environmentRead;
+
+  int get remainingBytes => [
+    for (final d in items)
+      if (d.state != DownloadState.done) max(0, d.total - d.bytes),
+    for (final r in torrentRecords)
+      if (r.info?.done != true) max(0, r.expectedFileSize - (r.info?.downloaded ?? 0)),
+    for (final r in records)
+      if (r.status != TaskStatus.complete && r.expectedFileSize > 0)
+        (r.expectedFileSize * (1 - r.progress.clamp(0, 1))).ceil(),
+  ].fold<int>(0, (sum, bytes) => sum + bytes);
+
+  Future<void> refreshEnvironment() => _environmentRead ??=
+      _readEnvironment().whenComplete(() => _environmentRead = null);
+
+  Future<void> _readEnvironment() async {
+    try {
+      final m = await (await _e).downloadEnvironment();
+      wifiOnly = m['wifiOnly'] == true;
+      networkAllowed = m['allowed'] == true;
+      freeBytes = m['free'] as int?;
+      storedBytes = m['used'] as int?;
+      environmentError = null;
+    } catch (_) {
+      environmentError = 'Could not read download network and storage. Try again.';
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> setWifiOnly(bool on) async {
+    final old = wifiOnly;
+    if (!await _fd.requireWiFi(on ? RequireWiFi.forAllTasks : RequireWiFi.forNoTasks)) {
+      throw StateError('Could not apply the download network choice');
+    }
+    try {
+      await (await _e).setDownloadWifiOnly(on);
+    } catch (_) {
+      await _fd.requireWiFi(old ? RequireWiFi.forAllTasks : RequireWiFi.forNoTasks);
+      rethrow;
+    }
+    await _environmentRead;
+    wifiOnly = on;
+    await refreshEnvironment();
+  }
+  final FileDownloader _fd;
   List<TaskRecord> records = [];
   final torrentRecords = <TorrentDownload>[];
   bool torrentError = false;
@@ -341,6 +393,12 @@ class Downloads extends ChangeNotifier {
     );
     // Foreground mode keeps long downloads alive past Android's background limits.
     await _fd.configure(globalConfig: (Config.runInForeground, true));
+    // The worker checks Content-Length against remaining capacity; unknown sizes still report write failures.
+    await _fd.configure(globalConfig: (Config.checkAvailableSpace, 1));
+    await refreshEnvironment();
+    if (environmentError == null && !await _fd.requireWiFi(wifiOnly ? RequireWiFi.forAllTasks : RequireWiFi.forNoTasks)) {
+      throw StateError('Could not restore the download network choice');
+    }
     // database.updates fires after the record is stored; _fd.updates fires before.
     _fd.database.updates.listen((r) async {
       if (_deleted.contains(r.taskId)) await _fd.database.deleteRecordWithId(r.taskId);
@@ -474,6 +532,7 @@ class Downloads extends ChangeNotifier {
       baseDirectory: BaseDirectory.applicationDocuments,
       updates: Updates.statusAndProgress,
       allowPause: true,
+      requiresWiFi: wifiOnly,
       retries: 5,
       displayName: playback.subtitle == null ? title : '$title · ${playback.subtitle}',
       metaData: StreamDownload(title: title, poster: poster, playback: playback).toMetaData(),
@@ -506,6 +565,17 @@ class Downloads extends ChangeNotifier {
   Future<void> resume(Object r) async {
     if (r is Download) return resumeNative(r);
     await _fd.resume((r as TaskRecord).task as DownloadTask);
+  }
+
+  Future<void> retry(TaskRecord r) async {
+    if (!await _fd.enqueue(r.task.copyWith(retries: 5))) throw StateError('Download was not queued');
+    await refresh();
+  }
+
+  Future<void> retryTorrent(TorrentDownload r) async {
+    await (await _e).resume(r.kept.id);
+    r.info = null;
+    await _refreshTorrents();
   }
 
   Future<void> delete(Object record) async {

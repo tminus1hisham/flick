@@ -20,7 +20,8 @@ class DownloadService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val n = notification(this, intent?.getIntExtra("count", 1) ?: 1, intent?.getIntExtra("percent", 0) ?: 0)
+        val n = notification(this, intent?.getIntExtra("count", 1) ?: 1, intent?.getIntExtra("percent", 0) ?: 0,
+            intent?.getBooleanExtra("waiting", false) ?: false)
         if (Build.VERSION.SDK_INT >= 29) startForeground(ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         else startForeground(ID, n)
         // Without the engine there is no torrent session to keep alive.
@@ -34,10 +35,10 @@ class DownloadService : Service() {
         private const val ID = 1
         private const val CHANNEL = "downloads"
 
-        fun show(context: Context, count: Int, percent: Int) =
-            context.getSystemService(NotificationManager::class.java).notify(ID, notification(context, count, percent))
+        fun show(context: Context, count: Int, percent: Int, waiting: Boolean = false) =
+            context.getSystemService(NotificationManager::class.java).notify(ID, notification(context, count, percent, waiting))
 
-        private fun notification(context: Context, count: Int, percent: Int): Notification {
+        private fun notification(context: Context, count: Int, percent: Int, waiting: Boolean): Notification {
             val b = if (Build.VERSION.SDK_INT >= 26) {
                 context.getSystemService(NotificationManager::class.java).createNotificationChannel(
                     NotificationChannel(CHANNEL, "Downloads", NotificationManager.IMPORTANCE_LOW))
@@ -47,8 +48,8 @@ class DownloadService : Service() {
             }
             val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
             return b.setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle("Downloading $count")
-                .setContentText("$percent%")
+                .setContentTitle(if (waiting) "Downloads waiting for network" else "Downloading $count")
+                .setContentText(if (waiting) "Connect to an allowed network to resume" else "$percent%")
                 .setProgress(100, percent, false)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)

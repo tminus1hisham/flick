@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:background_downloader/background_downloader.dart';
+import 'package:background_downloader/src/permissions.dart' show Permissions;
 import 'package:flick/downloads.dart';
 import 'package:flick/playback.dart';
 import 'package:flick/torrent.dart';
@@ -14,10 +17,13 @@ const Playback _ep =
 /// Records channel calls; [progressOf] answers progress.
 class _Engine implements TorrentEngine {
   final calls = <String>[];
+  bool wifiOnly = false, failPolicy = false;
+  Future<Map<String, Object?>> Function()? environmentOf;
   NativeTorrentProgress? Function(int id) progressOf = (_) => null;
 
   @override
-  Future<int> add(String magnet, String dir) async {
+  Future<int> add(String magnet, String dir, {bool downloadOnly = false}) async {
+    expect(downloadOnly, isTrue, reason: 'Restored and new downloads must apply the network rule before metadata');
     calls.add('add $dir');
     return 7;
   }
@@ -36,7 +42,45 @@ class _Engine implements TorrentEngine {
   Future<NativeTorrentProgress?> progress(int id) async => progressOf(id);
 
   @override
+  Future<Map<String, Object?>> downloadEnvironment() async => environmentOf?.call() ?? {
+    'wifiOnly': wifiOnly, 'allowed': !wifiOnly, 'free': 1000, 'used': 200,
+  };
+
+  @override
+  Future<void> setDownloadWifiOnly(bool on) async {
+    if (failPolicy) throw StateError('disk full');
+    wifiOnly = on;
+  }
+
+  @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
+}
+
+class _Permissions implements Permissions {
+  @override
+  Future<PermissionStatus> request(PermissionType type) async => PermissionStatus.granted;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Downloader implements FileDownloader {
+  final policies = <RequireWiFi>[];
+  final tasks = <Task>[];
+  bool acceptPolicy = true;
+  @override
+  Permissions get permissions => _Permissions();
+  @override
+  Future<bool> requireWiFi(RequireWiFi requirement, {
+    dynamic rescheduleRunningTasks = true, dynamic alsoRestartUploads = false,
+  }) async {
+    expect(rescheduleRunningTasks, isTrue);
+    policies.add(requirement);
+    return acceptPolicy;
+  }
+  @override
+  Future<bool> enqueue(Task task) async { tasks.add(task); return true; }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 Downloads _downloads(_Engine e) {
@@ -54,6 +98,98 @@ void main() {
     expect(downloadState('paused'), DownloadState.paused);
     expect(downloadState('done'), DownloadState.done);
     expect(downloadState('error'), DownloadState.failed);
+  });
+
+  test('network choice reaches HTTP and native engines and reloads with capacity', () async {
+    final e = _Engine();
+    final http = _Downloader();
+    final d = Downloads(engine: e, downloader: http);
+    addTearDown(d.dispose);
+    await d.setWifiOnly(true);
+    expect(http.policies, [RequireWiFi.forAllTasks]);
+    expect((e.wifiOnly, d.wifiOnly, d.networkAllowed, d.freeBytes, d.storedBytes), (true, true, false, 1000, 200));
+    final restarted = Downloads(engine: e, downloader: http);
+    addTearDown(restarted.dispose);
+    await restarted.refreshEnvironment();
+    expect(restarted.wifiOnly, isTrue);
+    await restarted.setWifiOnly(false);
+    expect(http.policies.last, RequireWiFi.forNoTasks);
+    expect((e.wifiOnly, restarted.networkAllowed), (false, true));
+  });
+
+  test('a refused policy leaves the preference intact and native failure rolls HTTP back', () async {
+    final e = _Engine();
+    final http = _Downloader()..acceptPolicy = false;
+    final d = Downloads(engine: e, downloader: http);
+    addTearDown(d.dispose);
+    await expectLater(d.setWifiOnly(true), throwsStateError);
+    expect(e.wifiOnly, isFalse);
+    http.acceptPolicy = true;
+    e.failPolicy = true;
+    await expectLater(d.setWifiOnly(true), throwsStateError);
+    expect(http.policies.last, RequireWiFi.forNoTasks);
+    expect(d.wifiOnly, isFalse);
+  });
+
+  test('a pending storage refresh cannot overwrite a successful network choice', () async {
+    final e = _Engine();
+    final pending = Completer<Map<String, Object?>>();
+    e.environmentOf = () => pending.future;
+    final d = Downloads(engine: e, downloader: _Downloader());
+    addTearDown(d.dispose);
+    final refresh = d.refreshEnvironment();
+    final change = d.setWifiOnly(true);
+    await Future<void>.delayed(Duration.zero);
+    expect(e.wifiOnly, isTrue);
+    e.environmentOf = null;
+    pending.complete({'wifiOnly': false, 'allowed': true, 'free': 1000, 'used': 200});
+    await Future.wait([refresh, change]);
+    expect((d.wifiOnly, d.networkAllowed), (true, false));
+  });
+
+  test('new HTTP tasks and retries retain identity and headers under the network choice', () async {
+    final e = _Engine();
+    final http = _Downloader();
+    final d = Downloads(engine: e, downloader: http);
+    addTearDown(d.dispose);
+    await d.load();
+    await d.setWifiOnly(true);
+    await d.enqueueStream(url: 'https://video.test/file.mp4', headers: {'Authorization': 'video-only'},
+      title: _ep.title, playback: _ep);
+    final task = http.tasks.single;
+    expect(task.requiresWiFi, isTrue);
+    expect(task.headers, {'Authorization': 'video-only'});
+    expect(StreamDownload.fromMetaData(task.metaData)!.playback.videoId, _ep.videoId);
+    await d.retry(TaskRecord(task, TaskStatus.failed, -1, -1));
+    expect(http.tasks.last.taskId, task.taskId);
+    expect(http.tasks.last.headers, task.headers);
+  });
+
+  test('network waiting remains active and does not become a user pause', () async {
+    final e = _Engine();
+    final d = _downloads(e);
+    await d.load();
+    await d.start(_magnet, _ep, 3);
+    e.progressOf = (_) => (bytes: 20, total: 100, rate: 0, peers: 0, state: 'waiting', error: null, path: null);
+    await d.refreshNative();
+    expect((d.items.single.state, d.items.single.waiting), (DownloadState.downloading, true));
+    e.progressOf = (_) => (bytes: 25, total: 100, rate: 5, peers: 1, state: 'downloading', error: null, path: null);
+    await d.refreshNative();
+    expect(d.items.single.waiting, isFalse);
+    expect(TorrentProgress.fromStatus({'waiting': true}).waiting, isTrue);
+  });
+
+  test('capacity warning counts known unfinished bytes and ignores unknown and finished sizes', () async {
+    final d = _downloads(_Engine());
+    await d.load();
+    final partial = Download(hash: _hash, magnet: _magnet, file: 0, playback: _ep, total: 100)..bytes = 30;
+    d.items.add(partial);
+    final task = DownloadTask(url: 'https://video.test/file');
+    d.records = [TaskRecord(task, TaskStatus.running, 0.25, 200),
+      TaskRecord(task, TaskStatus.complete, 1, 500), TaskRecord(task, TaskStatus.running, -1, -1)];
+    expect(d.remainingBytes, 220);
+    partial.state = DownloadState.done;
+    expect(d.remainingBytes, 150);
   });
 
   test('an unfinished download survives a restart and is added to the engine again', () async {
